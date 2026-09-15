@@ -13,11 +13,17 @@ export function buildTree(docs: DocNode[]): TreeData[] {
   const roots: TreeData[] = [];
 
   for (const d of docs) {
-    byId.set(d.id, { id: d.id, name: d.title || 'Sem título', docType: d.type });
+    byId.set(d.id, {
+      id: d.id,
+      name: d.title || 'Sem título',
+      docType: d.type,
+      // Inicializa filhos AQUI (1ª passada): um filho pode aparecer antes da
+      // pasta na ordenação por position; resetar na 2ª passada apagaria filhos.
+      ...(d.type === 'core/folder' ? { children: [] as TreeData[] } : {}),
+    });
   }
   for (const d of docs) {
     const node = byId.get(d.id)!;
-    if (d.type === 'core/folder') node.children = [];
     if (d.parentId && byId.has(d.parentId)) {
       const parent = byId.get(d.parentId)!;
       parent.children = parent.children ?? [];

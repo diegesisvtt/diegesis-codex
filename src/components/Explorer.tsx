@@ -177,6 +177,8 @@ export function Explorer() {
             onDelete={({ ids }) => ids.forEach((id) => deleteDocument(id))}
             onMove={({ dragIds, parentId, index }) => {
               dragIds.forEach((id, i) => moveDocument(id, parentId, index + i));
+              // Garante que o destino fique visível após o drop
+              if (parentId) setTimeout(() => treeRef.current?.open(parentId), 80);
             }}
           >
             {Node}
