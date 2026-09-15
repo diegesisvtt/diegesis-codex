@@ -1,0 +1,28 @@
+appId: com.mythril.app
+productName: Mythril
+directories:
+  buildResources: build
+  output: release
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+asar: true
+win:
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: Mythril
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.productivity
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Office
