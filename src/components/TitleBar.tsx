@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { BookOpen, Plus, ChevronDown, Search } from 'lucide-react';
+import { BookOpen, Plus, ChevronDown, Search, Sparkles } from 'lucide-react';
 import { useStore } from '../state/store';
 import { Modal, Button } from './ui';
 
 export function TitleBar({ onOpenSearch }: { onOpenSearch(): void }) {
-  const { realms, activeRealmId, setActiveRealm, createRealm } = useStore();
+  const { realms, activeRealmId, setActiveRealm, createRealm, openPanel } = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
@@ -21,6 +21,14 @@ export function TitleBar({ onOpenSearch }: { onOpenSearch(): void }) {
       </div>
 
       <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => openPanel('ai-chat')}
+          title="Assistente IA"
+          className="flex items-center gap-2 text-[12px] text-ink-3 hover:text-ink-2 px-2.5 py-1.5 rounded-md hover:bg-hover transition-colors border border-line bg-sidebar"
+        >
+          <Sparkles size={13} />
+          <span>IA</span>
+        </button>
         <button
           onClick={onOpenSearch}
           className="flex items-center gap-2 text-[12px] text-ink-3 hover:text-ink-2 px-2.5 py-1.5 rounded-md hover:bg-hover transition-colors border border-line bg-sidebar"

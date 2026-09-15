@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Layout, Model, TabNode, Actions, DockLocation, IJsonModel, IJsonTabNode } from 'flexlayout-react';
 import { BookOpen } from 'lucide-react';
-import { useStore } from '../state/store';
+import { useStore, type PanelKind } from '../state/store';
 import { Explorer } from './Explorer';
 import { DocumentContainer } from './DocumentContainer';
+import { AIChatPanel } from './AIChatPanel';
+import { AISettingsPanel } from './AISettingsPanel';
 
 const MAIN_TABSET_ID = 'main-tabset';
 const WELCOME_TAB_ID = '__welcome__';
+
+const PANEL_TABS: Record<PanelKind, { id: string; name: string }> = {
+  'ai-chat': { id: '__ai_chat__', name: 'Assistente IA' },
+  'ai-settings': { id: '__ai_settings__', name: 'Configurações de IA' },
+};
 
 function defaultModel(): IJsonModel {
   return {
@@ -111,7 +118,7 @@ function Welcome() {
 }
 
 export function Workspace() {
-  const { docs, uiState, saveUiState, registerOpenDocument, registerOnDocumentDeleted } = useStore();
+  const { docs, uiState, saveUiState, registerOpenDocument, registerOnDocumentDeleted, registerOpenPanel } = useStore();
   const layoutRef = useRef<Layout>(null);
   const docsRef = useRef(docs);
   docsRef.current = docs;
@@ -137,7 +144,8 @@ export function Workspace() {
       (t: any) => t.getComponent?.() === 'document'
     );
     const hasWelcome = !!m.getNodeById(WELCOME_TAB_ID);
-    if (docTabs.length === 0 && !hasWelcome) {
+    const totalTabs = (tabset.getChildren?.() ?? []).length;
+    if (totalTabs === 0 && !hasWelcome) {
       m.doAction(
         Actions.addNode(
           {
@@ -190,6 +198,24 @@ export function Workspace() {
     registerOnDocumentDeleted((docId: string) => {
       if (model.getNodeById(docId)) model.doAction(Actions.deleteTab(docId));
     });
+
+    registerOpenPanel((panel: PanelKind) => {
+      const tab = PANEL_TABS[panel];
+      if (model.getNodeById(tab.id)) {
+        model.doAction(Actions.selectTab(tab.id));
+        return;
+      }
+      model.doAction(
+        Actions.addNode(
+          { type: 'tab', id: tab.id, name: tab.name, component: panel } as IJsonTabNode,
+          MAIN_TABSET_ID,
+          DockLocation.CENTER,
+          -1,
+          true
+        )
+      );
+      if (model.getNodeById(WELCOME_TAB_ID)) model.doAction(Actions.deleteTab(WELCOME_TAB_ID));
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model]);
 
@@ -209,6 +235,10 @@ export function Workspace() {
         return <Explorer />;
       case 'document':
         return <DocumentContainer docId={node.getConfig().docId} />;
+      case 'ai-chat':
+        return <AIChatPanel />;
+      case 'ai-settings':
+        return <AISettingsPanel />;
       case 'welcome':
         return <Welcome />;
       default:
