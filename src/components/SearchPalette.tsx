@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { File, LayoutGrid, Search } from 'lucide-react';
-import type { SearchResult } from '@shared/types';
+import { File, LayoutGrid, Search, Sparkles } from 'lucide-react';
+import type { SearchResult, SemanticSearchResult } from '@shared/types';
 import { useStore } from '../state/store';
+
+type Mode = 'fts' | 'semantic';
+
+interface UnifiedResult {
+  docId: string;
+  title: string;
+  type: SearchResult['type'];
+  snippet: string;
+  score?: number;
+}
 
 /** Renders an FTS snippet ("foo <mark>bar</mark> baz") as safe React elements. */
 function Snippet({ html }: { html: string }) {
@@ -37,11 +47,14 @@ function Snippet({ html }: { html: string }) {
 export function SearchPalette({ open, onClose }: { open: boolean; onClose(): void }) {
   const { activeRealmId, openDocument } = useStore();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [results, setResults] = useState<UnifiedResult[]>([]);
   const [selected, setSelected] = useState(0);
   const [searching, setSearching] = useState(false);
+  const [mode, setMode] = useState<Mode>('fts');
+  const [semanticAvailable, setSemanticAvailable] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const seqRef = useRef(0);
 
   // Reset state when opened
   useEffect(() => {
@@ -49,7 +62,12 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose(): voi
       setQuery('');
       setResults([]);
       setSelected(0);
+      setMode('fts');
       setTimeout(() => inputRef.current?.focus(), 30);
+      window.mythril.ai
+        .indexStatus()
+        .then((s) => setSemanticAvailable(s.embeddedCount > 0))
+        .catch(() => setSemanticAvailable(false));
     }
   }, [open]);
 
@@ -63,19 +81,25 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose(): voi
       return;
     }
     setSearching(true);
+    const seq = ++seqRef.current;
     const t = setTimeout(async () => {
       try {
-        const r = await window.mythril.docs.search(activeRealmId, q);
-        setResults(r);
-        setSelected(0);
+        if (mode === 'semantic') {
+          const r: SemanticSearchResult[] = await window.mythril.ai.searchSemantic(activeRealmId, q);
+          if (seq === seqRef.current) setResults(r);
+        } else {
+          const r: SearchResult[] = await window.mythril.docs.search(activeRealmId, q);
+          if (seq === seqRef.current) setResults(r);
+        }
+        if (seq === seqRef.current) setSelected(0);
       } catch (err) {
         console.error('search failed', err);
       } finally {
-        setSearching(false);
+        if (seq === seqRef.current) setSearching(false);
       }
-    }, 140);
+    }, mode === 'semantic' ? 350 : 140);
     return () => clearTimeout(t);
-  }, [query, open, activeRealmId]);
+  }, [query, open, activeRealmId, mode]);
 
   // Keep selected row visible
   useEffect(() => {
@@ -86,7 +110,7 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose(): voi
 
   if (!open) return null;
 
-  const pick = (r: SearchResult) => {
+  const pick = (r: UnifiedResult) => {
     openDocument(r.docId);
     onClose();
   };
@@ -122,9 +146,32 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose(): voi
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Buscar em todas as notas…"
+            placeholder={
+              mode === 'semantic' ? 'Descreva o que você procura…' : 'Buscar em todas as notas…'
+            }
             className="flex-1 bg-transparent py-3.5 text-[15px] text-ink-1 placeholder-ink-3 outline-none"
           />
+          {semanticAvailable && (
+            <div className="flex items-center bg-sidebar border border-line rounded-md p-0.5 shrink-0">
+              <button
+                onClick={() => setMode('fts')}
+                className={`px-2 py-1 rounded text-[11px] transition-colors ${
+                  mode === 'fts' ? 'bg-overlay text-ink-1' : 'text-ink-3 hover:text-ink-2'
+                }`}
+              >
+                Texto
+              </button>
+              <button
+                onClick={() => setMode('semantic')}
+                className={`px-2 py-1 rounded text-[11px] transition-colors flex items-center gap-1 ${
+                  mode === 'semantic' ? 'bg-overlay text-accent-ink' : 'text-ink-3 hover:text-ink-2'
+                }`}
+              >
+                <Sparkles size={11} />
+                Semântica
+              </button>
+            </div>
+          )}
           <kbd className="text-[10px] text-ink-3 bg-overlay rounded px-1.5 py-0.5 shrink-0">ESC</kbd>
         </div>
 
@@ -155,10 +202,20 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose(): voi
                     <Icon size={14} className={color} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-medium text-ink-1 truncate">
-                      {r.title || 'Sem título'}
+                    <div className="text-[13px] font-medium text-ink-1 truncate flex items-center gap-2">
+                      <span className="truncate">{r.title || 'Sem título'}</span>
+                      {r.score !== undefined && (
+                        <span className="shrink-0 text-[10px] px-1.5 py-px rounded-full bg-accent-soft text-accent-ink">
+                          {Math.round(r.score * 100)}%
+                        </span>
+                      )}
                     </div>
-                    {r.snippet && <Snippet html={r.snippet} />}
+                    {r.snippet &&
+                      (mode === 'fts' ? (
+                        <Snippet html={r.snippet} />
+                      ) : (
+                        <span className="text-[12px] text-ink-3 leading-snug line-clamp-2">{r.snippet}</span>
+                      ))}
                   </div>
                 </button>
               );
