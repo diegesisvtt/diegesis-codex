@@ -6,7 +6,7 @@ const common = {
   platform: 'node',
   target: 'node20',
   format: 'cjs',
-  external: ['electron', 'better-sqlite3'],
+  external: ['electron', 'better-sqlite3', 'sqlite-vec', '@huggingface/transformers', 'onnxruntime-node'],
   sourcemap: true,
   outdir: 'dist-electron',
 };

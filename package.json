@@ -17,10 +17,11 @@
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:linux": "npm run build && electron-builder --linux",
     "pack": "npm run build && electron-builder --dir",
-    "typecheck": "tsc -b --noEmit false --pretty",
+    "typecheck": "tsc -b --pretty",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@tiptap/core": "^2.11.5",
     "@tiptap/extension-image": "^2.11.5",
     "@tiptap/extension-link": "^2.11.5",
@@ -37,6 +38,7 @@
     "react": "^18.3.1",
     "react-arborist": "^3.4.0",
     "react-dom": "^18.3.1",
+    "sqlite-vec": "^0.1.9",
     "tippy.js": "^6.3.7"
   },
   "devDependencies": {
