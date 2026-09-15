@@ -30,6 +30,7 @@ import {
   GripVertical,
   Copy,
   Trash2,
+  Sparkles,
 } from 'lucide-react';
 import type { DocNode } from '@shared/types';
 import { useStore } from '../../state/store';
@@ -285,11 +286,20 @@ function BubbleIconButton({
 }
 
 function SelectionBubble({ editor }: { editor: Editor }) {
+  const { openPanel, setAiDraft } = useStore();
   const [turnIntoOpen, setTurnIntoOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
 
   const activeBlock = TURN_INTO.find((t) => t.isActive(editor));
+
+  const askAI = () => {
+    const { from, to } = editor.state.selection;
+    const selected = editor.state.doc.textBetween(from, to, ' ').trim();
+    if (!selected) return;
+    setAiDraft(`Sobre este trecho das minhas notas:\n\n> ${selected}\n\n`);
+    openPanel('ai-chat');
+  };
 
   const applyLink = () => {
     const url = linkUrl.trim();
@@ -344,6 +354,8 @@ function SelectionBubble({ editor }: { editor: Editor }) {
             setTurnIntoOpen(false);
           }}
         />
+        <div className="w-px h-4 bg-line-strong mx-1" />
+        <BubbleIconButton icon={Sparkles} title="Perguntar à IA sobre a seleção" onClick={askAI} />
 
         {/* Turn-into dropdown */}
         {turnIntoOpen && (
