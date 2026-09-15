@@ -1,7 +1,11 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import * as db from './db';
-import type { DocChanges, DocInput, UiState } from '../shared/types';
+import * as aiConfig from './ai/config';
+import * as embedder from './ai/embedder';
+import { semanticSearch, streamChat } from './ai/rag';
+import { getProvider, listProviders } from './ai/providers/registry';
+import type { AIChatRequest, AIProviderConfig, DocChanges, DocInput, UiState } from '../shared/types';
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 
@@ -22,6 +26,33 @@ function registerIpc(): void {
 
   ipcMain.handle('ui:load', () => db.loadUiState());
   ipcMain.handle('ui:save', (_e, state: UiState) => db.saveUiState(state));
+
+  // ---- AI / RAG ----
+  ipcMain.handle('ai:providers:list', () => listProviders());
+  ipcMain.handle('ai:provider:test', (_e, providerId: string, config: Record<string, string>) => {
+    const provider = getProvider(providerId);
+    if (!provider) return { ok: false, error: `Provider desconhecido: ${providerId}` };
+    return provider.testConnection(aiConfig.resolveMaskedSecrets(providerId, config));
+  });
+  ipcMain.handle('ai:settings:get', () => aiConfig.getAISettings());
+  ipcMain.handle('ai:settings:setChat', (_e, cfg: AIProviderConfig | null) => {
+    aiConfig.setChatProvider(cfg);
+  });
+  ipcMain.handle('ai:index:status', () => embedder.currentStatus());
+  ipcMain.handle('ai:index:rebuild', () => embedder.rebuildIndex());
+  ipcMain.handle('ai:search:semantic', (_e, realmId: string, query: string) =>
+    semanticSearch(realmId, query)
+  );
+  ipcMain.handle('ai:chat', (event, req: AIChatRequest) => {
+    const sender = event.sender;
+    const safeSend = (channel: string, payload: unknown) => {
+      if (!sender.isDestroyed()) sender.send(channel, payload);
+    };
+    return streamChat(req, {
+      onChunk: (chunk) => safeSend('ai:chat:chunk', chunk),
+      onSources: (chatId, sources) => safeSend('ai:chat:sources', { chatId, sources }),
+    });
+  });
 
   ipcMain.handle('app:platform', () => process.platform);
   ipcMain.handle('app:version', () => app.getVersion());
@@ -62,6 +93,10 @@ function createWindow(): void {
 app.whenReady().then(() => {
   db.initDb();
   registerIpc();
+  embedder.startEmbedder();
+  embedder.indexEvents.on('status', (status) => {
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send('ai:index:status', status);
+  });
   createWindow();
 
   app.on('activate', () => {

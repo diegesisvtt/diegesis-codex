@@ -1,5 +1,20 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { DocChanges, DocInput, MythrilApi, UiState } from '../shared/types';
+import type {
+  AIChatSources,
+  AIIndexStatus,
+  AIProviderConfig,
+  ChatStreamChunk,
+  DocChanges,
+  DocInput,
+  MythrilApi,
+  UiState,
+} from '../shared/types';
+
+function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
+  const listener = (_e: Electron.IpcRendererEvent, payload: T) => cb(payload);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+}
 
 const api: MythrilApi = {
   realms: {
@@ -19,6 +34,19 @@ const api: MythrilApi = {
   ui: {
     load: () => ipcRenderer.invoke('ui:load'),
     save: (state: UiState) => ipcRenderer.invoke('ui:save', state),
+  },
+  ai: {
+    providers: () => ipcRenderer.invoke('ai:providers:list'),
+    testProvider: (providerId, config) => ipcRenderer.invoke('ai:provider:test', providerId, config),
+    getSettings: () => ipcRenderer.invoke('ai:settings:get'),
+    setChatProvider: (cfg: AIProviderConfig | null) => ipcRenderer.invoke('ai:settings:setChat', cfg),
+    indexStatus: () => ipcRenderer.invoke('ai:index:status'),
+    rebuildIndex: () => ipcRenderer.invoke('ai:index:rebuild'),
+    onIndexStatus: (cb) => subscribe<AIIndexStatus>('ai:index:status', cb),
+    searchSemantic: (realmId, query) => ipcRenderer.invoke('ai:search:semantic', realmId, query),
+    chat: (req) => ipcRenderer.invoke('ai:chat', req),
+    onChatChunk: (cb) => subscribe<ChatStreamChunk>('ai:chat:chunk', cb),
+    onChatSources: (cb) => subscribe<AIChatSources>('ai:chat:sources', cb),
   },
   app: {
     platform: () => ipcRenderer.invoke('app:platform'),
