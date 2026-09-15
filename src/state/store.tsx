@@ -3,12 +3,16 @@ import type { DocNode, DocChanges, DocumentType, Realm, UiState } from '@shared/
 
 const generateId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
+export type PanelKind = 'ai-chat' | 'ai-settings';
+
 interface StoreState {
   ready: boolean;
   realms: Realm[];
   activeRealmId: string | null;
   docs: DocNode[];
   uiState: UiState;
+  /** draft message consumed by the AI chat panel (set by editor commands) */
+  aiDraft: string | null;
 }
 
 interface StoreActions {
@@ -28,6 +32,10 @@ interface StoreActions {
   registerOpenDocument(fn: (docId: string) => void): void;
   onDocumentDeleted(docId: string): void;
   registerOnDocumentDeleted(fn: (docId: string) => void): void;
+  /** opens a singleton app panel (AI chat, AI settings…) as a workspace tab */
+  openPanel(panel: PanelKind): void;
+  registerOpenPanel(fn: (panel: PanelKind) => void): void;
+  setAiDraft(draft: string | null): void;
 }
 
 const StoreContext = createContext<(StoreState & StoreActions) | null>(null);
@@ -56,11 +64,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     activeRealmId: null,
     docs: [],
     uiState: {},
+    aiDraft: null,
   });
 
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const openDocRef = useRef<((docId: string) => void) | null>(null);
   const docDeletedRef = useRef<((docId: string) => void) | null>(null);
+  const openPanelRef = useRef<((panel: PanelKind) => void) | null>(null);
 
   // ---- bootstrap ----
   useEffect(() => {
@@ -71,7 +81,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ? ui.activeRealmId
           : realms[0]?.id ?? null;
       const docs = activeRealmId ? await window.mythril.docs.listByRealm(activeRealmId) : [];
-      setState({ ready: true, realms, activeRealmId, docs, uiState: ui ?? {} });
+      setState({ ready: true, realms, activeRealmId, docs, uiState: ui ?? {}, aiDraft: null });
     })();
   }, []);
 
@@ -193,6 +203,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const registerOnDocumentDeleted = useCallback((fn: (docId: string) => void) => {
     docDeletedRef.current = fn;
   }, []);
+  const registerOpenPanel = useCallback((fn: (panel: PanelKind) => void) => {
+    openPanelRef.current = fn;
+  }, []);
+  const setAiDraft = useCallback((draft: string | null) => {
+    setState((s) => ({ ...s, aiDraft: draft }));
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -210,6 +226,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       registerOpenDocument,
       onDocumentDeleted: (docId: string) => docDeletedRef.current?.(docId),
       registerOnDocumentDeleted,
+      openPanel: (panel: PanelKind) => openPanelRef.current?.(panel),
+      registerOpenPanel,
+      setAiDraft,
     }),
     [
       state,
@@ -224,6 +243,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       saveUiState,
       registerOpenDocument,
       registerOnDocumentDeleted,
+      registerOpenPanel,
+      setAiDraft,
     ]
   );
 
