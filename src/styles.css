@@ -386,6 +386,21 @@ body,
 }
 
 /* ============================================================
+   Whiteboard — embedded tiptap note blocks
+   ============================================================ */
+.tiptap.wb-note-editor {
+  min-height: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.tiptap.wb-note-editor h2 {
+  font-size: 1.25em;
+}
+.tiptap.wb-note-editor h3 {
+  font-size: 1.1em;
+}
+
+/* ============================================================
    tippy.js — strip chrome, keep only our content
    ============================================================ */
 .tippy-box {
@@ -436,7 +451,7 @@ input,
 textarea {
   caret-color: var(--color-accent-ink);
 }
-:focus-visible {
+:focus-visible:not(.outline-none):not(.tiptap):not(.ProseMirror) {
   outline: 2px solid var(--color-accent-soft);
   outline-offset: 1px;
 }
