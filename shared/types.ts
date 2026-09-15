@@ -53,6 +53,101 @@ export interface SearchResult {
   snippet: string;
 }
 
+// ---------- AI / RAG ----------
+
+export interface ProviderField {
+  key: string;
+  label: string;
+  type: 'text' | 'password' | 'number';
+  placeholder?: string;
+  required?: boolean;
+  /** secret fields are encrypted at rest and masked when read back */
+  secret?: boolean;
+  default?: string;
+}
+
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  description: string;
+  fields: ProviderField[];
+}
+
+export type ChatRole = 'system' | 'user' | 'assistant';
+
+export interface ChatMessage {
+  role: ChatRole;
+  content: string;
+}
+
+export interface AIProviderConfig {
+  providerId: string;
+  config: Record<string, string>;
+}
+
+export interface AISettings {
+  chat: AIProviderConfig | null;
+}
+
+/** sentinel returned in place of stored secret values */
+export const SECRET_MASK = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
+
+export type EmbedModelState = 'idle' | 'downloading' | 'ready' | 'error';
+
+export interface AIIndexStatus {
+  /** local embedding model lifecycle (one-time download, then offline) */
+  modelState: EmbedModelState;
+  /** 0..100 download progress */
+  modelProgress: number;
+  pendingJobs: number;
+  processing: boolean;
+  chunkCount: number;
+  embeddedCount: number;
+  /** last embedding pipeline error, if any */
+  lastError: string | null;
+}
+
+export interface SemanticSearchResult {
+  docId: string;
+  title: string;
+  type: DocumentType;
+  snippet: string;
+  /** 0..1 similarity score */
+  score: number;
+}
+
+export interface RetrievedChunk {
+  docId: string;
+  title: string;
+  type: DocumentType;
+  text: string;
+  score: number;
+}
+
+export interface AIChatRequest {
+  chatId: string;
+  realmId: string | null;
+  messages: ChatMessage[];
+  useContext: boolean;
+}
+
+export interface ChatStreamChunk {
+  chatId: string;
+  delta: string;
+  done: boolean;
+  error?: string;
+}
+
+export interface AIChatSources {
+  chatId: string;
+  sources: RetrievedChunk[];
+}
+
+export interface ProviderTestResult {
+  ok: boolean;
+  error?: string;
+}
+
 export interface MythrilApi {
   realms: {
     list(): Promise<Realm[]>;
@@ -71,6 +166,19 @@ export interface MythrilApi {
   ui: {
     load(): Promise<UiState | null>;
     save(state: UiState): Promise<void>;
+  };
+  ai: {
+    providers(): Promise<ProviderInfo[]>;
+    testProvider(providerId: string, config: Record<string, string>): Promise<ProviderTestResult>;
+    getSettings(): Promise<AISettings>;
+    setChatProvider(cfg: AIProviderConfig | null): Promise<void>;
+    indexStatus(): Promise<AIIndexStatus>;
+    rebuildIndex(): Promise<void>;
+    onIndexStatus(cb: (status: AIIndexStatus) => void): () => void;
+    searchSemantic(realmId: string, query: string): Promise<SemanticSearchResult[]>;
+    chat(req: AIChatRequest): Promise<void>;
+    onChatChunk(cb: (chunk: ChatStreamChunk) => void): () => void;
+    onChatSources(cb: (s: AIChatSources) => void): () => void;
   };
   app: {
     platform(): Promise<NodeJS.Platform>;
