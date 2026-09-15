@@ -1,21 +1,27 @@
 import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import { app } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import type { DocChanges, DocInput, DocNode, Realm, SearchResult, UiState } from '../shared/types';
+import type { DocChanges, DocInput, DocNode, Realm, SearchResult, SemanticSearchResult, UiState } from '../shared/types';
 
 export const generateId = () => crypto.randomBytes(6).toString('hex');
 
 let db: Database.Database;
 
-export function initDb(): void {
-  const dir = app.getPath('userData');
+export function initDb(dbPath?: string): void {
+  const dir = dbPath ? path.dirname(dbPath) : app.getPath('userData');
   fs.mkdirSync(dir, { recursive: true });
-  db = new Database(path.join(dir, 'mythril.db'));
+  db = new Database(dbPath ?? path.join(dir, 'mythril.db'));
+  sqliteVec.load(db);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   migrate();
+}
+
+export function getDb(): Database.Database {
+  return db;
 }
 
 function migrate(): void {
@@ -47,7 +53,36 @@ function migrate(): void {
       body,
       tokenize = 'unicode61 remove_diacritics 2'
     );
+    CREATE TABLE IF NOT EXISTS doc_chunks (
+      id TEXT PRIMARY KEY,
+      doc_id TEXT NOT NULL,
+      realm_id TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      embedded INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc ON doc_chunks(doc_id, seq);
+    CREATE INDEX IF NOT EXISTS idx_doc_chunks_embedded ON doc_chunks(embedded);
+    CREATE TABLE IF NOT EXISTS ai_jobs (
+      id TEXT PRIMARY KEY,
+      doc_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      error TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_jobs_status ON ai_jobs(status, created_at);
+    CREATE TABLE IF NOT EXISTS ai_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
   `);
+
+  // Recreate the vec table if one was previously configured (dimension comes from ai_meta).
+  const dim = getEmbedDim();
+  if (dim !== null) createVecTable(dim);
 
   // Seed a default realm with a welcome note on first run.
   const realmCount = db.prepare('SELECT COUNT(*) AS c FROM realms').get() as { c: number };
@@ -149,6 +184,283 @@ export function searchDocs(realmId: string, query: string): SearchResult[] {
   return rows;
 }
 
+// ---------- Vector store (sqlite-vec) ----------
+
+function createVecTable(dim: number): void {
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(
+      embedding float[${dim}] distance_metric=cosine,
+      +chunk_id TEXT,
+      +doc_id TEXT,
+      +realm_id TEXT
+    );
+  `);
+}
+
+export function getEmbedDim(): number | null {
+  const row = db.prepare("SELECT value FROM ai_meta WHERE key = 'embed_dim'").get() as
+    | { value: string }
+    | undefined;
+  return row ? parseInt(row.value, 10) : null;
+}
+
+/**
+ * Sets the embedding dimension, (re)creating the vec table. If the dimension
+ * changes, all embeddings are wiped and every document is re-enqueued.
+ */
+export function setEmbedDim(dim: number): { changed: boolean } {
+  const prev = getEmbedDim();
+  db.prepare(
+    "INSERT INTO ai_meta (key, value) VALUES ('embed_dim', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+  ).run(String(dim));
+  if (prev === dim) return { changed: false };
+
+  db.exec('DROP TABLE IF EXISTS vec_chunks');
+  createVecTable(dim);
+  db.prepare('UPDATE doc_chunks SET embedded = 0').run();
+  enqueueAllDocs();
+  return { changed: true };
+}
+
+/** Creates the vec table lazily when the dimension is first discovered from a
+ *  provider response, without wiping anything. */
+export function ensureEmbedDim(dim: number): void {
+  if (getEmbedDim() !== null) return;
+  db.prepare("INSERT INTO ai_meta (key, value) VALUES ('embed_dim', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(
+    String(dim)
+  );
+  createVecTable(dim);
+}
+
+/** Drops the vec table and forgets the dimension (re-discovered on next embed batch). */
+export function resetEmbedDim(): void {
+  db.exec('DROP TABLE IF EXISTS vec_chunks');
+  db.prepare("DELETE FROM ai_meta WHERE key = 'embed_dim'").run();
+  db.prepare('UPDATE doc_chunks SET embedded = 0').run();
+  enqueueAllDocs();
+}
+
+export interface DocChunkRow {
+  id: string;
+  doc_id: string;
+  realm_id: string;
+  seq: number;
+  text: string;
+  content_hash: string;
+  embedded: number;
+}
+
+/** Replaces a document's chunks, removing their vector rows. New chunks start unembedded. */
+export function deleteChunksForDoc(docId: string): void {
+  if (getEmbedDim() !== null) {
+    db.prepare('DELETE FROM vec_chunks WHERE rowid IN (SELECT rowid FROM vec_chunks WHERE doc_id = ?)').run(docId);
+  }
+  db.prepare('DELETE FROM doc_chunks WHERE doc_id = ?').run(docId);
+}
+
+export function deleteChunksForRealm(realmId: string): void {
+  if (getEmbedDim() !== null) {
+    db.prepare('DELETE FROM vec_chunks WHERE rowid IN (SELECT rowid FROM vec_chunks WHERE realm_id = ?)').run(realmId);
+  }
+  db.prepare('DELETE FROM doc_chunks WHERE realm_id = ?').run(realmId);
+}
+
+/** Existing chunk hashes for a document, used to skip re-embedding unchanged content. */
+export function getChunkHashes(docId: string): Map<number, { id: string; hash: string; embedded: boolean }> {
+  const rows = db
+    .prepare('SELECT id, seq, content_hash, embedded FROM doc_chunks WHERE doc_id = ?')
+    .all(docId) as any[];
+  const map = new Map<number, { id: string; hash: string; embedded: boolean }>();
+  for (const r of rows) map.set(r.seq, { id: r.id, hash: r.content_hash, embedded: r.embedded === 1 });
+  return map;
+}
+
+function deleteChunk(chunkId: string): void {
+  if (getEmbedDim() !== null) {
+    db.prepare('DELETE FROM vec_chunks WHERE rowid IN (SELECT rowid FROM vec_chunks WHERE chunk_id = ?)').run(chunkId);
+  }
+  db.prepare('DELETE FROM doc_chunks WHERE id = ?').run(chunkId);
+}
+
+/**
+ * Diffs a document's freshly computed chunks against the stored ones. Unchanged
+ * chunks (same seq + hash) keep their ids and embeddings; changed/removed chunks
+ * are deleted (vectors included); new/changed chunks are inserted unembedded.
+ */
+export function syncDocChunks(
+  docId: string,
+  realmId: string,
+  chunks: { seq: number; text: string; hash: string }[]
+): void {
+  const existing = getChunkHashes(docId);
+  const tx = db.transaction(() => {
+    for (const [seq, row] of existing) {
+      const next = chunks.find((c) => c.seq === seq);
+      if (!next || next.hash !== row.hash) deleteChunk(row.id);
+    }
+    const insert = db.prepare(
+      'INSERT INTO doc_chunks (id, doc_id, realm_id, seq, text, content_hash, embedded, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?)'
+    );
+    const now = Date.now();
+    for (const c of chunks) {
+      const prev = existing.get(c.seq);
+      if (prev && prev.hash === c.hash) continue; // unchanged
+      insert.run(generateId(), docId, realmId, c.seq, c.text, c.hash, now);
+    }
+  });
+  tx();
+}
+
+export function getUnembeddedChunks(limit: number): DocChunkRow[] {
+  return db
+    .prepare('SELECT * FROM doc_chunks WHERE embedded = 0 ORDER BY updated_at ASC LIMIT ?')
+    .all(limit) as DocChunkRow[];
+}
+
+export function insertVecEmbedding(chunkId: string, docId: string, realmId: string, embedding: Float32Array): void {
+  const tx = db.transaction(() => {
+    // the chunk may have been deleted while the embedding request was in flight
+    const exists = db.prepare('SELECT 1 AS x FROM doc_chunks WHERE id = ?').get(chunkId);
+    if (!exists) return;
+    db.prepare('DELETE FROM vec_chunks WHERE rowid IN (SELECT rowid FROM vec_chunks WHERE chunk_id = ?)').run(chunkId);
+    db.prepare('INSERT INTO vec_chunks (chunk_id, doc_id, realm_id, embedding) VALUES (?, ?, ?, ?)').run(
+      chunkId,
+      docId,
+      realmId,
+      embedding
+    );
+    db.prepare('UPDATE doc_chunks SET embedded = 1, updated_at = ? WHERE id = ?').run(Date.now(), chunkId);
+  });
+  tx();
+}
+
+/**
+ * Two-step KNN: the vec0 MATCH query runs isolated (joins/constraints on aux
+ * columns are illegal inside KNN queries), then chunks are joined by id.
+ * Over-fetches progressively so realms with few chunks still get k results.
+ */
+function knnRaw(realmId: string, embedding: Float32Array, k: number) {
+  if (getEmbedDim() === null) return [];
+  const knnStmt = db.prepare('SELECT chunk_id, distance FROM vec_chunks WHERE embedding MATCH ? AND k = ?');
+  const joinStmt = db.prepare(
+    `SELECT c.id AS chunkId, c.text AS text, c.doc_id AS docId, d.title AS title, d.type AS type
+     FROM doc_chunks c
+     JOIN documents d ON d.id = c.doc_id
+     WHERE c.realm_id = ? AND c.id IN (SELECT value FROM json_each(?))`
+  );
+
+  let fetchK = k * 5;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const knn = knnStmt.all(embedding, fetchK) as { chunk_id: string; distance: number }[];
+    if (knn.length === 0) return [];
+    const dist = new Map(knn.map((r) => [r.chunk_id, r.distance]));
+    const joined = (joinStmt.all(realmId, JSON.stringify(knn.map((r) => r.chunk_id))) as any[])
+      .map((r) => ({ ...r, distance: dist.get(r.chunkId) as number }))
+      .sort((a, b) => a.distance - b.distance);
+    // enough realm matches, or KNN already exhausted the store → done
+    if (joined.length >= k || knn.length < fetchK) return joined.slice(0, k);
+    fetchK *= 4;
+  }
+  // last attempt returns what it could
+  const knn = knnStmt.all(embedding, fetchK) as { chunk_id: string; distance: number }[];
+  const dist = new Map(knn.map((r) => [r.chunk_id, r.distance]));
+  return (joinStmt.all(realmId, JSON.stringify(knn.map((r) => r.chunk_id))) as any[])
+    .map((r) => ({ ...r, distance: dist.get(r.chunkId) as number }))
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, k);
+}
+
+export function knnSearch(realmId: string, embedding: Float32Array, k: number): SemanticSearchResult[] {
+  return knnRaw(realmId, embedding, k).map((r) => ({
+    docId: r.docId,
+    title: r.title,
+    type: r.type,
+    snippet: r.text.length > 280 ? r.text.slice(0, 280) + '…' : r.text,
+    score: Math.max(0, 1 - r.distance),
+  }));
+}
+
+/** KNN search returning full chunk text — used by the RAG pipeline. */
+export function knnChunks(
+  realmId: string,
+  embedding: Float32Array,
+  k: number
+): { docId: string; title: string; type: string; text: string; score: number }[] {
+  return knnRaw(realmId, embedding, k).map((r) => ({
+    docId: r.docId,
+    title: r.title,
+    type: r.type,
+    text: r.text,
+    score: Math.max(0, 1 - r.distance),
+  }));
+}
+
+export function chunkStats(): { chunkCount: number; embeddedCount: number } {
+  const row = db
+    .prepare('SELECT COUNT(*) AS chunks, COALESCE(SUM(embedded), 0) AS embedded FROM doc_chunks')
+    .get() as { chunks: number; embedded: number };
+  return { chunkCount: row.chunks, embeddedCount: row.embedded };
+}
+
+// ---------- AI embedding job queue ----------
+
+export function enqueueEmbedJob(docId: string): void {
+  db.prepare("DELETE FROM ai_jobs WHERE doc_id = ? AND status = 'pending'").run(docId);
+  db.prepare("INSERT INTO ai_jobs (id, doc_id, status, attempts, created_at) VALUES (?, ?, 'pending', 0, ?)").run(
+    generateId(),
+    docId,
+    Date.now()
+  );
+}
+
+export function enqueueAllDocs(): void {
+  const rows = db.prepare('SELECT id FROM documents').all() as { id: string }[];
+  db.prepare("DELETE FROM ai_jobs WHERE status = 'pending'").run();
+  const insert = db.prepare(
+    "INSERT INTO ai_jobs (id, doc_id, status, attempts, created_at) VALUES (?, ?, 'pending', 0, ?)"
+  );
+  const tx = db.transaction(() => {
+    const now = Date.now();
+    for (const r of rows) insert.run(generateId(), r.id, now);
+  });
+  tx();
+}
+
+export function pendingJobCount(): number {
+  return (db.prepare("SELECT COUNT(*) AS c FROM ai_jobs WHERE status = 'pending'").get() as { c: number }).c;
+}
+
+export function claimPendingJob(): { id: string; doc_id: string; attempts: number } | null {
+  const row = db
+    .prepare("SELECT id, doc_id, attempts FROM ai_jobs WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1")
+    .get() as { id: string; doc_id: string; attempts: number } | undefined;
+  if (!row) return null;
+  // mark as processing so enqueueEmbedJob's pending-dedupe cannot delete/re-add it mid-flight
+  db.prepare("UPDATE ai_jobs SET status = 'processing' WHERE id = ?").run(row.id);
+  return row;
+}
+
+export function completeJob(id: string): void {
+  db.prepare('DELETE FROM ai_jobs WHERE id = ?').run(id);
+}
+
+export function failJob(id: string, error: string, maxAttempts = 5): void {
+  const row = db.prepare('SELECT attempts FROM ai_jobs WHERE id = ?').get(id) as { attempts: number } | undefined;
+  if (!row) return;
+  if (row.attempts + 1 >= maxAttempts) {
+    // Give up on this job so one bad document cannot stall the queue.
+    db.prepare('DELETE FROM ai_jobs WHERE id = ?').run(id);
+    return;
+  }
+  db.prepare("UPDATE ai_jobs SET status = 'pending', attempts = attempts + 1, error = ? WHERE id = ?").run(error, id);
+}
+
+export function getDocForChunking(docId: string): { id: string; realmId: string; title: string; text: string } | null {
+  const row = db.prepare('SELECT id, realm_id, title, content, type FROM documents WHERE id = ?').get(docId) as any;
+  if (!row) return null;
+  return { id: row.id, realmId: row.realm_id, title: row.title, text: extractPlainText(row.content) };
+}
+
 // ---------- Realms ----------
 
 export function listRealms(): Realm[] {
@@ -167,6 +479,9 @@ export function renameRealm(id: string, name: string): void {
 }
 
 export function deleteRealm(id: string): void {
+  deleteChunksForRealm(id);
+  db.prepare("DELETE FROM ai_jobs WHERE doc_id IN (SELECT id FROM documents WHERE realm_id = ?)").run(id);
+  db.prepare('DELETE FROM documents_fts WHERE realm_id = ?').run(id);
   db.prepare('DELETE FROM realms WHERE id = ?').run(id);
 }
 
@@ -204,6 +519,7 @@ export function createDoc(input: DocInput): DocNode {
   ).run(input.id, input.realmId, input.parentId, input.type, input.title, input.content ?? null, position, now);
   const doc: DocNode = { ...input, content: input.content ?? null, position, updatedAt: now };
   ftsUpsert(doc);
+  if (input.type !== 'core/folder') enqueueEmbedJob(doc.id);
   return doc;
 }
 
@@ -219,8 +535,11 @@ export function updateDoc(id: string, changes: DocChanges): void {
   db.prepare(`UPDATE documents SET ${fields.join(', ')} WHERE id = ?`).run(...values);
 
   if (changes.title !== undefined || changes.content !== undefined) {
-    const row = db.prepare('SELECT id, realm_id, title, content FROM documents WHERE id = ?').get(id) as any;
-    if (row) ftsUpsert({ id: row.id, realmId: row.realm_id, title: row.title, content: row.content });
+    const row = db.prepare('SELECT id, realm_id, type, title, content FROM documents WHERE id = ?').get(id) as any;
+    if (row) {
+      ftsUpsert({ id: row.id, realmId: row.realm_id, title: row.title, content: row.content });
+      if (row.type !== 'core/folder') enqueueEmbedJob(id);
+    }
   }
 }
 
@@ -237,7 +556,11 @@ export function deleteDoc(id: string): void {
     .all(id) as { id: string }[];
   db.prepare('DELETE FROM documents WHERE id = ?').run(id);
   const del = db.prepare('DELETE FROM documents_fts WHERE doc_id = ?');
-  for (const d of descendants) del.run(d.id);
+  for (const d of descendants) {
+    del.run(d.id);
+    deleteChunksForDoc(d.id);
+    db.prepare('DELETE FROM ai_jobs WHERE doc_id = ?').run(d.id);
+  }
 }
 
 export function moveDoc(id: string, parentId: string | null, position: number): void {
