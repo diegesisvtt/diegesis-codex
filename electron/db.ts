@@ -4,7 +4,8 @@ import { app } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import type { DocChanges, DocInput, DocNode, Realm, SearchResult, SemanticSearchResult, UiState } from '../shared/types';
+import type { ChatRole, Conversation, DocChanges, DocInput, DocNode, Realm, RetrievedChunk, SearchResult, SemanticSearchResult, StoredChatMessage, UiState } from '../shared/types';
+import { blocksToPlainText, isTiptapDoc, tiptapToBlocks } from '../shared/blockContent';
 
 export const generateId = () => crypto.randomBytes(6).toString('hex');
 
@@ -78,7 +79,63 @@ function migrate(): void {
       key TEXT PRIMARY KEY,
       value TEXT
     );
+    CREATE TABLE IF NOT EXISTS conversations (
+      id TEXT PRIMARY KEY,
+      realm_id TEXT NOT NULL REFERENCES realms(id) ON DELETE CASCADE,
+      title TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_conversations_realm ON conversations(realm_id, updated_at DESC);
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      sources TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_conv ON chat_messages(conversation_id, created_at ASC);
+    CREATE TABLE IF NOT EXISTS pdf_pages (
+      doc_id TEXT NOT NULL,
+      page INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      PRIMARY KEY (doc_id, page)
+    );
   `);
+
+  // migration: Notion-style page icons (pins inherit the note's icon)
+  try {
+    db.exec('ALTER TABLE documents ADD COLUMN icon TEXT');
+  } catch {
+    /* column already exists */
+  }
+
+  // migration: legacy tiptap JSON → BlockNote JSON in note documents
+  {
+    const notes = db.prepare("SELECT id, content FROM documents WHERE type = 'core/note'").all() as {
+      id: string;
+      content: string | null;
+    }[];
+    const upd = db.prepare('UPDATE documents SET content = ? WHERE id = ?');
+    let migrated = 0;
+    const tx = db.transaction(() => {
+      for (const n of notes) {
+        if (!n.content) continue;
+        try {
+          const parsed = JSON.parse(n.content);
+          if (isTiptapDoc(parsed)) {
+            upd.run(JSON.stringify(tiptapToBlocks(parsed)), n.id);
+            migrated++;
+          }
+        } catch {
+          /* malformed content — leave as is */
+        }
+      }
+    });
+    tx();
+    if (migrated > 0) rebuildFts();
+  }
 
   // Recreate the vec table if one was previously configured (dimension comes from ai_meta).
   const dim = getEmbedDim();
@@ -93,16 +150,19 @@ function migrate(): void {
       'Meu Primeiro Universo',
       Date.now()
     );
-    const welcome = {
-      type: 'doc',
-      content: [
-        { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Bem-vindo ao Mythril' }] },
-        {
-          type: 'paragraph',
-          content: [{ type: 'text', text: 'Crie mundos, notas e quadros de campanha. Tudo salvo localmente em SQLite.' }],
-        },
-      ],
-    };
+    const welcome = [
+      {
+        type: 'heading',
+        props: { level: 1 },
+        content: [{ type: 'text', text: 'Bem-vindo ao Mythril', styles: {} }],
+      },
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Crie mundos, notas e quadros de campanha. Tudo salvo localmente em SQLite.', styles: {} },
+        ],
+      },
+    ];
     db.prepare(
       'INSERT INTO documents (id, realm_id, parent_id, type, title, content, position, updated_at) VALUES (?, ?, NULL, ?, ?, ?, 0, ?)'
     ).run(generateId(), realmId, 'core/note', 'Bem-vindo ao Mythril', JSON.stringify(welcome), Date.now());
@@ -119,43 +179,114 @@ function migrate(): void {
 // ---------- Full-text search ----------
 
 /** Extracts plain text from a document's JSON content for indexing. */
-function extractPlainText(content: string | null): string {
+export function extractPlainText(content: string | null): string {
   if (!content) return '';
   try {
     const parsed = JSON.parse(content);
     const parts: string[] = [];
-    const walk = (node: any): void => {
-      if (!node) return;
-      if (typeof node.text === 'string') parts.push(node.text);
-      if (Array.isArray(node.content)) node.content.forEach(walk);
-      // whiteboard nodes
-      if (Array.isArray(node.nodes)) {
-        for (const n of node.nodes) if (n?.data?.name) parts.push(String(n.data.name));
+    // PDF documents: index file name, pin tags/fields, highlight excerpts, bookmark labels.
+    if (parsed && typeof parsed === 'object' && parsed.file && Array.isArray(parsed.pins)) {
+      if (parsed.file.name) parts.push(String(parsed.file.name));
+      for (const pin of parsed.pins) {
+        if (pin?.tag) parts.push(String(pin.tag));
+        if (Array.isArray(pin?.fields)) {
+          for (const f of pin.fields) {
+            if (f?.key) parts.push(String(f.key));
+            if (f?.value != null) parts.push(String(f.value));
+          }
+        }
       }
-    };
-    walk(parsed);
-    return parts.join(' ');
+      for (const hl of parsed.highlights ?? []) if (hl?.text) parts.push(String(hl.text));
+      for (const bm of parsed.bookmarks ?? []) if (bm?.label) parts.push(String(bm.label));
+      return parts.join(' ');
+    }
+    // notes (BlockNote JSON), whiteboards and legacy content
+    return blocksToPlainText(content);
   } catch {
     return '';
   }
 }
 
-function ftsUpsert(doc: { id: string; realmId: string; title: string; content: string | null }): void {
+// ---------- PDF page text ----------
+
+export function getPdfPagesText(docId: string): string {
+  return getPdfPageRows(docId)
+    .map((r) => r.text)
+    .join('\n');
+}
+
+/** Extracted per-page text of a PDF doc with real page numbers; used by realm export. */
+export function getPdfPageRows(docId: string): { page: number; text: string }[] {
+  return db.prepare('SELECT page, text FROM pdf_pages WHERE doc_id = ? ORDER BY page ASC').all(docId) as {
+    page: number;
+    text: string;
+  }[];
+}
+
+/** Restores extracted PDF page text (realm import), preserving page numbers, then re-indexes. */
+export function restorePdfPages(docId: string, rows: { page: number; text: string }[]): void {
+  const row = db.prepare('SELECT id, realm_id, type, title, content FROM documents WHERE id = ?').get(docId) as any;
+  if (!row || row.type !== 'core/pdf') return;
+  const clean = rows
+    .filter((r) => r && Number.isInteger(r.page) && r.page >= 1 && r.page <= 10000 && typeof r.text === 'string')
+    .map((r) => ({ page: r.page, text: r.text.length > 200000 ? r.text.slice(0, 200000) : r.text }))
+    .filter((r) => r.text.trim());
+  if (!clean.length) return;
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM pdf_pages WHERE doc_id = ?').run(docId);
+    const ins = db.prepare('INSERT INTO pdf_pages (doc_id, page, text) VALUES (?, ?, ?)');
+    for (const r of clean) ins.run(docId, r.page, r.text);
+  });
+  tx();
+  ftsUpsert({ id: row.id, realmId: row.realm_id, type: row.type, title: row.title, content: row.content });
+  enqueueEmbedJob(docId);
+}
+
+/** Replaces the extracted per-page text of a PDF doc and re-indexes it (FTS + embeddings). */
+export function savePdfPages(docId: string, pages: string[]): void {
+  const row = db.prepare('SELECT id, realm_id, type, title, content FROM documents WHERE id = ?').get(docId) as any;
+  if (!row || row.type !== 'core/pdf') return;
+  // sanity caps: a 300 MB PDF shouldn't be able to freeze the app or bloat the DB
+  const clean = pages
+    .filter((p): p is string => typeof p === 'string')
+    .slice(0, 10000)
+    .map((p) => (p.length > 200000 ? p.slice(0, 200000) : p));
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM pdf_pages WHERE doc_id = ?').run(docId);
+    const ins = db.prepare('INSERT INTO pdf_pages (doc_id, page, text) VALUES (?, ?, ?)');
+    clean.forEach((text, i) => {
+      if (text && text.trim()) ins.run(docId, i + 1, text);
+    });
+  });
+  tx();
+  ftsUpsert({ id: row.id, realmId: row.realm_id, type: row.type, title: row.title, content: row.content });
+  enqueueEmbedJob(docId);
+}
+
+/** Full text used for FTS/embeddings: JSON content plus extracted PDF pages. */
+function docIndexText(doc: { id: string; type: string; content: string | null }): string {
+  const text = extractPlainText(doc.content);
+  if (doc.type !== 'core/pdf') return text;
+  const pages = getPdfPagesText(doc.id);
+  return pages ? `${text} ${pages}` : text;
+}
+
+function ftsUpsert(doc: { id: string; realmId: string; type: string; title: string; content: string | null }): void {
   db.prepare('DELETE FROM documents_fts WHERE doc_id = ?').run(doc.id);
   db.prepare('INSERT INTO documents_fts (doc_id, realm_id, title, body) VALUES (?, ?, ?, ?)').run(
     doc.id,
     doc.realmId,
     doc.title,
-    extractPlainText(doc.content)
+    docIndexText(doc)
   );
 }
 
 export function rebuildFts(): void {
   db.prepare('DELETE FROM documents_fts').run();
-  const rows = db.prepare('SELECT id, realm_id, title, content FROM documents').all() as any[];
+  const rows = db.prepare('SELECT id, realm_id, type, title, content FROM documents').all() as any[];
   const insert = db.prepare('INSERT INTO documents_fts (doc_id, realm_id, title, body) VALUES (?, ?, ?, ?)');
   const tx = db.transaction(() => {
-    for (const r of rows) insert.run(r.id, r.realm_id, r.title, extractPlainText(r.content));
+    for (const r of rows) insert.run(r.id, r.realm_id, r.title, docIndexText({ id: r.id, type: r.type, content: r.content }));
   });
   tx();
 }
@@ -458,7 +589,7 @@ export function failJob(id: string, error: string, maxAttempts = 5): void {
 export function getDocForChunking(docId: string): { id: string; realmId: string; title: string; text: string } | null {
   const row = db.prepare('SELECT id, realm_id, title, content, type FROM documents WHERE id = ?').get(docId) as any;
   if (!row) return null;
-  return { id: row.id, realmId: row.realm_id, title: row.title, text: extractPlainText(row.content) };
+  return { id: row.id, realmId: row.realm_id, title: row.title, text: docIndexText({ id: row.id, type: row.type, content: row.content }) };
 }
 
 // ---------- Realms ----------
@@ -482,7 +613,13 @@ export function deleteRealm(id: string): void {
   deleteChunksForRealm(id);
   db.prepare("DELETE FROM ai_jobs WHERE doc_id IN (SELECT id FROM documents WHERE realm_id = ?)").run(id);
   db.prepare('DELETE FROM documents_fts WHERE realm_id = ?').run(id);
+  db.prepare('DELETE FROM pdf_pages WHERE doc_id IN (SELECT id FROM documents WHERE realm_id = ?)').run(id);
   db.prepare('DELETE FROM realms WHERE id = ?').run(id);
+}
+
+/** Ids and types of every document in a realm (used for asset cleanup). */
+export function listRealmDocTypes(realmId: string): { id: string; type: string }[] {
+  return db.prepare('SELECT id, type FROM documents WHERE realm_id = ?').all(realmId) as { id: string; type: string }[];
 }
 
 // ---------- Documents ----------
@@ -494,6 +631,7 @@ function rowToDoc(r: any): DocNode {
     parentId: r.parent_id,
     type: r.type,
     title: r.title,
+    icon: r.icon ?? null,
     content: r.content,
     position: r.position,
     updatedAt: r.updated_at,
@@ -515,10 +653,10 @@ export function createDoc(input: DocInput): DocNode {
       .prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM documents WHERE realm_id = ? AND parent_id IS ?')
       .get(input.realmId, input.parentId) as { p: number }).p);
   db.prepare(
-    'INSERT INTO documents (id, realm_id, parent_id, type, title, content, position, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(input.id, input.realmId, input.parentId, input.type, input.title, input.content ?? null, position, now);
+    'INSERT INTO documents (id, realm_id, parent_id, type, title, icon, content, position, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(input.id, input.realmId, input.parentId, input.type, input.title, input.icon ?? null, input.content ?? null, position, now);
   const doc: DocNode = { ...input, content: input.content ?? null, position, updatedAt: now };
-  ftsUpsert(doc);
+  ftsUpsert({ id: doc.id, realmId: doc.realmId, type: doc.type, title: doc.title, content: doc.content });
   if (input.type !== 'core/folder') enqueueEmbedJob(doc.id);
   return doc;
 }
@@ -527,6 +665,7 @@ export function updateDoc(id: string, changes: DocChanges): void {
   const fields: string[] = [];
   const values: unknown[] = [];
   if (changes.title !== undefined) { fields.push('title = ?'); values.push(changes.title); }
+  if (changes.icon !== undefined) { fields.push('icon = ?'); values.push(changes.icon); }
   if (changes.content !== undefined) { fields.push('content = ?'); values.push(changes.content); }
   if (changes.parentId !== undefined) { fields.push('parent_id = ?'); values.push(changes.parentId); }
   if (changes.position !== undefined) { fields.push('position = ?'); values.push(changes.position); }
@@ -537,10 +676,23 @@ export function updateDoc(id: string, changes: DocChanges): void {
   if (changes.title !== undefined || changes.content !== undefined) {
     const row = db.prepare('SELECT id, realm_id, type, title, content FROM documents WHERE id = ?').get(id) as any;
     if (row) {
-      ftsUpsert({ id: row.id, realmId: row.realm_id, title: row.title, content: row.content });
+      ftsUpsert({ id: row.id, realmId: row.realm_id, type: row.type, title: row.title, content: row.content });
       if (row.type !== 'core/folder') enqueueEmbedJob(id);
     }
   }
+}
+
+/** Ids and types of a document and all its descendants (used for asset cleanup). */
+export function listSubtreeDocs(id: string): { id: string; type: string }[] {
+  return db
+    .prepare(
+      `WITH RECURSIVE sub(id, type) AS (
+         SELECT id, type FROM documents WHERE id = ?
+         UNION ALL
+         SELECT d.id, d.type FROM documents d JOIN sub s ON d.parent_id = s.id
+       ) SELECT id, type FROM sub`
+    )
+    .all(id) as { id: string; type: string }[];
 }
 
 export function deleteDoc(id: string): void {
@@ -556,8 +708,10 @@ export function deleteDoc(id: string): void {
     .all(id) as { id: string }[];
   db.prepare('DELETE FROM documents WHERE id = ?').run(id);
   const del = db.prepare('DELETE FROM documents_fts WHERE doc_id = ?');
+  const delPages = db.prepare('DELETE FROM pdf_pages WHERE doc_id = ?');
   for (const d of descendants) {
     del.run(d.id);
+    delPages.run(d.id);
     deleteChunksForDoc(d.id);
     db.prepare('DELETE FROM ai_jobs WHERE doc_id = ?').run(d.id);
   }
@@ -591,4 +745,103 @@ export function saveUiState(state: UiState): void {
   db.prepare("INSERT INTO settings (key, value) VALUES ('ui_state', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(
     JSON.stringify(state)
   );
+}
+
+// ---------- AI conversations ----------
+
+export function listConversations(realmId: string): Conversation[] {
+  const rows = db
+    .prepare('SELECT * FROM conversations WHERE realm_id = ? ORDER BY updated_at DESC')
+    .all(realmId) as any[];
+  return rows.map((r) => ({
+    id: r.id,
+    realmId: r.realm_id,
+    title: r.title,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+export function createConversation(realmId: string): Conversation {
+  const now = Date.now();
+  const conv: Conversation = { id: generateId(), realmId, title: 'Nova conversa', createdAt: now, updatedAt: now };
+  db.prepare('INSERT INTO conversations (id, realm_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(
+    conv.id,
+    conv.realmId,
+    conv.title,
+    conv.createdAt,
+    conv.updatedAt
+  );
+  return conv;
+}
+
+export function getConversation(id: string): Conversation | null {
+  const r = db.prepare('SELECT * FROM conversations WHERE id = ?').get(id) as any;
+  return r
+    ? { id: r.id, realmId: r.realm_id, title: r.title, createdAt: r.created_at, updatedAt: r.updated_at }
+    : null;
+}
+
+export function renameConversation(id: string, title: string): void {
+  db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(title, Date.now(), id);
+}
+
+export function touchConversation(id: string, firstUserMessage?: string): void {
+  // auto-title from the first user message if the conversation is still untitled
+  const conv = getConversation(id);
+  if (!conv) return;
+  if (conv.title === 'Nova conversa' && firstUserMessage) {
+    const title = firstUserMessage.replace(/\s+/g, ' ').trim().slice(0, 48) || conv.title;
+    db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(title, Date.now(), id);
+  } else {
+    db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(Date.now(), id);
+  }
+}
+
+export function deleteConversation(id: string): void {
+  db.prepare('DELETE FROM conversations WHERE id = ?').run(id); // messages cascade
+}
+
+/** Inserts an already-remapped conversation with its messages (realm import). */
+export function restoreConversation(
+  realmId: string,
+  conv: { id: string; title: string; createdAt: number; updatedAt: number },
+  messages: { id: string; role: ChatRole; content: string; sources: string | null; createdAt: number }[]
+): void {
+  db.prepare('INSERT INTO conversations (id, realm_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(
+    conv.id,
+    realmId,
+    conv.title.slice(0, 500),
+    conv.createdAt,
+    conv.updatedAt
+  );
+  const ins = db.prepare(
+    'INSERT INTO chat_messages (id, conversation_id, role, content, sources, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+  for (const m of messages) ins.run(m.id, conv.id, m.role, m.content, m.sources, m.createdAt);
+}
+
+export function addChatMessage(
+  conversationId: string,
+  role: ChatRole,
+  content: string,
+  sources?: RetrievedChunk[]
+): void {
+  db.prepare(
+    'INSERT INTO chat_messages (id, conversation_id, role, content, sources, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(generateId(), conversationId, role, content, sources ? JSON.stringify(sources) : null, Date.now());
+}
+
+export function listChatMessages(conversationId: string): StoredChatMessage[] {
+  const rows = db
+    .prepare('SELECT * FROM chat_messages WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC')
+    .all(conversationId) as any[];
+  return rows.map((r) => ({
+    id: r.id,
+    conversationId: r.conversation_id,
+    role: r.role as ChatRole,
+    content: r.content,
+    sources: r.sources ? JSON.parse(r.sources) : undefined,
+    createdAt: r.created_at,
+  }));
 }
