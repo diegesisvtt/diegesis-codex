@@ -221,18 +221,9 @@ body,
   font-style: normal;
 }
 
-/* Headings — Notion scale */
-.mythril-bn .bn-block-content[data-content-type="heading"] {
-  --level: 1.875em;
-  padding-top: 14px;
-  line-height: 1.25;
-}
-.mythril-bn [data-content-type="heading"][data-level="2"] {
-  --level: 1.5em;
-}
-.mythril-bn [data-content-type="heading"][data-level="3"] {
-  --level: 1.2em;
-}
+/* Headings, listas e blocos usam o layout padrão do BlockNote —
+   o posicionamento do side menu é calculado sobre ele; customizações
+   aqui desalinham os ícones laterais */
 
 /* Links */
 .mythril-bn .bn-editor a {
@@ -314,13 +305,6 @@ body,
   line-height: 1.5;
   padding: 0;
   min-height: 0;
-}
-.mythril-bn.mini .bn-block-content[data-content-type="heading"] {
-  --level: 1.25em;
-  padding-top: 6px;
-}
-.mythril-bn.mini [data-content-type="heading"][data-level="3"] {
-  --level: 1.1em;
 }
 
 /* ============================================================
