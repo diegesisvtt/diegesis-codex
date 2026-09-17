@@ -2,7 +2,7 @@
 
 export const APP_VERSION = '1.0.0';
 
-export type DocumentType = 'core/note' | 'core/whiteboard' | 'core/folder';
+export type DocumentType = 'core/note' | 'core/whiteboard' | 'core/folder' | 'core/pdf';
 
 export interface Realm {
   id: string;
@@ -16,6 +16,8 @@ export interface DocNode {
   parentId: string | null;
   type: DocumentType;
   title: string;
+  /** Notion-style page icon (RPG icon set name); also used by PDF pins of this note */
+  icon?: string | null;
   /** JSON string: tiptap doc for notes, { nodes: [...] } for whiteboards, null for folders */
   content: string | null;
   position: number;
@@ -28,12 +30,14 @@ export interface DocInput {
   parentId: string | null;
   type: DocumentType;
   title: string;
+  icon?: string | null;
   content?: string | null;
   position?: number;
 }
 
 export interface DocChanges {
   title?: string;
+  icon?: string | null;
   content?: string | null;
   parentId?: string | null;
   position?: number;
@@ -126,9 +130,35 @@ export interface RetrievedChunk {
 
 export interface AIChatRequest {
   chatId: string;
+  conversationId: string;
   realmId: string | null;
   messages: ChatMessage[];
   useContext: boolean;
+}
+
+export interface Conversation {
+  id: string;
+  realmId: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface StoredChatMessage {
+  id: string;
+  conversationId: string;
+  role: ChatRole;
+  content: string;
+  sources?: RetrievedChunk[];
+  createdAt: number;
+}
+
+/** Emitted when the assistant uses a tool during a chat turn. */
+export interface AIToolEvent {
+  chatId: string;
+  /** human-readable summary, e.g. 'Criou a nota "Arton"' */
+  summary: string;
+  ok: boolean;
 }
 
 export interface ChatStreamChunk {
@@ -148,12 +178,33 @@ export interface ProviderTestResult {
   error?: string;
 }
 
+export interface PdfImportResult {
+  /** null when the user cancelled the file dialog */
+  doc: DocNode | null;
+  error?: string;
+}
+
+export interface RealmTransferResult {
+  ok: boolean;
+  /** true when the user dismissed the file dialog */
+  canceled?: boolean;
+  error?: string;
+  /** import only: the newly created realm */
+  realm?: Realm;
+  /** export only: where the file was written */
+  filePath?: string;
+}
+
 export interface MythrilApi {
   realms: {
     list(): Promise<Realm[]>;
     create(name: string): Promise<Realm>;
     rename(id: string, name: string): Promise<void>;
     delete(id: string): Promise<void>;
+    /** opens a save dialog and writes the realm (docs + PDFs) to a JSON file */
+    export(id: string): Promise<RealmTransferResult>;
+    /** opens a file dialog and imports a previously exported realm file */
+    import(): Promise<RealmTransferResult>;
   };
   docs: {
     listByRealm(realmId: string): Promise<DocNode[]>;
@@ -162,6 +213,8 @@ export interface MythrilApi {
     delete(id: string): Promise<void>; // deletes subtree
     move(id: string, parentId: string | null, position: number): Promise<void>;
     search(realmId: string, query: string): Promise<SearchResult[]>;
+    /** fired when documents are changed outside the renderer (e.g. AI tools) */
+    onChanged(cb: (realmId: string) => void): () => void;
   };
   ui: {
     load(): Promise<UiState | null>;
@@ -176,9 +229,25 @@ export interface MythrilApi {
     rebuildIndex(): Promise<void>;
     onIndexStatus(cb: (status: AIIndexStatus) => void): () => void;
     searchSemantic(realmId: string, query: string): Promise<SemanticSearchResult[]>;
+    listConversations(realmId: string): Promise<Conversation[]>;
+    createConversation(realmId: string): Promise<Conversation>;
+    renameConversation(id: string, title: string): Promise<void>;
+    deleteConversation(id: string): Promise<void>;
+    listMessages(conversationId: string): Promise<StoredChatMessage[]>;
     chat(req: AIChatRequest): Promise<void>;
+    cancelChat(chatId: string): Promise<void>;
     onChatChunk(cb: (chunk: ChatStreamChunk) => void): () => void;
     onChatSources(cb: (s: AIChatSources) => void): () => void;
+    onToolEvent(cb: (e: AIToolEvent) => void): () => void;
+  };
+  pdf: {
+    /** opens a file dialog, copies the PDF into app storage and creates the document */
+    import(realmId: string, parentId: string | null): Promise<PdfImportResult>;
+    /** stores extracted per-page text (index 0 = page 1) and re-indexes the doc */
+    saveText(docId: string, pages: string[]): Promise<void>;
+    /** page thumbnail disk cache (base64 JPEG); null when not cached */
+    readThumb(docId: string, page: number): Promise<string | null>;
+    writeThumb(docId: string, page: number, base64: string): Promise<void>;
   };
   app: {
     platform(): Promise<NodeJS.Platform>;
