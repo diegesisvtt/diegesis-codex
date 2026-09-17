@@ -1,15 +1,63 @@
 import { useState } from 'react';
-import { BookOpen, Plus, ChevronDown, Search, Sparkles } from 'lucide-react';
+import { BookOpen, Plus, ChevronDown, Search, Sparkles, Pencil, Trash2, FileDown, FileUp } from 'lucide-react';
 import { useStore } from '../state/store';
 import { Modal, Button } from './ui';
+import type { Realm } from '@shared/types';
 
 export function TitleBar({ onOpenSearch }: { onOpenSearch(): void }) {
-  const { realms, activeRealmId, setActiveRealm, createRealm, openPanel } = useStore();
+  const { realms, activeRealmId, setActiveRealm, createRealm, renameRealm, deleteRealm, exportRealm, importRealm, openPanel } =
+    useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
+  const [renaming, setRenaming] = useState<Realm | null>(null);
+  const [renameName, setRenameName] = useState('');
+  const [deleting, setDeleting] = useState<Realm | null>(null);
+  const [transferError, setTransferError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const active = realms.find((r) => r.id === activeRealmId);
+
+  const doExport = async (realm: Realm) => {
+    setMenuOpen(false);
+    setBusy(true);
+    try {
+      const res = await exportRealm(realm.id);
+      if (!res.ok && !res.canceled) setTransferError(res.error ?? 'Falha ao exportar o universo.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doImport = async () => {
+    setMenuOpen(false);
+    setBusy(true);
+    try {
+      const res = await importRealm();
+      if (!res.ok && !res.canceled) setTransferError(res.error ?? 'Falha ao importar o universo.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    await deleteRealm(deleting.id);
+    setDeleting(null);
+  };
+
+  const submitCreate = async () => {
+    if (!name.trim()) return;
+    await createRealm(name.trim());
+    setName('');
+    setCreating(false);
+  };
+
+  const submitRename = async () => {
+    if (!renaming || !renameName.trim()) return;
+    await renameRealm(renaming.id, renameName.trim());
+    setRenaming(null);
+  };
 
   return (
     <div className="h-11 border-b border-line bg-app flex items-center px-3 shrink-0 justify-between z-20 select-none">
@@ -50,28 +98,67 @@ export function TitleBar({ onOpenSearch }: { onOpenSearch(): void }) {
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-full mt-1 z-40 w-64 bg-elevated border border-line rounded-lg shadow-2xl py-1 overflow-hidden animate-fade-up">
+              <div className="absolute right-0 top-full mt-1 z-40 w-72 bg-elevated border border-line rounded-lg shadow-2xl py-1 overflow-hidden animate-fade-up">
                 <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-ink-3">
                   Universos
                 </div>
                 {realms.map((r) => (
-                  <button
+                  <div
                     key={r.id}
-                    onClick={() => {
-                      setActiveRealm(r.id);
-                      setMenuOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-1.5 text-[13px] transition-colors flex items-center gap-2 ${
-                      r.id === activeRealmId ? 'text-ink-1 bg-active' : 'text-ink-2 hover:bg-hover'
+                    className={`group flex items-center gap-1 pr-1 transition-colors ${
+                      r.id === activeRealmId ? 'bg-active' : 'hover:bg-hover'
                     }`}
                   >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        r.id === activeRealmId ? 'bg-accent' : 'bg-line-strong'
+                    <button
+                      onClick={() => {
+                        setActiveRealm(r.id);
+                        setMenuOpen(false);
+                      }}
+                      className={`flex-1 min-w-0 text-left px-3 py-1.5 text-[13px] flex items-center gap-2 ${
+                        r.id === activeRealmId ? 'text-ink-1' : 'text-ink-2'
                       }`}
-                    />
-                    <span className="truncate">{r.name}</span>
-                  </button>
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          r.id === activeRealmId ? 'bg-accent' : 'bg-line-strong'
+                        }`}
+                      />
+                      <span className="truncate">{r.name}</span>
+                    </button>
+                    <span className="hidden group-hover:flex group-focus-within:flex items-center shrink-0">
+                      <button
+                        title="Renomear universo"
+                        disabled={busy}
+                        onClick={() => {
+                          setRenaming(r);
+                          setRenameName(r.name);
+                          setMenuOpen(false);
+                        }}
+                        className="p-1 rounded text-ink-3 hover:text-ink-1 hover:bg-overlay transition-colors disabled:opacity-40"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      <button
+                        title="Exportar universo"
+                        disabled={busy}
+                        onClick={() => doExport(r)}
+                        className="p-1 rounded text-ink-3 hover:text-ink-1 hover:bg-overlay transition-colors disabled:opacity-40"
+                      >
+                        <FileDown size={12} />
+                      </button>
+                      <button
+                        title="Excluir universo"
+                        disabled={busy}
+                        onClick={() => {
+                          setDeleting(r);
+                          setMenuOpen(false);
+                        }}
+                        className="p-1 rounded text-ink-3 hover:text-danger hover:bg-overlay transition-colors disabled:opacity-40"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </span>
+                  </div>
                 ))}
                 <div className="border-t border-line mt-1 pt-1">
                   <button
@@ -82,6 +169,13 @@ export function TitleBar({ onOpenSearch }: { onOpenSearch(): void }) {
                     className="w-full text-left px-3 py-1.5 text-[13px] text-ink-2 hover:bg-hover hover:text-ink-1 flex items-center gap-2"
                   >
                     <Plus size={13} /> Novo universo
+                  </button>
+                  <button
+                    onClick={doImport}
+                    disabled={busy}
+                    className="w-full text-left px-3 py-1.5 text-[13px] text-ink-2 hover:bg-hover hover:text-ink-1 flex items-center gap-2 disabled:opacity-40"
+                  >
+                    <FileUp size={13} /> Importar universo…
                   </button>
                 </div>
               </div>
@@ -99,16 +193,7 @@ export function TitleBar({ onOpenSearch }: { onOpenSearch(): void }) {
             <Button variant="ghost" onClick={() => setCreating(false)}>
               Cancelar
             </Button>
-            <Button
-              onClick={async () => {
-                if (!name.trim()) return;
-                await createRealm(name.trim());
-                setName('');
-                setCreating(false);
-              }}
-            >
-              Criar
-            </Button>
+            <Button onClick={submitCreate}>Criar</Button>
           </>
         }
       >
@@ -117,15 +202,69 @@ export function TitleBar({ onOpenSearch }: { onOpenSearch(): void }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && name.trim()) {
-              createRealm(name.trim());
-              setName('');
-              setCreating(false);
-            }
+            if (e.key === 'Enter') submitCreate();
           }}
           placeholder="Nome do universo…"
           className="w-full bg-sidebar border border-line rounded-md px-3 py-2 text-ink-1 text-sm outline-none focus:border-accent transition-colors"
         />
+      </Modal>
+
+      <Modal
+        isOpen={renaming !== null}
+        onClose={() => setRenaming(null)}
+        title="Renomear universo"
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setRenaming(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={submitRename}>Renomear</Button>
+          </>
+        }
+      >
+        <input
+          autoFocus
+          value={renameName}
+          onChange={(e) => setRenameName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submitRename();
+          }}
+          placeholder="Nome do universo…"
+          className="w-full bg-sidebar border border-line rounded-md px-3 py-2 text-ink-1 text-sm outline-none focus:border-accent transition-colors"
+        />
+      </Modal>
+
+      <Modal
+        isOpen={deleting !== null}
+        onClose={() => setDeleting(null)}
+        title="Excluir universo"
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setDeleting(null)}>
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={confirmDelete}>
+              Excluir
+            </Button>
+          </>
+        }
+      >
+        <p>
+          Excluir <strong className="text-ink-1">{deleting?.name}</strong>?
+        </p>
+        <p className="mt-2 text-ink-3 text-[13px]">
+          Todos os documentos, PDFs e conversas deste universo serão apagados permanentemente. Esta ação não pode ser
+          desfeita.
+        </p>
+      </Modal>
+
+      <Modal
+        isOpen={transferError !== null}
+        onClose={() => setTransferError(null)}
+        title="Erro na transferência"
+        actions={<Button onClick={() => setTransferError(null)}>OK</Button>}
+      >
+        <p>{transferError}</p>
       </Modal>
     </div>
   );

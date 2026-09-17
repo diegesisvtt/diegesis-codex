@@ -3,12 +3,20 @@ import { Layout, Model, TabNode, Actions, DockLocation, IJsonModel, IJsonTabNode
 import { BookOpen } from 'lucide-react';
 import { useStore, type PanelKind } from '../state/store';
 import { Explorer } from './Explorer';
+import { HighlightsPanel } from './HighlightsPanel';
 import { DocumentContainer } from './DocumentContainer';
 import { AIChatPanel } from './AIChatPanel';
 import { AISettingsPanel } from './AISettingsPanel';
 
 const MAIN_TABSET_ID = 'main-tabset';
 const WELCOME_TAB_ID = '__welcome__';
+const HIGHLIGHTS_TAB: IJsonTabNode = {
+  type: 'tab',
+  id: '__highlights__',
+  name: 'Destaques',
+  component: 'highlights',
+  enableClose: false,
+};
 
 const PANEL_TABS: Record<PanelKind, { id: string; name: string }> = {
   'ai-chat': { id: '__ai_chat__', name: 'Assistente IA' },
@@ -37,6 +45,7 @@ function defaultModel(): IJsonModel {
             enableClose: false,
             enableDrag: false,
           },
+          HIGHLIGHTS_TAB,
         ],
       },
     ],
@@ -91,6 +100,22 @@ function sanitizeModel(json: IJsonModel, validDocIds: Set<string>): IJsonModel {
       enableDeleteWhenEmpty: false,
       children: [],
     });
+  }
+
+  // migration: layouts saved before the highlights panel existed don't have it
+  const hasHighlights = JSON.stringify(clone.borders ?? []).includes('__highlights__');
+  if (!hasHighlights) {
+    clone.borders = clone.borders ?? [];
+    const left = (clone.borders as any[]).find((b) => b.location === 'left');
+    if (left) left.children.push({ ...HIGHLIGHTS_TAB });
+    else
+      (clone.borders as any[]).push({
+        type: 'border',
+        location: 'left',
+        size: 290,
+        selected: 0,
+        children: [{ ...HIGHLIGHTS_TAB }],
+      });
   }
   return clone;
 }
@@ -233,6 +258,8 @@ export function Workspace() {
     switch (node.getComponent()) {
       case 'explorer':
         return <Explorer />;
+      case 'highlights':
+        return <HighlightsPanel />;
       case 'document':
         return <DocumentContainer docId={node.getConfig().docId} />;
       case 'ai-chat':
