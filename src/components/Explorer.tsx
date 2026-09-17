@@ -10,29 +10,96 @@ import {
   FilePlus2,
   FolderPlus,
   PenLine,
+  BookOpen,
+  FileUp,
+  MapPin,
+  Bookmark,
+  Star,
 } from 'lucide-react';
+import type { DocNode } from '@shared/types';
 import { useStore } from '../state/store';
 import { buildTree, TreeData } from './treeData';
+import { buildPdfTreeInfo, parseBookmarkVirtualId, renameBookmarkLabel, removeBookmark, type PdfTreeInfo } from './pdfTree';
+import { pinIcon } from './editors/pdf/rpg';
+
+// buildPdfTreeInfo parses every PDF's content JSON; cache per docs-array
+// reference so each row render doesn't redo the work.
+const pdfInfoCache = new WeakMap<DocNode[], PdfTreeInfo>();
+function cachedPdfInfo(docs: DocNode[]): PdfTreeInfo {
+  let info = pdfInfoCache.get(docs);
+  if (!info) {
+    info = buildPdfTreeInfo(docs);
+    pdfInfoCache.set(docs, info);
+  }
+  return info;
+}
 
 function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
-  const { deleteDocument, openDocument } = useStore();
+  const { docs, deleteDocument, updateDocument, openDocument, focusPdf } = useStore();
   const data = node.data;
+  const bookmark = data.bookmark;
+  const pin = !bookmark ? cachedPdfInfo(docs).pinNotes.get(data.id) : undefined;
+  // Notion-style page icon set in the note editor (pins keep the pin icon/color)
+  const docIcon = !bookmark && !pin ? docs.find((d) => d.id === data.id)?.icon : undefined;
 
-  const Icon =
-    data.docType === 'core/folder' ? Folder : data.docType === 'core/note' ? File : LayoutGrid;
+  const Icon = bookmark
+    ? Bookmark
+    : pin
+      ? MapPin
+      : docIcon
+        ? pinIcon(docIcon)
+        : data.docType === 'core/folder'
+          ? Folder
+          : data.docType === 'core/note'
+            ? File
+            : data.docType === 'core/pdf'
+              ? BookOpen
+              : LayoutGrid;
   const iconColor =
     data.docType === 'core/folder'
       ? 'text-ink-3'
       : data.docType === 'core/note'
         ? 'text-note'
-        : 'text-board';
+        : data.docType === 'core/pdf'
+          ? 'text-pdf'
+          : 'text-board';
+
+  // pins and bookmarks open the PDF at their location, not an editor tab
+  const openAtLocation = () => {
+    if (bookmark) {
+      openDocument(bookmark.pdfDocId);
+      focusPdf({ docId: bookmark.pdfDocId, page: bookmark.page });
+    } else if (pin) {
+      openDocument(pin.pdfDocId);
+      focusPdf({ docId: pin.pdfDocId, pinId: pin.pinId });
+    }
+  };
 
   return (
     <div
       style={style}
       ref={dragHandle}
-      onClick={() => (data.docType === 'core/folder' ? node.toggle() : node.select())}
+      // pin notes can be dragged onto a PDF page to create a link token there.
+      // capture phase: react-arborist stops propagation in its own native
+      // dragstart handler, which would prevent a bubble-phase listener from
+      // ever firing (the token never arrived at the PDF)
+      onDragStartCapture={(e) => {
+        if (pin) {
+          e.dataTransfer.setData('application/x-mythril-pin-note', `${pin.pdfDocId}:${data.id}`);
+          e.dataTransfer.effectAllowed = 'copy';
+        }
+      }}
+      onClick={() => {
+        if (bookmark || pin) {
+          node.select();
+          openAtLocation();
+          return;
+        }
+        if (data.docType === 'core/folder' || data.docType === 'core/pdf') node.toggle();
+        else node.select();
+      }}
       onDoubleClick={() => {
+        if (bookmark || pin) return; // single click already navigated
         if (data.docType !== 'core/folder') openDocument(data.id);
       }}
       className={`group flex items-center gap-1.5 pr-1.5 h-full cursor-pointer select-none text-[13px] rounded-md mx-1 transition-colors
@@ -45,7 +112,14 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
       ) : (
         <span className="w-[13px] shrink-0" />
       )}
-      <Icon size={15} strokeWidth={1.75} className={`${iconColor} shrink-0`} />
+      {bookmark || pin ? (
+        <span className="relative shrink-0 flex items-center">
+          <Icon size={15} strokeWidth={1.75} style={{ color: (bookmark ?? pin)!.color }} />
+          {bookmark?.favorite && <Star size={7} className="absolute -top-1 -right-1 text-yellow-400 fill-current" />}
+        </span>
+      ) : (
+        <Icon size={15} strokeWidth={1.75} className={`${iconColor} shrink-0`} />
+      )}
       {node.isEditing ? (
         <input
           type="text"
@@ -61,7 +135,10 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
           className="flex-1 bg-overlay text-ink-1 text-[13px] rounded px-1.5 py-0.5 outline-none border border-accent min-w-0"
         />
       ) : (
-        <span className="truncate flex-1">{data.name}</span>
+        <span className="truncate flex-1">
+          {data.name}
+          {bookmark && <span className="ml-1.5 text-[10px] text-ink-3">p.{bookmark.page}</span>}
+        </span>
       )}
       <span className="opacity-0 group-hover:opacity-100 flex items-center shrink-0 transition-opacity">
         <button
@@ -78,6 +155,11 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
           title="Excluir"
           onClick={(e) => {
             e.stopPropagation();
+            if (bookmark) {
+              const pdfDoc = docs.find((d) => d.id === bookmark.pdfDocId);
+              if (pdfDoc) updateDocument(pdfDoc.id, { content: removeBookmark(pdfDoc.content, bookmark.bookmarkId) });
+              return;
+            }
             deleteDocument(data.id);
           }}
           className="p-1 text-ink-3 hover:text-danger hover:bg-active rounded"
@@ -90,12 +172,14 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
 }
 
 export function Explorer() {
-  const { docs, createDocument, updateDocument, moveDocument, deleteDocument, openDocument } = useStore();
+  const { docs, createDocument, importPdf, updateDocument, moveDocument, deleteDocument, openDocument, focusPdf } = useStore();
   const treeRef = useRef<TreeApi<TreeData> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(400);
+  const [importing, setImporting] = useState(false);
 
-  const data = useMemo(() => buildTree(docs), [docs]);
+  const pdfInfo = useMemo(() => cachedPdfInfo(docs), [docs]);
+  const data = useMemo(() => buildTree(docs, pdfInfo.bookmarksByPdf), [docs, pdfInfo]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -125,6 +209,18 @@ export function Explorer() {
     }
   };
 
+  const importPdfHere = async () => {
+    if (importing) return;
+    setImporting(true);
+    try {
+      const result = await importPdf(selectedFolderId());
+      if (result.error) window.alert(result.error);
+      if (result.doc) openDocument(result.doc.id);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="h-full w-full flex flex-col bg-sidebar">
       <div className="px-3 h-9 border-b border-line flex justify-between items-center shrink-0">
@@ -143,6 +239,14 @@ export function Explorer() {
             className="text-ink-3 hover:text-board p-1 rounded-md hover:bg-hover transition-colors"
           >
             <LayoutGrid size={14} />
+          </button>
+          <button
+            onClick={importPdfHere}
+            disabled={importing}
+            title="Importar PDF"
+            className="text-ink-3 hover:text-pdf p-1 rounded-md hover:bg-hover transition-colors disabled:opacity-50"
+          >
+            <FileUp size={14} />
           </button>
           <button
             onClick={() => createAndEdit('core/folder')}
@@ -171,14 +275,51 @@ export function Explorer() {
             paddingTop={2}
             openByDefault={true}
             onActivate={(node) => {
+              const bm = node.data.bookmark;
+              if (bm) {
+                openDocument(bm.pdfDocId);
+                focusPdf({ docId: bm.pdfDocId, page: bm.page });
+                return;
+              }
+              const pin = pdfInfo.pinNotes.get(node.data.id);
+              if (pin) {
+                openDocument(pin.pdfDocId);
+                focusPdf({ docId: pin.pdfDocId, pinId: pin.pinId });
+                return;
+              }
               if (node.data.docType !== 'core/folder') openDocument(node.data.id);
             }}
-            onRename={({ id, name }) => updateDocument(id, { title: name })}
-            onDelete={({ ids }) => ids.forEach((id) => deleteDocument(id))}
+            disableDrag={(d: TreeData) => !!d.bookmark}
+            onRename={({ id, name }) => {
+              const bm = parseBookmarkVirtualId(id);
+              if (bm) {
+                const pdfDoc = docs.find((d) => d.id === bm.pdfDocId);
+                if (pdfDoc && name.trim())
+                  updateDocument(pdfDoc.id, { content: renameBookmarkLabel(pdfDoc.content, bm.bookmarkId, name.trim()) });
+                return;
+              }
+              updateDocument(id, { title: name });
+            }}
+            onDelete={({ ids }) =>
+              ids.forEach((id) => {
+                const bm = parseBookmarkVirtualId(id);
+                if (bm) {
+                  const pdfDoc = docs.find((d) => d.id === bm.pdfDocId);
+                  if (pdfDoc) updateDocument(pdfDoc.id, { content: removeBookmark(pdfDoc.content, bm.bookmarkId) });
+                  return;
+                }
+                deleteDocument(id);
+              })
+            }
             onMove={({ dragIds, parentId, index }) => {
-              dragIds.forEach((id, i) => moveDocument(id, parentId, index + i));
+              // virtual bookmark nodes can't be dragged, and nothing can be
+              // dropped "inside" one (it has no real children)
+              const realIds = dragIds.filter((id) => !id.startsWith('bm:'));
+              if (realIds.length === 0) return;
+              const target = parentId && parentId.startsWith('bm:') ? null : parentId;
+              realIds.forEach((id, i) => moveDocument(id, target, index + i));
               // Garante que o destino fique visível após o drop
-              if (parentId) setTimeout(() => treeRef.current?.open(parentId), 80);
+              if (target) setTimeout(() => treeRef.current?.open(target), 80);
             }}
           >
             {Node}
