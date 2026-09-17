@@ -341,6 +341,22 @@ function NoteShape({ shape, interactive, autoFocus, updateProps, onExitEdit }: S
 }
 
 /* ============================================================
+   Image shape
+   ============================================================ */
+
+function ImageShape({ shape }: ShapeViewProps) {
+  return (
+    <img
+      src={shape.props.src}
+      alt={shape.props.name ?? ''}
+      draggable={false}
+      className="block rounded-lg border border-line shadow-xl"
+      style={{ width: shape.props.w ?? 320, height: shape.props.h ?? 240 }}
+    />
+  );
+}
+
+/* ============================================================
    Group shape — renders children as static previews
    ============================================================ */
 
@@ -374,6 +390,8 @@ export function ShapeView(props: ShapeViewProps & { shapes: WBShapeMap }) {
       return <TextShape {...props} />;
     case 'note':
       return <NoteShape {...props} />;
+    case 'image':
+      return <ImageShape {...props} />;
     case 'group':
       return <GroupShape shape={shape} shapes={props.shapes} />;
     default:

@@ -5,13 +5,20 @@
    and store coordinates relative to the group origin.
    ============================================================ */
 
-export type ShapeType = 'group' | 'text' | 'note' | 'tracker' | 'clock';
+export type ShapeType = 'group' | 'text' | 'note' | 'tracker' | 'clock' | 'arrow' | 'image';
 
 /** text shape style variant (plain text or header sizes) */
 export type TextSize = 'text' | 'h1' | 'h2' | 'h3';
 
 /** tracker variants: value/max with progress bar, or a single big value */
 export type TrackerKind = 'bar' | 'value';
+
+/** arrow endpoint: free canvas point, or bound to a shape (renders on its border) */
+export interface ArrowPoint {
+  x: number;
+  y: number;
+  shapeId: string | null;
+}
 
 export interface WBShape {
   id: string;
@@ -45,6 +52,12 @@ export const DEFAULT_PROPS: Record<ShapeType, Record<string, any>> = {
   note: { doc: '', html: '', w: 300 },
   tracker: { name: 'Novo Tracker', kind: 'bar' as TrackerKind, value: 10, max: 20 },
   clock: { name: 'Novo Relógio', segments: 4, filled: 0 },
+  arrow: {
+    start: { x: 0, y: 0, shapeId: null } as ArrowPoint,
+    end: { x: 0, y: 0, shapeId: null } as ArrowPoint,
+    text: '',
+  },
+  image: { src: '', w: 320, h: 240, name: '' },
 };
 
 /** Fallback sizes used before a shape has been measured on screen */
@@ -54,6 +67,8 @@ export const DEFAULT_SIZE: Record<ShapeType, { w: number; h: number }> = {
   note: { w: 300, h: 140 },
   tracker: { w: 288, h: 190 },
   clock: { w: 200, h: 250 },
+  arrow: { w: 0, h: 0 },
+  image: { w: 320, h: 240 },
 };
 
 export function createShape(type: ShapeType, x: number, y: number): WBShape {
@@ -190,11 +205,53 @@ export function boundsIntersect(a: WBBounds, b: WBBounds): boolean {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
+/* ---------- arrows ---------- */
+
+/** point on the border of a rect along the ray from its center toward `toward` */
+export function rectBorderPoint(b: WBBounds, toward: { x: number; y: number }): { x: number; y: number } {
+  const cx = b.x + b.w / 2;
+  const cy = b.y + b.h / 2;
+  const dx = toward.x - cx;
+  const dy = toward.y - cy;
+  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return { x: cx, y: cy };
+  const s = Math.min(dx !== 0 ? b.w / 2 / Math.abs(dx) : Infinity, dy !== 0 ? b.h / 2 / Math.abs(dy) : Infinity);
+  return { x: cx + dx * s, y: cy + dy * s };
+}
+
+/** resolve both endpoints: bound ends land on the target shape's border */
+export function arrowEndpoints(arrow: WBShape, shapes: WBShapeMap): { x1: number; y1: number; x2: number; y2: number } {
+  const centerOf = (s: WBShape) => {
+    const b = shapeBounds(s);
+    return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+  };
+  const resolve = (p: ArrowPoint, other: ArrowPoint): { x: number; y: number } => {
+    const target = p.shapeId ? shapes[p.shapeId] : null;
+    if (!target) return { x: p.x, y: p.y };
+    const otherTarget = other.shapeId ? shapes[other.shapeId] : null;
+    const toward = otherTarget ? centerOf(otherTarget) : other;
+    return rectBorderPoint(shapeBounds(target), toward);
+  };
+  const start = resolve(arrow.props.start, arrow.props.end);
+  const end = resolve(arrow.props.end, arrow.props.start);
+  return { x1: start.x, y1: start.y, x2: end.x, y2: end.y };
+}
+
+export function arrowBounds(arrow: WBShape, shapes: WBShapeMap): WBBounds {
+  const { x1, y1, x2, y2 } = arrowEndpoints(arrow, shapes);
+  return { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) };
+}
+
+/** keep x/y and props.w/h in sync with the resolved endpoints (for marquee etc.) */
+export function syncArrowBounds(arrow: WBShape, shapes: WBShapeMap): WBShape {
+  const b = arrowBounds(arrow, shapes);
+  return { ...arrow, x: b.x, y: b.y, props: { ...arrow.props, w: b.w, h: b.h } };
+}
+
 /* ---------- group operations ---------- */
 
-/** Wrap the given top-level shape ids into a new group shape */
+/** Wrap the given top-level shape ids into a new group shape (arrows can't be grouped) */
 export function groupShapes(shapes: WBShapeMap, ids: string[]): { next: WBShapeMap; groupId: string } | null {
-  const members = ids.map((id) => shapes[id]).filter((s): s is WBShape => !!s && !s.parentId);
+  const members = ids.map((id) => shapes[id]).filter((s): s is WBShape => !!s && !s.parentId && s.type !== 'arrow');
   if (members.length < 2) return null;
   const bounds = unionBounds(members.map(shapeBounds));
   const group: WBShape = {
@@ -243,4 +300,39 @@ export function deleteShapes(shapes: WBShapeMap, ids: string[]): WBShapeMap {
     if (!toRemove.has(id)) next[id] = shape;
   }
   return next;
+}
+
+/** Clone top-level shapes with an offset; groups are cloned with their children */
+export function duplicateShapes(shapes: WBShapeMap, ids: string[], offset = 20): { next: WBShapeMap; cloneIds: string[] } {
+  const next: WBShapeMap = { ...shapes };
+  const cloneIds: string[] = [];
+  for (const id of ids) {
+    const s = next[id];
+    if (!s || s.parentId) continue;
+    const cloneId = generateId();
+    cloneIds.push(cloneId);
+    next[cloneId] = { ...s, id: cloneId, x: s.x + offset, y: s.y + offset, props: { ...s.props } };
+    if (s.type === 'group') {
+      for (const child of childrenOf(shapes, s.id)) {
+        const childCloneId = generateId();
+        next[childCloneId] = { ...child, id: childCloneId, parentId: cloneId, props: { ...child.props } };
+      }
+    }
+  }
+  return { next, cloneIds };
+}
+
+/** Z-order: object key order is render order — last renders on top */
+export function bringToFront(shapes: WBShapeMap, ids: string[]): WBShapeMap {
+  const idSet = new Set(ids);
+  const rest = Object.entries(shapes).filter(([id]) => !idSet.has(id));
+  const moved = Object.entries(shapes).filter(([id]) => idSet.has(id));
+  return Object.fromEntries([...rest, ...moved]);
+}
+
+export function sendToBack(shapes: WBShapeMap, ids: string[]): WBShapeMap {
+  const idSet = new Set(ids);
+  const rest = Object.entries(shapes).filter(([id]) => !idSet.has(id));
+  const moved = Object.entries(shapes).filter(([id]) => idSet.has(id));
+  return Object.fromEntries([...moved, ...rest]);
 }

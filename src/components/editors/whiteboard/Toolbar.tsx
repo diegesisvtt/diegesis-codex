@@ -9,6 +9,8 @@ import {
   StickyNote,
   Gauge,
   Clock,
+  ArrowUpRight,
+  Image,
   Group,
   Ungroup,
   Trash2,
@@ -29,6 +31,9 @@ interface ToolbarProps {
   onGroup(): void;
   onUngroup(): void;
   onDelete(): void;
+  /** grid snapping toggle (Alt bypasses while dragging) */
+  snapEnabled?: boolean;
+  onToggleSnap?(): void;
 }
 
 function ToolButton({
@@ -70,6 +75,8 @@ const CREATE_TOOLS: { tool: WBTool; label: string; icon: typeof Type }[] = [
   { tool: 'note', label: 'Bloco de texto (N)', icon: StickyNote },
   { tool: 'tracker', label: 'Tracker', icon: Gauge },
   { tool: 'clock', label: 'Relógio', icon: Clock },
+  { tool: 'arrow', label: 'Seta (A)', icon: ArrowUpRight },
+  { tool: 'image', label: 'Imagem (I)', icon: Image },
 ];
 
 const TEXT_STYLES: { size: TextSize; label: string; icon: typeof Type }[] = [
