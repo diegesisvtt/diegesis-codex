@@ -126,6 +126,16 @@ function sanitizePdfLayout(saved: unknown, content: PdfDocContent): IJsonModel {
     clone.layout.children = prune(clone.layout.children ?? []);
     clone.borders = (clone.borders ?? []).map((b: any) => ({ ...b, children: prune(b.children ?? []) }));
     if (!JSON.stringify(clone.layout).includes(PAGES_TAB_ID)) return defaultPdfLayout();
+    // the pages tab never shows a tab strip, even in layouts saved before this
+    const hidePagesStrip = (nodes: any[]): void => {
+      for (const n of nodes) {
+        if (n?.type === 'tabset' && (n.id === PAGES_TABSET_ID || (n.children ?? []).some((t: any) => t.id === PAGES_TAB_ID))) {
+          n.enableTabStrip = false;
+        }
+        if (n?.children) hidePagesStrip(n.children);
+      }
+    };
+    hidePagesStrip(clone.layout.children);
     if (!clone.borders.some((b: any) => b.location === 'right')) {
       clone.borders.push({ type: 'border', location: 'right', size: 380, children: [] });
     }

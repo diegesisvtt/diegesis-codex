@@ -192,22 +192,27 @@ export function usePdfAnnotations(
     async (hlId: string) => {
       const hl = contentRef.current.highlights.find((h) => h.id === hlId);
       if (!hl || hl.noteId) return;
-      const note = await createDocument('core/note', doc.id, `Destaque — p. ${hl.page}`);
+      // the note belongs to the user, not to the PDF: create it at the realm
+      // root so it can be moved/organized freely in the tree
+      const note = await createDocument('core/note', null, `Destaque — p. ${hl.page}`);
       updateDocument(note.id, {
-        content: JSON.stringify([
-          {
-            type: 'quote',
-            content: [{ type: 'text', text: hl.text, styles: {} }],
-          },
-          { type: 'paragraph', content: [{ type: 'text', text: `— ${doc.title}, p. ${hl.page}`, styles: {} }] },
-        ]),
+        content: JSON.stringify({
+          type: 'doc',
+          content: [
+            {
+              type: 'blockquote',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: hl.text }] }],
+            },
+            { type: 'paragraph', content: [{ type: 'text', text: `— ${doc.title}, p. ${hl.page}` }] },
+          ],
+        }),
       });
       commit((c) => {
         const target = c.highlights.find((h) => h.id === hlId);
         if (target) target.noteId = note.id;
       });
     },
-    [commit, contentRef, createDocument, updateDocument, doc.id, doc.title]
+    [commit, contentRef, createDocument, updateDocument, doc.title]
   );
 
   const toggleBookmark = useCallback(
