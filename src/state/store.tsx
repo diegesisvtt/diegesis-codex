@@ -1,9 +1,17 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { DocNode, DocChanges, DocumentType, Realm, UiState } from '@shared/types';
+import type { DocNode, DocChanges, DocumentType, PdfImportResult, Realm, RealmTransferResult, UiState } from '@shared/types';
 
 const generateId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
 export type PanelKind = 'ai-chat' | 'ai-settings';
+
+/** Pending navigation into a PDF tab: jump to a pin, highlight or page once focused. */
+export interface PdfFocus {
+  docId: string;
+  pinId?: string;
+  highlightId?: string;
+  page?: number;
+}
 
 interface StoreState {
   ready: boolean;
@@ -13,6 +21,8 @@ interface StoreState {
   uiState: UiState;
   /** draft message consumed by the AI chat panel (set by editor commands) */
   aiDraft: string | null;
+  /** pending PDF navigation (set by the Explorer, consumed by PdfReader) */
+  pdfFocus: PdfFocus | null;
 }
 
 interface StoreActions {
@@ -20,8 +30,14 @@ interface StoreActions {
   createRealm(name: string): Promise<void>;
   renameRealm(id: string, name: string): Promise<void>;
   deleteRealm(id: string): Promise<void>;
+  /** opens a save dialog; result.canceled is true when dismissed */
+  exportRealm(id: string): Promise<RealmTransferResult>;
+  /** opens a file dialog and switches to the imported realm on success */
+  importRealm(): Promise<RealmTransferResult>;
 
   createDocument(type: DocumentType, parentId: string | null, title?: string): Promise<DocNode>;
+  /** imports a PDF via native file dialog; doc is null when cancelled */
+  importPdf(parentId: string | null): Promise<PdfImportResult>;
   updateDocument(id: string, changes: DocChanges): void; // optimistic + debounced persist
   deleteDocument(id: string): Promise<void>;
   moveDocument(id: string, parentId: string | null, position: number): Promise<void>;
@@ -36,6 +52,12 @@ interface StoreActions {
   openPanel(panel: PanelKind): void;
   registerOpenPanel(fn: (panel: PanelKind) => void): void;
   setAiDraft(draft: string | null): void;
+  /** ask the open PDF tab to jump to a pin or page (consumable, one-shot) */
+  focusPdf(focus: PdfFocus): void;
+  clearPdfFocus(): void;
+  /** fired when a document's title/content changed outside the renderer (AI tools);
+   *  not fired for docs with a pending local save (user is typing) */
+  subscribeExternalDocChange(fn: (doc: DocNode) => void): () => void;
 }
 
 const StoreContext = createContext<(StoreState & StoreActions) | null>(null);
@@ -46,7 +68,7 @@ export const useStore = () => {
 };
 
 function defaultContent(type: DocumentType): string | null {
-  if (type === 'core/note') return JSON.stringify({ type: 'doc', content: [{ type: 'paragraph' }] });
+  if (type === 'core/note') return JSON.stringify([{ type: 'paragraph' }]);
   if (type === 'core/whiteboard') return JSON.stringify({ nodes: [] });
   return null;
 }
@@ -55,6 +77,7 @@ const DEFAULT_TITLES: Record<DocumentType, string> = {
   'core/note': 'Nova Nota',
   'core/whiteboard': 'Novo Quadro',
   'core/folder': 'Nova Pasta',
+  'core/pdf': 'Novo PDF',
 };
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
@@ -65,12 +88,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     docs: [],
     uiState: {},
     aiDraft: null,
+    pdfFocus: null,
   });
 
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const openDocRef = useRef<((docId: string) => void) | null>(null);
   const docDeletedRef = useRef<((docId: string) => void) | null>(null);
   const openPanelRef = useRef<((panel: PanelKind) => void) | null>(null);
+  const externalDocListeners = useRef(new Set<(doc: DocNode) => void>());
 
   // ---- bootstrap ----
   useEffect(() => {
@@ -81,8 +106,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ? ui.activeRealmId
           : realms[0]?.id ?? null;
       const docs = activeRealmId ? await window.mythril.docs.listByRealm(activeRealmId) : [];
-      setState({ ready: true, realms, activeRealmId, docs, uiState: ui ?? {}, aiDraft: null });
+      setState({ ready: true, realms, activeRealmId, docs, uiState: ui ?? {}, aiDraft: null, pdfFocus: null });
     })();
+  }, []);
+
+  // Refresh the doc tree when documents change outside the renderer (AI tools)
+  useEffect(() => {
+    return window.mythril.docs.onChanged((realmId) => {
+      window.mythril.docs.listByRealm(realmId).then((fresh) =>
+        setState((cur) => {
+          if (cur.activeRealmId !== realmId) return cur;
+          // notify open editors about externally-changed docs (skip docs the
+          // user is currently editing — a local save is already in flight)
+          const prevById = new Map(cur.docs.map((d) => [d.id, d]));
+          for (const doc of fresh) {
+            const prev = prevById.get(doc.id);
+            if (prev && (prev.content !== doc.content || prev.title !== doc.title) && !saveTimers.current.has(doc.id)) {
+              externalDocListeners.current.forEach((fn) => fn(doc));
+            }
+          }
+          return { ...cur, docs: fresh };
+        })
+      );
+    });
   }, []);
 
   const setActiveRealm = useCallback(async (id: string) => {
@@ -97,6 +143,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const createRealm = useCallback(async (name: string) => {
     const realm = await window.mythril.realms.create(name);
     setState((s) => ({ ...s, realms: [...s.realms, realm], activeRealmId: realm.id, docs: [] }));
+    window.mythril.ui.load().then((ui) =>
+      window.mythril.ui.save({ ...(ui ?? {}), activeRealmId: realm.id })
+    );
   }, []);
 
   const renameRealm = useCallback(async (id: string, name: string) => {
@@ -109,8 +158,34 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setState((s) => {
       const realms = s.realms.filter((r) => r.id !== id);
       const nextActive = s.activeRealmId === id ? realms[0]?.id ?? null : s.activeRealmId;
+      if (s.activeRealmId === id) {
+        // load the next realm's docs and persist the switch
+        if (nextActive) {
+          window.mythril.docs.listByRealm(nextActive).then((docs) =>
+            setState((cur) => (cur.activeRealmId === nextActive ? { ...cur, docs } : cur))
+          );
+        }
+        window.mythril.ui.load().then((ui) =>
+          window.mythril.ui.save({ ...(ui ?? {}), activeRealmId: nextActive ?? undefined })
+        );
+      }
       return { ...s, realms, activeRealmId: nextActive, docs: s.activeRealmId === id ? [] : s.docs };
     });
+  }, []);
+
+  const exportRealm = useCallback((id: string) => window.mythril.realms.export(id), []);
+
+  const importRealm = useCallback(async (): Promise<RealmTransferResult> => {
+    const res = await window.mythril.realms.import();
+    if (res.ok && res.realm) {
+      const realm = res.realm;
+      const docs = await window.mythril.docs.listByRealm(realm.id);
+      setState((s) => ({ ...s, realms: [...s.realms, realm], activeRealmId: realm.id, docs }));
+      window.mythril.ui.load().then((ui) =>
+        window.mythril.ui.save({ ...(ui ?? {}), activeRealmId: realm.id })
+      );
+    }
+    return res;
   }, []);
 
   // ---- documents ----
@@ -128,6 +203,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       });
       setState((s) => ({ ...s, docs: [...s.docs, doc] }));
       return doc;
+    },
+    [state.activeRealmId]
+  );
+
+  const importPdf = useCallback(
+    async (parentId: string | null): Promise<PdfImportResult> => {
+      const realmId = state.activeRealmId;
+      if (!realmId) throw new Error('No active realm');
+      const result = await window.mythril.pdf.import(realmId, parentId);
+      if (result.doc) setState((s) => ({ ...s, docs: [...s.docs, result.doc!] }));
+      return result;
     },
     [state.activeRealmId]
   );
@@ -209,6 +295,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const setAiDraft = useCallback((draft: string | null) => {
     setState((s) => ({ ...s, aiDraft: draft }));
   }, []);
+  const focusPdf = useCallback((focus: PdfFocus) => {
+    setState((s) => ({ ...s, pdfFocus: focus }));
+  }, []);
+  const clearPdfFocus = useCallback(() => {
+    setState((s) => (s.pdfFocus ? { ...s, pdfFocus: null } : s));
+  }, []);
+  const subscribeExternalDocChange = useCallback((fn: (doc: DocNode) => void) => {
+    externalDocListeners.current.add(fn);
+    return () => externalDocListeners.current.delete(fn);
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -217,7 +313,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       createRealm,
       renameRealm,
       deleteRealm,
+      exportRealm,
+      importRealm,
       createDocument,
+      importPdf,
       updateDocument,
       deleteDocument,
       moveDocument,
@@ -229,6 +328,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       openPanel: (panel: PanelKind) => openPanelRef.current?.(panel),
       registerOpenPanel,
       setAiDraft,
+      focusPdf,
+      clearPdfFocus,
+      subscribeExternalDocChange,
     }),
     [
       state,
@@ -236,7 +338,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       createRealm,
       renameRealm,
       deleteRealm,
+      exportRealm,
+      importRealm,
       createDocument,
+      importPdf,
       updateDocument,
       deleteDocument,
       moveDocument,
@@ -245,6 +350,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       registerOnDocumentDeleted,
       registerOpenPanel,
       setAiDraft,
+      focusPdf,
+      clearPdfFocus,
+      subscribeExternalDocChange,
     ]
   );
 
