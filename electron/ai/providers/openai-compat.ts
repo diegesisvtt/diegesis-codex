@@ -80,19 +80,61 @@ export function createOpenAICompatProvider(overrides: Partial<ProviderInfo> & { 
       const res = await fetch(joinUrl(config.baseUrl, '/chat/completions'), {
         method: 'POST',
         headers: headers(config),
+        signal: req.signal ?? null,
         body: JSON.stringify({
           model,
           stream: true,
-          messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
+          messages: req.messages.map((m) => {
+            const msg: Record<string, unknown> = { role: m.role, content: m.content };
+            if (m.role === 'tool' && m.toolCallId) msg.tool_call_id = m.toolCallId;
+            if (m.role === 'assistant' && m.toolCalls?.length) {
+              msg.tool_calls = m.toolCalls.map((t) => ({
+                id: t.id,
+                type: 'function',
+                function: { name: t.name, arguments: t.arguments },
+              }));
+            }
+            return msg;
+          }),
+          ...(req.tools?.length
+            ? {
+                tools: req.tools.map((t) => ({
+                  type: 'function',
+                  function: { name: t.name, description: t.description, parameters: t.parameters },
+                })),
+                tool_choice: 'auto',
+              }
+            : {}),
         }),
       });
       if (!res.ok || !res.body) throw new Error(await readError(res));
 
-      for await (const payload of parseSSE(res)) {
-        const delta: string = payload?.choices?.[0]?.delta?.content ?? '';
-        if (delta) yield { delta, done: false };
+      // tool call fragments arrive indexed; accumulate until the stream ends
+      const pendingCalls = new Map<number, { id: string; name: string; arguments: string }>();
+      try {
+        for await (const payload of parseSSE(res)) {
+          const delta = payload?.choices?.[0]?.delta;
+          const text: string = delta?.content ?? '';
+          if (text) yield { delta: text, done: false };
+          for (const tc of delta?.tool_calls ?? []) {
+            const idx: number = tc.index ?? 0;
+            const cur = pendingCalls.get(idx) ?? { id: '', name: '', arguments: '' };
+            if (tc.id) cur.id = tc.id;
+            if (tc.function?.name) cur.name += tc.function.name;
+            if (tc.function?.arguments) cur.arguments += tc.function.arguments;
+            pendingCalls.set(idx, cur);
+          }
+        }
+      } catch (err) {
+        // aborted by the user: end the turn gracefully with whatever was streamed
+        if (req.signal?.aborted || (err instanceof Error && err.name === 'AbortError')) {
+          yield { delta: '', done: true };
+          return;
+        }
+        throw err;
       }
-      yield { delta: '', done: true };
+      const toolCalls = [...pendingCalls.values()].filter((t) => t.name);
+      yield { delta: '', done: true, ...(toolCalls.length ? { toolCalls } : {}) };
     },
 
     async testConnection(config: ProviderConfig): Promise<{ ok: boolean; error?: string }> {
