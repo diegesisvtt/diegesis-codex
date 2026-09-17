@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "flexlayout-react/style/dark.css";
+@import "@blocknote/core/fonts/inter.css";
+@import "@blocknote/ariakit/style.css";
 
 /* ============================================================
    MYTHRIL — Design tokens (Notion-inspired dark)
@@ -24,6 +26,7 @@
   --color-danger-soft: rgba(235, 87, 87, 0.14);
   --color-note: #529cca;
   --color-board: #4dab9a;
+  --color-pdf: #d96a5f;
 
   --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica,
     "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
@@ -176,164 +179,80 @@ body,
 }
 
 /* ============================================================
-   Tiptap — Notion editor typography
+   BlockNote — Mythril dark theme (Notion-inspired)
    ============================================================ */
-.tiptap {
-  outline: none;
-  min-height: 60vh;
+.mythril-bn {
+  --bn-colors-editor-text: var(--color-ink-1);
+  --bn-colors-editor-background: transparent;
+  --bn-colors-side-menu: var(--color-ink-3);
+  --bn-colors-menu-text: var(--color-ink-2);
+  --bn-colors-menu-background: var(--color-elevated);
+  --bn-colors-tooltip-text: var(--color-ink-1);
+  --bn-colors-tooltip-background: var(--color-elevated);
+  --bn-colors-hovered-text: var(--color-ink-1);
+  --bn-colors-hovered-background: var(--color-hover);
+  --bn-colors-selected-text: var(--color-ink-1);
+  --bn-colors-selected-background: var(--color-active);
+  --bn-colors-border: var(--color-line-strong);
+  --bn-border: 1px solid var(--color-line);
+  --bn-shadow-medium: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --bn-font-family: var(--font-ui);
+  background: transparent;
+}
+
+.mythril-bn .bn-editor {
   font-size: 16px;
   line-height: 1.65;
   color: var(--color-ink-1);
   caret-color: var(--color-accent-ink);
   word-break: break-word;
+  max-width: 724px;
+  margin: 0 auto;
+  padding-inline: 54px 16px;
+  padding-bottom: 40vh;
 }
-.tiptap ::selection {
+.mythril-bn .bn-editor ::selection {
   background: rgba(35, 131, 226, 0.32);
 }
 
-/* Placeholder — Notion mostra no bloco atual (showOnlyCurrent) */
-.tiptap .is-editor-empty::before {
-  content: attr(data-placeholder);
-  float: left;
+/* Placeholder */
+.mythril-bn .bn-block-content:has(.ProseMirror-trailingBreak:only-child):after {
   color: var(--color-ink-3);
-  pointer-events: none;
-  height: 0;
-}
-
-.tiptap > * + * {
-  margin-top: 0.15em;
+  font-style: normal;
 }
 
 /* Headings — Notion scale */
-.tiptap h1 {
-  font-size: 1.875em;
-  font-weight: 700;
+.mythril-bn .bn-block-content[data-content-type="heading"] {
+  --level: 1.875em;
+  padding-top: 14px;
   line-height: 1.25;
-  padding: 0.45em 0 0.1em;
-  margin: 0.55em 0 0.05em;
-  color: var(--color-ink-1);
 }
-.tiptap h2 {
-  font-size: 1.5em;
-  font-weight: 600;
-  line-height: 1.3;
-  padding: 0.4em 0 0.08em;
-  margin: 0.5em 0 0.05em;
-  color: var(--color-ink-1);
+.mythril-bn [data-content-type="heading"][data-level="2"] {
+  --level: 1.5em;
 }
-.tiptap h3 {
-  font-size: 1.2em;
-  font-weight: 600;
-  line-height: 1.35;
-  padding: 0.35em 0 0.05em;
-  margin: 0.45em 0 0.05em;
-  color: var(--color-ink-1);
-}
-.tiptap > h1:first-child,
-.tiptap > h2:first-child,
-.tiptap > h3:first-child {
-  margin-top: 0;
-  padding-top: 0.2em;
+.mythril-bn [data-content-type="heading"][data-level="3"] {
+  --level: 1.2em;
 }
 
-.tiptap p {
-  margin: 0;
-  padding: 2px 0;
-  color: var(--color-ink-1);
-}
-
-.tiptap a {
+/* Links */
+.mythril-bn .bn-editor a {
   color: var(--color-accent-ink);
   text-decoration: underline;
   text-decoration-color: rgba(82, 156, 202, 0.4);
   text-underline-offset: 2px;
-  cursor: pointer;
 }
-.tiptap a:hover {
+.mythril-bn .bn-editor a:hover {
   text-decoration-color: var(--color-accent-ink);
 }
 
-/* Lists */
-.tiptap ul,
-.tiptap ol {
-  padding-left: 26px;
-  margin: 0;
+/* Quote — Notion bar style */
+.mythril-bn [data-content-type="quote"] blockquote {
   color: var(--color-ink-1);
-}
-.tiptap li {
-  padding: 2px 0;
-}
-.tiptap li > p {
-  margin: 0;
-}
-.tiptap ul li::marker {
-  color: var(--color-ink-2);
-}
-.tiptap ol li::marker {
-  color: var(--color-ink-2);
-  font-weight: 500;
-}
-
-/* Task list — Notion checkbox */
-.tiptap ul[data-type="taskList"] {
-  list-style: none;
-  padding-left: 2px;
-}
-.tiptap ul[data-type="taskList"] li {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  padding: 3px 0;
-}
-.tiptap ul[data-type="taskList"] li > label {
-  margin-top: 3px;
-  flex-shrink: 0;
-}
-.tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  border: 1.4px solid var(--color-line-strong);
-  border-radius: 2px;
-  background: transparent;
-  cursor: pointer;
-  display: grid;
-  place-content: center;
-  transition: background 120ms ease, border-color 120ms ease;
-}
-.tiptap ul[data-type="taskList"] li > label input[type="checkbox"]:hover {
-  border-color: var(--color-accent-ink);
-}
-.tiptap ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-}
-.tiptap ul[data-type="taskList"] li > label input[type="checkbox"]:checked::before {
-  content: "";
-  width: 10px;
-  height: 6px;
-  border-left: 2px solid #fff;
-  border-bottom: 2px solid #fff;
-  transform: rotate(-45deg) translateY(-1px);
-}
-.tiptap ul[data-type="taskList"] li[data-checked="true"] > div {
-  color: var(--color-ink-3);
-  text-decoration: line-through;
-}
-
-/* Blockquote — Notion callout-bar style */
-.tiptap blockquote {
   border-left: 3px solid var(--color-ink-1);
-  padding: 2px 0 2px 14px;
-  margin: 6px 0;
-  color: var(--color-ink-1);
-  font-size: 1em;
 }
 
 /* Inline code — Notion red */
-.tiptap code {
+.mythril-bn .bn-inline-content code {
   font-family: var(--font-mono);
   font-size: 0.85em;
   color: #eb5757;
@@ -343,77 +262,105 @@ body,
 }
 
 /* Code block */
-.tiptap pre {
+.mythril-bn .bn-block-content[data-content-type="codeBlock"] {
+  color: var(--color-ink-1);
+  background-color: var(--color-sidebar);
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+}
+.mythril-bn .bn-block-content[data-content-type="codeBlock"] > pre {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  line-height: 1.6;
+  padding: 14px 18px;
+}
+
+/* Divider */
+.mythril-bn [data-content-type="divider"] hr {
+  border-top-color: var(--color-line-strong);
+}
+
+/* Images */
+.mythril-bn .bn-visual-media {
+  border-radius: 4px;
+}
+
+/* AI button inside the formatting toolbar */
+.bn-ask-ai {
+  display: flex;
+  align-items: center;
+  padding: 6px;
+  border-radius: 6px;
+  color: var(--color-ink-2);
+  transition: background 120ms ease, color 120ms ease;
+}
+.bn-ask-ai:hover {
+  background: var(--color-hover);
+  color: var(--color-ink-1);
+}
+
+/* Embedded mode (PDF cards) — compact chrome */
+.mythril-bn.embedded .bn-editor {
+  max-width: none;
+  font-size: 13.5px;
+  padding-inline: 28px 4px;
+  padding-bottom: 8px;
+}
+
+/* Mini mode (whiteboard notes) — no side menu, tight padding */
+.mythril-bn.mini .bn-editor {
+  max-width: none;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 0;
+  min-height: 0;
+}
+.mythril-bn.mini .bn-block-content[data-content-type="heading"] {
+  --level: 1.25em;
+  padding-top: 6px;
+}
+.mythril-bn.mini [data-content-type="heading"][data-level="3"] {
+  --level: 1.1em;
+}
+
+/* ============================================================
+   Whiteboard — static note preview (cached HTML)
+   ============================================================ */
+.wb-note-editor {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-ink-1);
+  word-break: break-word;
+}
+.wb-note-editor h1 { font-size: 1.5em; font-weight: 700; margin: 0.4em 0 0.1em; }
+.wb-note-editor h2 { font-size: 1.25em; font-weight: 600; margin: 0.4em 0 0.1em; }
+.wb-note-editor h3 { font-size: 1.1em; font-weight: 600; margin: 0.35em 0 0.1em; }
+.wb-note-editor p { margin: 0.15em 0; }
+.wb-note-editor ul,
+.wb-note-editor ol { padding-left: 22px; margin: 0.15em 0; }
+.wb-note-editor blockquote { border-left: 3px solid var(--color-ink-1); padding-left: 12px; margin: 4px 0; }
+.wb-note-editor code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: #eb5757;
+  background: rgba(135, 131, 120, 0.15);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+.wb-note-editor pre {
   font-family: var(--font-mono);
   background: var(--color-sidebar);
   border: 1px solid var(--color-line);
   border-radius: 6px;
-  padding: 14px 18px;
-  margin: 6px 0;
+  padding: 10px 14px;
+  margin: 4px 0;
   font-size: 0.85em;
-  line-height: 1.6;
   overflow-x: auto;
-  tab-size: 2;
 }
-.tiptap pre code {
-  background: transparent;
-  padding: 0;
-  color: var(--color-ink-1);
-  font-size: inherit;
-}
-
-/* Horizontal rule */
-.tiptap hr {
-  border: none;
-  border-top: 1px solid var(--color-line-strong);
-  margin: 14px 0;
-  cursor: default;
-}
-.tiptap hr.ProseMirror-selectednode {
-  border-top-color: var(--color-accent);
-}
-
-/* Images */
-.tiptap img {
-  max-width: 100%;
-  border-radius: 4px;
-  display: block;
-  margin: 6px 0;
-}
-.tiptap img.ProseMirror-selectednode {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-}
-
-/* ============================================================
-   Whiteboard — embedded tiptap note blocks
-   ============================================================ */
-.tiptap.wb-note-editor {
-  min-height: 0;
-  font-size: 14px;
-  line-height: 1.5;
-}
-.tiptap.wb-note-editor h2 {
-  font-size: 1.25em;
-}
-.tiptap.wb-note-editor h3 {
-  font-size: 1.1em;
-}
-
-/* ============================================================
-   tippy.js — strip chrome, keep only our content
-   ============================================================ */
-.tippy-box {
-  background: transparent;
-  border: none;
-  box-shadow: none;
-}
-.tippy-content {
-  padding: 0;
-}
-.tippy-arrow {
-  display: none;
-}
+.wb-note-editor pre code { background: transparent; padding: 0; color: var(--color-ink-1); }
+.wb-note-editor a { color: var(--color-accent-ink); text-decoration: underline; }
+.wb-note-editor img { max-width: 100%; border-radius: 4px; }
+.wb-note-editor hr { border: none; border-top: 1px solid var(--color-line-strong); margin: 10px 0; }
 
 /* ============================================================
    Micro-interactions
@@ -444,6 +391,45 @@ body,
   animation: fadeIn 160ms ease both;
 }
 
+/* ============================================================
+   PDF reader
+   ============================================================ */
+.pdf-scroll {
+  background:
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.04) 1px, transparent 0) 0 0 / 24px 24px,
+    var(--color-app);
+}
+.pdf-page canvas {
+  position: absolute;
+  inset: 0;
+}
+.pdf-page .textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+}
+/* keep pdf.js text selectable but visually transparent */
+.pdf-page .textLayer span,
+.pdf-page .textLayer br {
+  color: transparent;
+}
+.pdf-page .textLayer ::selection {
+  background: rgba(35, 131, 226, 0.35);
+  color: transparent;
+}
+/* page color filters */
+.pdf-filter-invert canvas {
+  filter: invert(0.92) hue-rotate(180deg) brightness(0.8) contrast(1.1) saturate(0.38);
+}
+.pdf-filter-sepia canvas {
+  filter: sepia(65%) brightness(80%) contrast(85%) hue-rotate(-10deg);
+}
+/* embedded note editor inside PDF annotation cards */
+.pdf-card-editor {
+  font-size: 12.5px;
+}
+
 button {
   cursor: pointer;
 }
@@ -451,7 +437,7 @@ input,
 textarea {
   caret-color: var(--color-accent-ink);
 }
-:focus-visible:not(.outline-none):not(.tiptap):not(.ProseMirror) {
+:focus-visible:not(.outline-none):not(.bn-editor) {
   outline: 2px solid var(--color-accent-soft);
   outline-offset: 1px;
 }
