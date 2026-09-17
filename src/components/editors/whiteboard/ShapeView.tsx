@@ -1,13 +1,9 @@
 import React, { useEffect, useRef } from 'react';
-import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Placeholder from '@tiptap/extension-placeholder';
-import TaskList from '@tiptap/extension-task-list';
-import TaskItem from '@tiptap/extension-task-item';
-import Underline from '@tiptap/extension-underline';
-import Link from '@tiptap/extension-link';
-import type { WBShape, WBShapeMap, TextSize } from './model';
+import { BarChart3, Hash } from 'lucide-react';
+import type { WBShape, WBShapeMap, TextSize, TrackerKind } from './model';
 import { childrenOf } from './model';
+import { RichTextEditor } from '../shared/RichTextEditor';
+import { MathInput } from './MathInput';
 
 /* ============================================================
    Shared props passed to every shape renderer
@@ -78,51 +74,93 @@ function ProgressClock({
 }
 
 /* ============================================================
-   Tracker shape (RPG attribute card)
+   Tracker shape — kinds: 'bar' (value/max + progress) | 'value' (single)
    ============================================================ */
+
+const KIND_META: { kind: TrackerKind; label: string; icon: typeof Hash }[] = [
+  { kind: 'bar', label: 'Barra (valor/máx)', icon: BarChart3 },
+  { kind: 'value', label: 'Valor único', icon: Hash },
+];
 
 function TrackerShape({ shape, interactive, updateProps }: ShapeViewProps) {
   const { name, value, max } = shape.props;
+  const kind: TrackerKind = shape.props.kind ?? 'bar';
+
+  const wellInput =
+    'w-full bg-sidebar border border-line rounded-lg px-6 py-2 text-center text-xl font-bold text-ink-1 outline-none focus:border-accent transition-colors';
+
   return (
     <div
-      className="bg-elevated/95 backdrop-blur border border-line rounded-lg shadow-xl p-4"
+      className="bg-elevated/95 backdrop-blur border border-line rounded-xl shadow-xl p-4 group/tracker"
       style={{ width: shape.props.w ?? 256 }}
     >
-      <input
-        className="bg-transparent text-ink-1 font-semibold mb-3 w-full border-none outline-none p-0 text-[15px] placeholder-ink-3"
-        value={name}
-        readOnly={!interactive}
-        onChange={(e) => updateProps({ name: e.target.value })}
-      />
-      <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <div className="text-[10px] text-ink-3 uppercase font-semibold tracking-widest mb-1">Atual</div>
-          <input
-            type="number"
-            className="bg-sidebar text-ink-1 rounded-md p-2 w-full text-center text-xl font-bold border border-line focus:border-accent outline-none transition-colors"
+      {/* header: name + kind switcher (revealed on hover) */}
+      <div className="relative mb-3">
+        <input
+          className="bg-transparent text-ink-1 font-semibold w-full border-none outline-none p-0 pr-10 text-[15px] placeholder-ink-3"
+          value={name}
+          readOnly={!interactive}
+          onChange={(e) => updateProps({ name: e.target.value })}
+        />
+        {interactive && (
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 flex gap-0.5 opacity-0 group-hover/tracker:opacity-100 transition-opacity duration-150">
+            {KIND_META.map(({ kind: k, label, icon: Icon }) => (
+              <button
+                key={k}
+                title={label}
+                onClick={() => updateProps({ kind: k })}
+                className={`p-1 rounded-md transition-colors ${
+                  kind === k ? 'text-accent-ink bg-accent-soft' : 'text-ink-3 hover:text-ink-1 hover:bg-hover'
+                }`}
+              >
+                <Icon size={13} strokeWidth={1.75} />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {kind === 'value' ? (
+        <div className="py-1">
+          <MathInput
             value={value}
             readOnly={!interactive}
-            onChange={(e) => updateProps({ value: parseInt(e.target.value) || 0 })}
+            onCommit={(next) => updateProps({ value: next })}
+            inputClassName="w-full bg-transparent border-none outline-none px-7 py-1 text-center text-[34px] leading-none font-bold text-ink-1 rounded-lg focus:bg-sidebar/60 transition-colors"
           />
         </div>
-        <div className="text-ink-3 font-light text-2xl pt-4">/</div>
-        <div className="flex-1">
-          <div className="text-[10px] text-ink-3 uppercase font-semibold tracking-widest mb-1">Max</div>
-          <input
-            type="number"
-            className="bg-sidebar/60 text-ink-2 rounded-md p-2 w-full text-center text-xl font-bold border border-line outline-none"
-            value={max}
-            readOnly={!interactive}
-            onChange={(e) => updateProps({ max: parseInt(e.target.value) || 0 })}
-          />
-        </div>
-      </div>
-      <div className="h-1 w-full bg-sidebar rounded-full mt-4 overflow-hidden">
-        <div
-          className="h-full bg-accent transition-all duration-300"
-          style={{ width: `${Math.min(100, Math.max(0, (value / (max || 1)) * 100))}%` }}
-        />
-      </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <div className="text-[10px] text-ink-3 uppercase font-semibold tracking-widest mb-1">Atual</div>
+              <MathInput
+                value={value}
+                readOnly={!interactive}
+                onCommit={(next) => updateProps({ value: next })}
+                inputClassName={wellInput}
+              />
+            </div>
+            <div className="text-ink-3 font-light text-2xl pt-4">/</div>
+            <div className="flex-1">
+              <div className="text-[10px] text-ink-3 uppercase font-semibold tracking-widest mb-1">Max</div>
+              <MathInput
+                value={max}
+                readOnly={!interactive}
+                showSteppers={false}
+                onCommit={(next) => updateProps({ max: next })}
+                inputClassName={`${wellInput} !bg-sidebar/60 text-ink-2`}
+              />
+            </div>
+          </div>
+          <div className="h-1 w-full bg-sidebar rounded-full mt-4 overflow-hidden">
+            <div
+              className="h-full bg-accent transition-all duration-300"
+              style={{ width: `${Math.min(100, Math.max(0, (value / (max || 1)) * 100))}%` }}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -257,15 +295,6 @@ function TextShape({ shape, interactive, autoFocus, updateProps, onExitEdit }: S
    Note shape — embedded tiptap rich text block
    ============================================================ */
 
-function safeParseDoc(raw: string | undefined): object | undefined {
-  if (!raw) return undefined;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-}
-
 function NoteEditorView({
   shape,
   autoFocus,
@@ -277,47 +306,16 @@ function NoteEditorView({
   updateProps(p: Record<string, any>): void;
   onExitEdit?(): void;
 }) {
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ heading: { levels: [2, 3] } }),
-      Placeholder.configure({ placeholder: 'Escreva algo…' }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Underline,
-      Link.configure({ openOnClick: false, autolink: true }),
-    ],
-    content: safeParseDoc(shape.props.doc),
-    autofocus: autoFocus ? 'end' : false,
-    onUpdate: ({ editor }) => {
-      updateProps({ doc: JSON.stringify(editor.getJSON()), html: editor.getHTML() });
-    },
-    editorProps: {
-      attributes: { class: 'tiptap wb-note-editor' },
-      handleKeyDown: (view, event) => {
-        if (event.key === 'Escape') {
-          (view.dom as HTMLElement).blur();
-          onExitEdit?.();
-          return true;
-        }
-        return false;
-      },
-    },
-  });
-
-  // keep editor content in sync if the doc is replaced externally
-  useEffect(() => {
-    if (!editor) return;
-    if (!shape.props.doc) {
-      if (!editor.isEmpty) editor.commands.clearContent();
-      return;
-    }
-    if (shape.props.doc !== JSON.stringify(editor.getJSON())) {
-      const parsed = safeParseDoc(shape.props.doc);
-      if (parsed) editor.commands.setContent(parsed);
-    }
-  }, [editor, shape.props.doc]);
-
-  return <EditorContent editor={editor} />;
+  return (
+    <RichTextEditor
+      content={shape.props.doc ?? null}
+      externalContent={shape.props.doc}
+      className="wb-note-editor"
+      autofocus={autoFocus ? 'end' : false}
+      onEscape={onExitEdit}
+      onChange={(json, html) => updateProps({ doc: json, html })}
+    />
+  );
 }
 
 function NoteShape({ shape, interactive, autoFocus, updateProps, onExitEdit }: ShapeViewProps) {
@@ -332,9 +330,9 @@ function NoteShape({ shape, interactive, autoFocus, updateProps, onExitEdit }: S
       {editing ? (
         <NoteEditorView shape={shape} autoFocus updateProps={updateProps} onExitEdit={onExitEdit} />
       ) : (
-        /* html is tiptap-generated by this client only — trusted local content */
+        /* html is generated locally by this client only — trusted local content */
         <div
-          className="tiptap wb-note-editor"
+          className="wb-note-editor"
           dangerouslySetInnerHTML={{ __html: shape.props.html || '<p class="opacity-40">Nota vazia</p>' }}
         />
       )}

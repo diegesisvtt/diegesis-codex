@@ -10,6 +10,9 @@ export type ShapeType = 'group' | 'text' | 'note' | 'tracker' | 'clock';
 /** text shape style variant (plain text or header sizes) */
 export type TextSize = 'text' | 'h1' | 'h2' | 'h3';
 
+/** tracker variants: value/max with progress bar, or a single big value */
+export type TrackerKind = 'bar' | 'value';
+
 export interface WBShape {
   id: string;
   type: ShapeType;
@@ -40,7 +43,7 @@ export const DEFAULT_PROPS: Record<ShapeType, Record<string, any>> = {
   group: { w: 0, h: 0 },
   text: { text: '', w: 260, size: 'text' as TextSize },
   note: { doc: '', html: '', w: 300 },
-  tracker: { name: 'Novo Atributo', value: 10, max: 20 },
+  tracker: { name: 'Novo Tracker', kind: 'bar' as TrackerKind, value: 10, max: 20 },
   clock: { name: 'Novo Relógio', segments: 4, filled: 0 },
 };
 
@@ -71,8 +74,9 @@ const HEADER_LEVEL_TO_SIZE: Record<number, TextSize> = { 1: 'h1', 2: 'h2', 3: 'h
 /** normalize a parsed shape: legacy 'header' shapes become text with a size prop */
 function normalizeShape(raw: any): WBShape | null {
   if (!raw || !raw.id || typeof raw.type !== 'string') return null;
+  let shape: WBShape | null = null;
   if (raw.type === 'header') {
-    return {
+    shape = {
       id: raw.id,
       type: 'text',
       x: raw.x ?? 0,
@@ -85,16 +89,22 @@ function normalizeShape(raw: any): WBShape | null {
         level: undefined,
       },
     };
+  } else if (raw.type in DEFAULT_PROPS) {
+    shape = {
+      id: raw.id,
+      type: raw.type,
+      x: raw.x ?? 0,
+      y: raw.y ?? 0,
+      parentId: raw.parentId ?? null,
+      props: { ...DEFAULT_PROPS[raw.type as ShapeType], ...(raw.props ?? {}) },
+    };
   }
-  if (!(raw.type in DEFAULT_PROPS)) return null;
-  return {
-    id: raw.id,
-    type: raw.type,
-    x: raw.x ?? 0,
-    y: raw.y ?? 0,
-    parentId: raw.parentId ?? null,
-    props: { ...DEFAULT_PROPS[raw.type as ShapeType], ...(raw.props ?? {}) },
-  };
+  if (!shape) return null;
+  // drop corrupted near-zero measurements (persisted while the tab was hidden);
+  // missing sizes fall back to defaults and get re-measured on screen
+  if (typeof shape.props.w === 'number' && shape.props.w < 4) delete shape.props.w;
+  if (typeof shape.props.h === 'number' && shape.props.h < 4) delete shape.props.h;
+  return shape;
 }
 
 export function parseShapes(content: string | null | undefined): WBShapeMap {
@@ -106,6 +116,16 @@ export function parseShapes(content: string | null | undefined): WBShapeMap {
       for (const [id, s] of Object.entries(raw.shapes)) {
         const normalized = normalizeShape(s);
         if (normalized) shapes[id] = normalized;
+      }
+      // groups are never re-measured on screen: recover missing bounds from children
+      for (const shape of Object.values(shapes)) {
+        if (shape.type !== 'group') continue;
+        if (typeof shape.props.w === 'number' && typeof shape.props.h === 'number') continue;
+        const b = unionBounds(childrenOf(shapes, shape.id).map(shapeBounds));
+        if (b.w > 0 && b.h > 0) {
+          // children coords are relative to the group origin: keep the full extent
+          shape.props = { ...shape.props, w: Math.ceil(b.x + b.w), h: Math.ceil(b.y + b.h) };
+        }
       }
       return shapes;
     }

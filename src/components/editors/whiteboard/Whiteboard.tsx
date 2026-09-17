@@ -57,6 +57,7 @@ function ShapeFrame({
   shape,
   isSelected,
   showHandles,
+  panning,
   onPointerDownShape,
   onDoubleClickShape,
   onResizeStart,
@@ -66,6 +67,8 @@ function ShapeFrame({
   shape: WBShape;
   isSelected: boolean;
   showHandles: boolean;
+  /** hand tool active: frames let pointer events bubble up to the canvas pan */
+  panning: boolean;
   onPointerDownShape(shape: WBShape, e: React.PointerEvent): void;
   onDoubleClickShape(shape: WBShape): void;
   onResizeStart(shape: WBShape, handle: ResizeHandle, e: React.PointerEvent): void;
@@ -87,6 +90,7 @@ function ShapeFrame({
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    if (panning) return; // bubble to the canvas pan handler
     e.stopPropagation();
     onPointerDownShape(shape, e);
   };
@@ -127,14 +131,21 @@ function ShapeFrame({
 export function Whiteboard({ doc }: { doc: DocNode }) {
   const { updateDocument } = useStore();
   const rootRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const [tool, setTool] = useState<WBTool>('select');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [marquee, setMarquee] = useState<WBBounds | null>(null);
+  /** space key held down: temporary hand tool (tldraw-style) */
+  const [spacePan, setSpacePan] = useState(false);
+  /** a pan gesture is in progress */
+  const [panning, setPanning] = useState(false);
   /** transient shape positions while dragging (persisted on pointer up) */
   const [liveShapes, setLiveShapes] = useState<WBShapeMap | null>(null);
+
+  const handActive = tool === 'hand' || spacePan;
 
   const persisted = useMemo(() => parseShapes(doc.content), [doc.content]);
   const shapes = liveShapes ?? persisted;
@@ -215,6 +226,9 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
 
   const handleReportSize = useCallback(
     (id: string, w: number, h: number) => {
+      // inactive flexlayout tabs stay mounted with display:none — the observer
+      // fires with 0x0 there; never persist hidden-element sizes
+      if (w < 2 || h < 2) return;
       // during a gesture (resize), fold size reports into the transient map so
       // reflowed heights are committed together with the gesture
       const map = liveRef.current ?? latestRef.current;
@@ -255,6 +269,45 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
     setSelectedIds(new Set(result.childIds));
     setEditingId(null);
   }, [save, selectedIds]);
+
+  /* ---------- pan session (hand tool / space / middle mouse) ---------- */
+
+  const beginPan = useCallback((e: React.PointerEvent) => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startLeft = scroller.scrollLeft;
+    const startTop = scroller.scrollTop;
+    setPanning(true);
+
+    const endSession = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      sessionCleanupRef.current = null;
+    };
+
+    const onMove = (ev: PointerEvent) => {
+      scroller.scrollLeft = startLeft - (ev.clientX - startX);
+      scroller.scrollTop = startTop - (ev.clientY - startY);
+    };
+
+    const onUp = () => {
+      endSession();
+      setPanning(false);
+    };
+
+    const onCancel = () => {
+      endSession();
+      setPanning(false);
+    };
+
+    sessionCleanupRef.current = onCancel;
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+  }, []);
 
   /* ---------- drag session (move selected shapes) ----------
      tldraw-style state machine: pointer down = "pointing" (select only);
@@ -494,18 +547,35 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
     [beginDrag, selectedIds, editingId, tool]
   );
 
-  const handleDoubleClickShape = useCallback((shape: WBShape) => {
-    if (shape.type === 'text' || shape.type === 'note') {
-      setSelectedIds(new Set([shape.id]));
-      setEditingId(shape.id);
-    }
-  }, []);
+  const handleDoubleClickShape = useCallback(
+    (shape: WBShape) => {
+      if (handActive) return;
+      if (shape.type === 'text' || shape.type === 'note') {
+        setSelectedIds(new Set([shape.id]));
+        setEditingId(shape.id);
+      }
+    },
+    [handActive]
+  );
 
   /* ---------- canvas pointer down: marquee or shape creation ---------- */
 
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      // middle mouse pans from anywhere (tldraw-style), regardless of tool
+      if (e.button === 1) {
+        e.preventDefault();
+        beginPan(e);
+        return;
+      }
       if (e.button !== 0) return;
+
+      // hand tool (or space held): drag pans the canvas
+      if (handActive) {
+        beginPan(e);
+        return;
+      }
+
       const point = toCanvas(e.clientX, e.clientY);
       setEditingId(null);
 
@@ -572,7 +642,7 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
       window.addEventListener('pointerup', onUp);
       window.addEventListener('pointercancel', onCancel);
     },
-    [tool, save, selectedIds, toCanvas]
+    [tool, handActive, beginPan, save, selectedIds, toCanvas]
   );
 
   /* ---------- keyboard shortcuts ---------- */
@@ -587,6 +657,13 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
       if (editing) return;
       // only handle keys when this canvas (or nothing in particular) has focus
       if (target && target !== document.body && !root.contains(target)) return;
+
+      if (e.key === ' ') {
+        // hold space for a temporary hand tool (tldraw-style)
+        e.preventDefault();
+        if (!e.repeat) setSpacePan(true);
+        return;
+      }
 
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.size > 0) {
         e.preventDefault();
@@ -606,13 +683,20 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
           setEditingId(shape.id);
         }
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-        const keyTool: Record<string, WBTool> = { v: 'select', t: 'text', n: 'note' };
+        const keyTool: Record<string, WBTool> = { v: 'select', h: 'hand', t: 'text', n: 'note' };
         const next = keyTool[e.key.toLowerCase()];
         if (next) setTool(next);
       }
     };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === ' ') setSpacePan(false);
+    };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
   }, [selectedIds, handleDelete, handleGroup, handleUngroup]);
 
   /* ---------- derived ---------- */
@@ -625,7 +709,13 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
 
   return (
     <div ref={rootRef} className="h-full w-full relative bg-app overflow-hidden flex flex-col">
-      <div className="flex-1 relative w-full overflow-auto custom-scrollbar" onPointerDown={handleCanvasPointerDown}>
+      <div
+        ref={scrollRef}
+        className={`flex-1 relative w-full overflow-auto custom-scrollbar ${
+          handActive ? (panning ? 'cursor-grabbing' : 'cursor-grab') : ''
+        }`}
+        onPointerDown={handleCanvasPointerDown}
+      >
         <div ref={contentRef} className="min-w-[2400px] min-h-[2400px] relative">
           {/* dot grid */}
           <div
@@ -638,7 +728,8 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
               key={shape.id}
               shape={shape}
               isSelected={selectedIds.has(shape.id)}
-              showHandles={selectedIds.size === 1 && selectedIds.has(shape.id)}
+              showHandles={!handActive && selectedIds.size === 1 && selectedIds.has(shape.id)}
+              panning={handActive}
               onPointerDownShape={handlePointerDownShape}
               onDoubleClickShape={handleDoubleClickShape}
               onResizeStart={beginResize}

@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   MousePointer2,
+  Hand,
   Type,
   Heading1,
   Heading2,
@@ -14,8 +15,8 @@ import {
 } from 'lucide-react';
 import type { ShapeType, TextSize } from './model';
 
-/** Canvas tools, tldraw-style: 'select' manipulates, the rest create shapes */
-export type WBTool = 'select' | Exclude<ShapeType, 'group'>;
+/** Canvas tools, tldraw-style: 'select' manipulates, 'hand' pans, the rest create shapes */
+export type WBTool = 'select' | 'hand' | Exclude<ShapeType, 'group'>;
 
 interface ToolbarProps {
   tool: WBTool;
@@ -67,7 +68,7 @@ const Divider = () => <div className="w-px h-5 bg-line mx-1 shrink-0" />;
 const CREATE_TOOLS: { tool: WBTool; label: string; icon: typeof Type }[] = [
   { tool: 'text', label: 'Texto (T)', icon: Type },
   { tool: 'note', label: 'Bloco de texto (N)', icon: StickyNote },
-  { tool: 'tracker', label: 'Atributo', icon: Gauge },
+  { tool: 'tracker', label: 'Tracker', icon: Gauge },
   { tool: 'clock', label: 'Relógio', icon: Clock },
 ];
 
@@ -97,6 +98,12 @@ export function WhiteboardToolbar({
           label="Selecionar (V)"
           active={tool === 'select'}
           onClick={() => onToolChange('select')}
+        />
+        <ToolButton
+          icon={Hand}
+          label="Mover tela (H ou Espaço)"
+          active={tool === 'hand'}
+          onClick={() => onToolChange('hand')}
         />
         <Divider />
         {CREATE_TOOLS.map(({ tool: t, label, icon }) => (
