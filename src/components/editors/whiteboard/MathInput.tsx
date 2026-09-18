@@ -8,9 +8,10 @@ import { Minus, Plus } from 'lucide-react';
  *   "=-7" -> set to -7 (absolute, allows negatives)
  *   "12"  -> set to 12 (absolute)
  * Returns null for unparseable input (the input reverts to the current value).
+ * Note: the dash must come LAST in [+=-] — [+-=] is a range covering 0-9!
  */
 export function parseMathCommand(input: string, current: number): number | null {
-  const m = input.trim().match(/^([+-=]?)\s*(-?\d+(?:[.,]\d+)?)$/);
+  const m = input.trim().match(/^([+=-]?)\s*(-?\d+(?:[.,]\d+)?)$/);
   if (!m) return null;
   const n = parseFloat(m[2].replace(',', '.'));
   if (Number.isNaN(n)) return null;
