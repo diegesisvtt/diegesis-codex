@@ -405,10 +405,28 @@ export function PdfReader({ doc }: { doc: DocNode }) {
 
   const scrollToPage = useCallback(
     (page: number, behavior: ScrollBehavior = 'smooth') => {
-      const el = pageEl(Math.min(Math.max(1, page), Math.max(1, numPages)));
+      const target = Math.min(Math.max(1, page), Math.max(1, numPages));
+      const el = pageEl(target);
       const scroller = scrollRef.current;
       if (!el || !scroller) return;
       scroller.scrollTo({ top: el.offsetTop - 12, behavior });
+      // Pages above the target render lazily with an estimated aspect-ratio
+      // height; as they mount and measure their real height, the target's
+      // offsetTop shifts and a one-shot scroll lands short (each repeated
+      // click got closer). Re-anchor while the layout is still settling.
+      let lastTop = el.offsetTop;
+      let attempts = 0;
+      const reanchor = () => {
+        const el2 = pageEl(target);
+        const scroller2 = scrollRef.current;
+        if (!el2 || !scroller2) return;
+        if (el2.offsetTop !== lastTop) {
+          lastTop = el2.offsetTop;
+          scroller2.scrollTo({ top: lastTop - 12, behavior: 'instant' as ScrollBehavior });
+        }
+        if (++attempts < 12) setTimeout(reanchor, 100);
+      };
+      setTimeout(reanchor, 100);
     },
     [numPages, pageEl]
   );
