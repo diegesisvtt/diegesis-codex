@@ -1,0 +1,30 @@
+export { PLUGIN_API_VERSION } from './api/types';
+export type {
+  AppFacade,
+  Disposable,
+  Plugin,
+  PluginContext,
+  PluginManifest,
+  PluginPermission,
+  PluginSettings,
+  ViewComponent,
+  ViewProps,
+} from './api/types';
+export type { AppEvents, EventBus, TypedEventBus } from './api/events';
+export type { Command, CommandRegistry } from './api/commands';
+export type { RibbonItem, ViewContribution, ViewLocation, ViewRegistry } from './api/views';
+export {
+  PluginManager,
+  PluginProvider,
+  useCommands,
+  useExternalPlugins,
+  usePluginEvent,
+  usePluginManager,
+  usePlugins,
+  useRibbonItems,
+  useViews,
+  type ExternalPluginsHandle,
+  type PluginInfo,
+} from './manager';
+export type { ExternalAppFacade, ExternalDocsApi } from './external/sandbox';
+export { builtinPlugins } from './builtin';

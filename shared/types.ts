@@ -2,6 +2,35 @@
 
 export const APP_VERSION = '1.0.0';
 
+/**
+ * Plugin API compatibility version. External plugins declare the version they
+ * were built against in manifest.json; the host refuses mismatched plugins.
+ */
+export const PLUGIN_API_VERSION = 1;
+
+/** manifest.json of an external (community) plugin folder. */
+export interface ExternalPluginManifest {
+  id: string;
+  name: string;
+  version: string;
+  apiVersion: number;
+  description?: string;
+  author?: string;
+  /** capability strings, e.g. 'ui', 'commands', 'docs:read' (see PluginPermission) */
+  permissions?: string[];
+  /** entry file relative to the plugin folder; defaults to 'main.js' */
+  main?: string;
+}
+
+/** A plugin folder found under <userData>/plugins. */
+export interface ExternalPluginInfo {
+  /** folder name */
+  dir: string;
+  /** null when the manifest is missing/invalid (see error) */
+  manifest: ExternalPluginManifest | null;
+  error?: string;
+}
+
 export type DocumentType = 'core/note' | 'core/whiteboard' | 'core/folder' | 'core/pdf';
 
 export interface Realm {
@@ -49,6 +78,15 @@ export interface UiState {
   sidebarVisible?: boolean;
   /** width (px) of the right-side AI chat panel */
   aiPanelWidth?: number;
+  /** plugin manager persistence (enabled state + per-plugin settings) */
+  plugins?: PluginUiState;
+}
+
+export interface PluginUiState {
+  /** ids of plugins explicitly disabled by the user (all plugins default to enabled) */
+  disabled?: string[];
+  /** per-plugin settings blobs, keyed by plugin id */
+  settings?: Record<string, Record<string, unknown>>;
 }
 
 export interface SearchResult {
@@ -263,5 +301,13 @@ export interface MythrilApi {
   app: {
     platform(): Promise<NodeJS.Platform>;
     version(): Promise<string>;
+  };
+  plugins: {
+    /** scans <userData>/plugins for external plugin folders */
+    list(): Promise<ExternalPluginInfo[]>;
+    /** reads the entry-file source code of a plugin folder */
+    read(dir: string): Promise<string>;
+    /** reveals the plugins folder in the OS file manager */
+    openFolder(): Promise<void>;
   };
 }

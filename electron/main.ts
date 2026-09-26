@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import * as db from './db';
 import * as pdf from './pdf';
+import * as plugins from './plugins';
 import * as realmTransfer from './realmTransfer';
 import * as aiConfig from './ai/config';
 import * as embedder from './ai/embedder';
@@ -108,6 +109,11 @@ function registerIpc(): void {
 
   ipcMain.handle('app:platform', () => process.platform);
   ipcMain.handle('app:version', () => app.getVersion());
+
+  // ---- external plugins ----
+  ipcMain.handle('plugins:list', () => plugins.listPlugins());
+  ipcMain.handle('plugins:read', (_e, dir: string) => plugins.readPluginCode(dir));
+  ipcMain.handle('plugins:openFolder', () => plugins.openPluginsFolder());
 }
 
 function createWindow(): void {

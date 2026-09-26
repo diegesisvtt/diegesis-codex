@@ -72,6 +72,11 @@ const api: MythrilApi = {
     platform: () => ipcRenderer.invoke('app:platform'),
     version: () => ipcRenderer.invoke('app:version'),
   },
+  plugins: {
+    list: () => ipcRenderer.invoke('plugins:list'),
+    read: (dir: string) => ipcRenderer.invoke('plugins:read', dir),
+    openFolder: () => ipcRenderer.invoke('plugins:openFolder'),
+  },
 };
 
 contextBridge.exposeInMainWorld('mythril', api);
