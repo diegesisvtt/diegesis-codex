@@ -1,15 +1,19 @@
-// Realm export/import: self-contained JSON transfer files.
-// The file embeds documents, conversations, extracted PDF page text and the
-// PDF binaries (base64) so a realm can move between machines without data loss.
+// Realm export/import: self-contained .realm transfer files (zip, DEFLATE).
+// The archive carries a realm.json manifest (documents, conversations,
+// extracted PDF page text) plus each PDF binary as a pdfs/<docId>.pdf entry,
+// so a realm can move between machines without data loss.
 import { app, dialog, BrowserWindow } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
+import AdmZip from 'adm-zip';
 import * as db from './db';
 import { pdfFilePath } from './pdf';
 import type { ChatRole, DocumentType, RealmTransferResult, RetrievedChunk } from '../shared/types';
 
 const FORMAT = 'mythril-realm';
-const VERSION = 1;
+const VERSION = 2;
+const MANIFEST = 'realm.json';
+const PDF_DIR = 'pdfs';
 const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB transfer file cap
 const VALID_TYPES: DocumentType[] = ['core/note', 'core/whiteboard', 'core/folder', 'core/pdf'];
 const VALID_ROLES: ChatRole[] = ['system', 'user', 'assistant'];
@@ -48,8 +52,6 @@ interface RealmFile {
   conversations: RealmFileConversation[];
   /** extracted page text with real page numbers, keyed by document id */
   pdfPages: Record<string, { page: number; text: string }[]>;
-  /** base64-encoded PDF binaries, keyed by document id */
-  pdfFiles: Record<string, string>;
 }
 
 function safeFileName(name: string): string {
@@ -72,8 +74,8 @@ export async function exportRealm(realmId: string): Promise<RealmTransferResult>
   }
   const picked = await dialog.showSaveDialog(win, {
     title: 'Exportar universo',
-    defaultPath: path.join(defaultDir, `${safeFileName(realm.name)}.realm.json`),
-    filters: [{ name: 'Mythril Realm', extensions: ['json'] }],
+    defaultPath: path.join(defaultDir, `${safeFileName(realm.name)}.realm`),
+    filters: [{ name: 'Mythril Realm', extensions: ['realm'] }],
   });
   if (picked.canceled || !picked.filePath) return { ok: false, canceled: true };
 
@@ -105,23 +107,26 @@ export async function exportRealm(realmId: string): Promise<RealmTransferResult>
       })),
     })),
     pdfPages: {},
-    pdfFiles: {},
   };
 
+  const zip = new AdmZip();
   for (const doc of docs) {
     if (doc.type !== 'core/pdf') continue;
     const pages = db.getPdfPageRows(doc.id);
     if (pages.length) payload.pdfPages[doc.id] = pages;
     try {
       const file = pdfFilePath(doc.id);
-      if (fs.existsSync(file)) payload.pdfFiles[doc.id] = await fs.promises.readFile(file, 'base64url');
+      if (fs.existsSync(file)) {
+        zip.addFile(`${PDF_DIR}/${doc.id}.pdf`, await fs.promises.readFile(file));
+      }
     } catch {
       return { ok: false, error: `Falha ao ler o PDF "${doc.title}".` };
     }
   }
+  zip.addFile(MANIFEST, Buffer.from(JSON.stringify(payload), 'utf8'));
 
   try {
-    await fs.promises.writeFile(picked.filePath, JSON.stringify(payload));
+    await fs.promises.writeFile(picked.filePath, zip.toBuffer());
   } catch {
     return { ok: false, error: 'Não foi possível gravar o arquivo de exportação.' };
   }
@@ -182,21 +187,36 @@ export async function importRealm(): Promise<RealmTransferResult> {
   if (!win) return { ok: false, error: 'Janela principal não disponível.' };
   const picked = await dialog.showOpenDialog(win, {
     title: 'Importar universo',
-    filters: [{ name: 'Mythril Realm', extensions: ['json'] }],
+    filters: [{ name: 'Mythril Realm', extensions: ['realm'] }],
     properties: ['openFile'],
   });
   if (picked.canceled || picked.filePaths.length === 0) return { ok: false, canceled: true };
 
   const src = picked.filePaths[0];
   let parsed: RealmFile;
+  let zip: AdmZip;
   try {
     const stat = await fs.promises.stat(src);
     if (stat.size > MAX_FILE_SIZE) return { ok: false, error: 'Arquivo de importação muito grande.' };
-    parsed = JSON.parse(await fs.promises.readFile(src, 'utf8'));
+    const head = Buffer.alloc(4);
+    const fd = await fs.promises.open(src, 'r');
+    try {
+      await fd.read(head, 0, 4, 0);
+    } finally {
+      await fd.close();
+    }
+    if (head.readUInt32LE(0) !== 0x04034b50) {
+      // "PK\x03\x04" — anything else (e.g. a renamed legacy .realm.json) isn't a zip.
+      return { ok: false, error: 'O arquivo não é um universo Mythril válido.' };
+    }
+    zip = new AdmZip(src);
+    const entry = zip.getEntry(MANIFEST);
+    if (!entry) return { ok: false, error: 'Arquivo de universo corrompido (sem manifesto).' };
+    parsed = JSON.parse(entry.getData().toString('utf8'));
   } catch {
     return { ok: false, error: 'Não foi possível ler o arquivo selecionado.' };
   }
-  if (parsed?.format !== FORMAT || typeof parsed.version !== 'number' || parsed.version > VERSION) {
+  if (parsed?.format !== FORMAT || typeof parsed.version !== 'number' || parsed.version !== VERSION) {
     return { ok: false, error: 'O arquivo não é um universo Mythril válido.' };
   }
   if (!Array.isArray(parsed.documents)) {
@@ -271,9 +291,9 @@ export async function importRealm(): Promise<RealmTransferResult> {
     for (const d of docs) {
       if (d.type !== 'core/pdf') continue;
       const newId = idMap.get(d.id)!;
-      const b64 = parsed.pdfFiles?.[d.id];
-      if (typeof b64 === 'string' && b64) {
-        await fs.promises.writeFile(pdfFilePath(newId), Buffer.from(b64, 'base64url'));
+      const pdfEntry = zip.getEntry(`${PDF_DIR}/${d.id}.pdf`);
+      if (pdfEntry) {
+        await fs.promises.writeFile(pdfFilePath(newId), pdfEntry.getData());
       }
       const pages = parsed.pdfPages?.[d.id];
       if (Array.isArray(pages) && pages.length) db.restorePdfPages(newId, pages);
