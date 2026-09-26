@@ -27,6 +27,8 @@ export function AIChatPanel() {
   const activeConvRef = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  /** autoscroll follows the stream only while the user is near the bottom */
+  const followRef = useRef(true);
   activeConvRef.current = activeConvId;
 
   const reloadConversations = useCallback(async (realmId: string, preferId?: string | null) => {
@@ -126,9 +128,9 @@ export function AIChatPanel() {
     };
   }, [activeRealmId, reloadConversations]);
 
-  // autoscroll
+  // autoscroll: follow new content only when the user hasn't scrolled up to read
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+    if (followRef.current) listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages]);
 
   // composer auto-grow (up to ~9 lines)
@@ -175,6 +177,7 @@ export function AIChatPanel() {
     setMessages((ms) => [...ms, { role: 'user', content: text }, { role: 'assistant', content: '' }]);
     setInput('');
     setStreaming(true);
+    followRef.current = true; // a new message re-engages autoscroll
     window.mythril.ai
       .chat({ chatId, conversationId: convId, realmId: activeRealmId, messages: history, useContext, useWebSearch })
       .catch((err) => {
@@ -296,7 +299,14 @@ export function AIChatPanel() {
       </div>
 
       {/* messages */}
-      <div ref={listRef} className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4">
+      <div
+        ref={listRef}
+        className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          followRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        }}
+      >
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center select-none">
               <Bot size={26} strokeWidth={1.5} className="text-ink-3 mb-3" />
