@@ -27,6 +27,7 @@
     "@huggingface/transformers": "^4.2.0",
     "@tiptap/core": "^3.31.3",
     "@tiptap/pm": "^3.31.3",
+    "adm-zip": "^0.6.1",
     "better-sqlite3": "^11.10.0",
     "flexlayout-react": "^0.7.12",
     "lucide-react": "^0.453.0",
@@ -38,6 +39,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
+    "@types/adm-zip": "^0.5.8",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^20.16.0",
     "@types/react": "^18.3.11",
