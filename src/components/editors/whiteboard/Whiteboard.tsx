@@ -18,6 +18,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import type { DocNode } from '@shared/types';
+import { REF_DRAG_MIME, parseExplorerDragRef } from '@shared/dragDrop';
 import { useStore } from '../../../state/store';
 import {
   createShape,
@@ -177,7 +178,7 @@ function ShapeFrame({
    ============================================================ */
 
 export function Whiteboard({ doc }: { doc: DocNode }) {
-  const { updateDocument } = useStore();
+  const { docs, updateDocument, openDocument, focusPdf } = useStore();
   const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -853,15 +854,96 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
   const handleDoubleClickShape = useCallback(
     (shape: WBShape) => {
       if (handActive) return;
+      // linked cards navigate to the referenced item instead of editing inline
+      if (shape.type === 'note' && (shape.props.docId || shape.props.refKind)) {
+        const { refKind = 'note', docId, pdfDocId, pinId, refPage } = shape.props;
+        if (refKind === 'pin' && pdfDocId) {
+          openDocument(pdfDocId);
+          focusPdf({ docId: pdfDocId, pinId });
+        } else if (refKind === 'bookmark' && pdfDocId) {
+          openDocument(pdfDocId);
+          focusPdf({ docId: pdfDocId, page: refPage ?? 1 });
+        } else if (refKind === 'highlight' && pdfDocId) {
+          openDocument(pdfDocId);
+          focusPdf({ docId: pdfDocId, highlightId: shape.props.highlightId });
+        } else if (docId) {
+          openDocument(docId);
+        }
+        return;
+      }
       if (shape.type === 'text' || shape.type === 'note' || shape.type === 'arrow') {
         setSelectedIds(new Set([shape.id]));
         setEditingId(shape.id);
       }
     },
-    [handActive]
+    [handActive, openDocument, focusPdf]
   );
 
   /* ---------- creation ---------- */
+
+  /* Explorer items (notes, PDF pins, bookmarks) dragged onto the canvas become
+     linked cards. react-dnd's HTML5 backend (behind the Explorer tree) force-sets
+     dropEffect='none' in a window-level dragover handler whenever the pointer is
+     outside its own drop targets — which suppresses the drop event even after our
+     preventDefault. That handler lives on window and was registered at app boot,
+     so a window listener registered here (on mount) runs AFTER it and wins. */
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes(REF_DRAG_MIME)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    };
+    window.addEventListener('dragover', onDragOver);
+    return () => window.removeEventListener('dragover', onDragOver);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes(REF_DRAG_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      const ref = parseExplorerDragRef(e.dataTransfer.getData(REF_DRAG_MIME));
+      if (!ref) return;
+      e.preventDefault();
+      const point = toCanvas(e.clientX, e.clientY);
+      const size = DEFAULT_SIZE.note;
+      const shape = createShape(
+        'note',
+        Math.max(0, applySnap(point.x - size.w / 2, e.altKey)),
+        Math.max(0, applySnap(point.y - size.h / 2, e.altKey))
+      );
+      // cache display data so the card still makes sense if the target is deleted later
+      const base = { refKind: ref.kind, refColor: ref.kind !== 'note' ? (ref.color ?? null) : null };
+      shape.props =
+        ref.kind === 'note'
+          ? { ...shape.props, ...base, docId: ref.docId, docTitle: docs.find((d) => d.id === ref.docId)?.title ?? 'Nota' }
+          : ref.kind === 'pin'
+            ? {
+                ...shape.props,
+                ...base,
+                docId: ref.docId,
+                pdfDocId: ref.pdfDocId,
+                pinId: ref.pinId,
+                docTitle: docs.find((d) => d.id === ref.docId)?.title ?? 'Pin',
+              }
+            : ref.kind === 'highlight'
+              ? {
+                  ...shape.props,
+                  ...base,
+                  pdfDocId: ref.pdfDocId,
+                  highlightId: ref.highlightId,
+                  refPage: ref.page,
+                  docTitle: ref.text,
+                }
+              : { ...shape.props, ...base, pdfDocId: ref.pdfDocId, refPage: ref.page, docTitle: ref.label };
+      save({ ...latestRef.current, [shape.id]: shape });
+      setSelectedIds(new Set([shape.id]));
+    },
+    [docs, toCanvas, applySnap, save]
+  );
 
   const createAt = useCallback(
     (tool: Exclude<ShapeType, 'group'>, point: { x: number; y: number }, altKey = false) => {
@@ -1156,6 +1238,8 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
         }`}
         onPointerDown={handleCanvasPointerDown}
         onContextMenu={handleContextMenuCanvas}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
       >
         <div ref={contentRef} className="min-w-[2400px] min-h-[2400px] relative">
           {/* dot grid */}

@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Tree, NodeRendererProps } from 'react-arborist';
 import { BookOpen, ChevronRight, ChevronDown, Highlighter, Trash2 } from 'lucide-react';
+import { REF_DRAG_MIME } from '@shared/dragDrop';
 import { useStore } from '../state/store';
 import {
   collectHighlights,
@@ -47,6 +48,23 @@ function Node({ node, style, dragHandle }: NodeRendererProps<HLTreeData>) {
     <div
       style={style}
       ref={dragHandle}
+      // highlights can be dragged onto a whiteboard to create a quote card
+      // (capture phase: react-dnd stops propagation in its own native handler)
+      onDragStartCapture={(e) => {
+        if (data.kind !== 'hl' || !data.highlightId) return;
+        e.dataTransfer.setData(
+          REF_DRAG_MIME,
+          JSON.stringify({
+            kind: 'highlight',
+            pdfDocId: data.pdfDocId,
+            highlightId: data.highlightId,
+            text: data.name,
+            page: data.page,
+            color: data.color,
+          })
+        );
+        e.dataTransfer.effectAllowed = 'copy';
+      }}
       onClick={() => (data.kind === 'pdf' ? node.toggle() : (node.select(), openAtLocation()))}
       onDoubleClick={() => {
         if (data.kind === 'pdf') openDocument(data.pdfDocId);

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
   Hash,
@@ -9,9 +9,18 @@ import {
   X,
   ArrowDownWideNarrow,
   ListOrdered,
+  File,
+  FileWarning,
+  MapPin,
+  Bookmark,
+  Highlighter,
 } from 'lucide-react';
 import type { WBShape, WBShapeMap, TextSize, TrackerKind, InitiativeEntry, InitiativeMode } from './model';
 import { childrenOf, generateId } from './model';
+import { blocksToPlainText } from '@shared/blockContent';
+import { pinIcon } from '../pdf/rpg';
+import { parsePdfContent } from '../pdf/model';
+import { useStore } from '../../../state/store';
 import { RichTextEditor } from '../shared/RichTextEditor';
 import { MathInput } from './MathInput';
 
@@ -619,7 +628,86 @@ function NoteEditorView({
   );
 }
 
+/**
+ * Card referencing an Explorer item (created by drag-and-drop):
+ * a note document, a PDF pin note, a PDF bookmark or a PDF highlight.
+ * Title/preview track live documents; double-click on the canvas navigates.
+ */
+function LinkedNoteShape({ shape }: { shape: WBShape }) {
+  const refKind: 'note' | 'pin' | 'bookmark' | 'highlight' = shape.props.refKind ?? 'note';
+  const { docs } = useStore();
+
+  // notes and pin notes are real documents; bookmarks/highlights live inside the PDF's content
+  const doc = refKind === 'note' || refKind === 'pin' ? docs.find((d) => d.id === shape.props.docId) : undefined;
+  const pdfDoc = refKind !== 'note' ? docs.find((d) => d.id === shape.props.pdfDocId) : undefined;
+  const preview = useMemo(() => (doc ? blocksToPlainText(doc.content).replace(/\s+/g, ' ').trim() : ''), [doc]);
+  const highlight = useMemo(() => {
+    if (refKind !== 'highlight' || !pdfDoc) return null;
+    return parsePdfContent(pdfDoc.content).highlights.find((h) => h.id === shape.props.highlightId) ?? null;
+  }, [refKind, pdfDoc, shape.props.highlightId]);
+
+  const refColor: string | null = (refKind === 'highlight' ? highlight?.color : shape.props.refColor) ?? null;
+  const missing = refKind === 'note' || refKind === 'pin' ? !doc : refKind === 'highlight' ? !highlight : !pdfDoc;
+
+  const Icon = missing
+    ? FileWarning
+    : refKind === 'pin'
+      ? MapPin
+      : refKind === 'bookmark'
+        ? Bookmark
+        : refKind === 'highlight'
+          ? Highlighter
+          : doc?.icon
+            ? pinIcon(doc.icon)
+            : File;
+  const title =
+    refKind === 'bookmark'
+      ? shape.props.docTitle || 'Marcador'
+      : refKind === 'highlight'
+        ? highlight?.text || shape.props.docTitle || 'Destaque'
+        : doc?.title || shape.props.docTitle || 'Nota';
+  const subtitle =
+    refKind === 'note'
+      ? null
+      : `${pdfDoc?.title ? `${pdfDoc.title} · ` : ''}p.${(refKind === 'highlight' ? highlight?.page : shape.props.refPage) ?? '?'}`;
+
+  return (
+    <div
+      className={`bg-elevated/95 backdrop-blur border rounded-lg shadow-xl px-4 py-3 select-none ${
+        missing ? 'border-danger/40' : 'border-line'
+      }`}
+      style={{ width: shape.props.w }}
+      title={missing ? 'O item referenciado foi removido' : 'Duplo clique para abrir'}
+    >
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <Icon
+          size={13}
+          strokeWidth={1.75}
+          className={`shrink-0 ${missing ? 'text-danger' : refKind === 'note' ? 'text-note' : ''}`}
+          style={!missing && refColor && refKind !== 'note' ? { color: refColor } : undefined}
+        />
+        <span
+          className={`text-[13px] font-semibold text-ink-1 ${refKind === 'highlight' ? 'line-clamp-2 leading-snug' : 'truncate'}`}
+        >
+          {refKind === 'highlight' ? `“${title}”` : title}
+        </span>
+      </div>
+      {missing ? (
+        <div className="text-[12px] text-ink-3 italic">Item removido</div>
+      ) : refKind === 'note' ? (
+        <div className="text-[12px] text-ink-2 leading-snug line-clamp-4">
+          {preview || <span className="opacity-40">Nota vazia</span>}
+        </div>
+      ) : (
+        <div className="text-[11px] text-ink-3 truncate">{subtitle}</div>
+      )}
+    </div>
+  );
+}
+
 function NoteShape({ shape, interactive, autoFocus, updateProps, onExitEdit }: ShapeViewProps) {
+  // linked cards are references to Explorer items, not editable inline
+  if (shape.props.docId || shape.props.refKind) return <LinkedNoteShape shape={shape} />;
   // tiptap instances are expensive: mount the live editor only while the note
   // is being edited; otherwise render the cached html preview
   const editing = interactive && autoFocus;

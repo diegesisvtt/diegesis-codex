@@ -17,6 +17,7 @@ import {
   Star,
 } from 'lucide-react';
 import type { DocNode } from '@shared/types';
+import { REF_DRAG_MIME } from '@shared/dragDrop';
 import { useStore } from '../state/store';
 import { buildTree, TreeData } from './treeData';
 import { buildPdfTreeInfo, parseBookmarkVirtualId, renameBookmarkLabel, removeBookmark, type PdfTreeInfo } from './pdfTree';
@@ -84,8 +85,31 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
       // dragstart handler, which would prevent a bubble-phase listener from
       // ever firing (the token never arrived at the PDF)
       onDragStartCapture={(e) => {
+        // a generic ref payload lets whiteboards create linked cards for
+        // notes, PDF pins and bookmarks (capture phase: react-dnd stops
+        // propagation in its own native dragstart handler)
         if (pin) {
           e.dataTransfer.setData('application/x-mythril-pin-note', `${pin.pdfDocId}:${data.id}`);
+          e.dataTransfer.setData(
+            REF_DRAG_MIME,
+            JSON.stringify({ kind: 'pin', docId: data.id, pdfDocId: pin.pdfDocId, pinId: pin.pinId, color: pin.color })
+          );
+          e.dataTransfer.effectAllowed = 'copy';
+        } else if (bookmark) {
+          e.dataTransfer.setData(
+            REF_DRAG_MIME,
+            JSON.stringify({
+              kind: 'bookmark',
+              pdfDocId: bookmark.pdfDocId,
+              bookmarkId: bookmark.bookmarkId,
+              label: data.name,
+              page: bookmark.page,
+              color: bookmark.color,
+            })
+          );
+          e.dataTransfer.effectAllowed = 'copy';
+        } else if (data.docType === 'core/note') {
+          e.dataTransfer.setData(REF_DRAG_MIME, JSON.stringify({ kind: 'note', docId: data.id }));
           e.dataTransfer.effectAllowed = 'copy';
         }
       }}
@@ -289,7 +313,7 @@ export function Explorer() {
               }
               if (node.data.docType !== 'core/folder') openDocument(node.data.id);
             }}
-            disableDrag={(d: TreeData) => !!d.bookmark}
+            disableDrag={false}
             onRename={({ id, name }) => {
               const bm = parseBookmarkVirtualId(id);
               if (bm) {

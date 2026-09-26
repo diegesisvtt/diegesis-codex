@@ -61,7 +61,20 @@ export const generateId = () =>
 export const DEFAULT_PROPS: Record<ShapeType, Record<string, any>> = {
   group: { w: 0, h: 0 },
   text: { text: '', w: 260, size: 'text' as TextSize },
-  note: { doc: '', html: '', w: 300 },
+  note: {
+    doc: '',
+    html: '',
+    w: 300,
+    // linked-reference cards (dropped from the Explorer)
+    refKind: null as 'note' | 'pin' | 'bookmark' | 'highlight' | null,
+    docId: null as string | null,
+    docTitle: '',
+    pdfDocId: null as string | null,
+    pinId: null as string | null,
+    highlightId: null as string | null,
+    refPage: null as number | null,
+    refColor: null as string | null,
+  },
   tracker: { name: 'Novo Tracker', kind: 'bar' as TrackerKind, value: 10, max: 20 },
   clock: { name: 'Novo Relógio', segments: 4, filled: 0 },
   initiative: {
