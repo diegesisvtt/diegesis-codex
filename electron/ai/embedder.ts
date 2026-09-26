@@ -21,10 +21,10 @@ let lastError: string | null = null;
 const hash = (s: string) => crypto.createHash('sha1').update(s).digest('hex');
 
 /** Splits plain text into overlapping chunks, preferring paragraph boundaries. */
-export function chunkText(text: string): { seq: number; text: string; hash: string }[] {
+export function chunkText(text: string, page: number | null = null): { seq: number; text: string; hash: string; page: number | null }[] {
   const clean = text.replace(/\s+/g, ' ').trim();
   if (!clean) return [];
-  const chunks: { seq: number; text: string; hash: string }[] = [];
+  const chunks: { seq: number; text: string; hash: string; page: number | null }[] = [];
   let start = 0;
   let seq = 0;
   while (start < clean.length) {
@@ -36,7 +36,7 @@ export function chunkText(text: string): { seq: number; text: string; hash: stri
       if (boundary > CHUNK_TARGET * 0.5) end = start + boundary + 1;
     }
     const piece = clean.slice(start, end).trim();
-    if (piece) chunks.push({ seq: seq++, text: piece, hash: hash(piece) });
+    if (piece) chunks.push({ seq: seq++, text: piece, hash: hash(piece), page });
     if (end >= clean.length) break;
     start = end - CHUNK_OVERLAP;
   }
@@ -44,13 +44,17 @@ export function chunkText(text: string): { seq: number; text: string; hash: stri
 }
 
 async function processJob(job: { id: string; doc_id: string }): Promise<void> {
-  const doc = db.getDocForChunking(job.doc_id);
+  const doc = db.getDocChunkSegments(job.doc_id);
   if (!doc) {
     // document was deleted while the job was queued
     db.completeJob(job.id);
     return;
   }
-  const chunks = chunkText(`${doc.title}\n\n${doc.text}`);
+  // chunk each segment (PDF page) separately, with a global seq across segments
+  let seq = 0;
+  const chunks = doc.segments.flatMap((s) =>
+    chunkText(`${doc.title}${s.page !== null ? ` (p. ${s.page})` : ''}\n\n${s.text}`, s.page).map((c) => ({ ...c, seq: seq++ }))
+  );
   db.syncDocChunks(doc.id, doc.realmId, chunks);
 
   // embed any chunk that still lacks a vector (bounded batches)

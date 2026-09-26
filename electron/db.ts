@@ -111,6 +111,16 @@ function migrate(): void {
     /* column already exists */
   }
 
+  // migration: page-aware chunks (PDF citations jump to the exact page)
+  try {
+    db.exec('ALTER TABLE doc_chunks ADD COLUMN page INTEGER');
+    // re-index PDFs so their chunks gain page info (chunk layout changed)
+    const pdfs = db.prepare("SELECT id FROM documents WHERE type = 'core/pdf'").all() as { id: string }[];
+    for (const p of pdfs) enqueueEmbedJob(p.id);
+  } catch {
+    /* column already exists */
+  }
+
   // migration: legacy tiptap JSON → BlockNote JSON in note documents
   {
     const notes = db.prepare("SELECT id, content FROM documents WHERE type = 'core/note'").all() as {
@@ -397,12 +407,12 @@ export function deleteChunksForRealm(realmId: string): void {
 }
 
 /** Existing chunk hashes for a document, used to skip re-embedding unchanged content. */
-export function getChunkHashes(docId: string): Map<number, { id: string; hash: string; embedded: boolean }> {
+export function getChunkHashes(docId: string): Map<number, { id: string; hash: string; embedded: boolean; page: number | null }> {
   const rows = db
-    .prepare('SELECT id, seq, content_hash, embedded FROM doc_chunks WHERE doc_id = ?')
+    .prepare('SELECT id, seq, content_hash, embedded, page FROM doc_chunks WHERE doc_id = ?')
     .all(docId) as any[];
-  const map = new Map<number, { id: string; hash: string; embedded: boolean }>();
-  for (const r of rows) map.set(r.seq, { id: r.id, hash: r.content_hash, embedded: r.embedded === 1 });
+  const map = new Map<number, { id: string; hash: string; embedded: boolean; page: number | null }>();
+  for (const r of rows) map.set(r.seq, { id: r.id, hash: r.content_hash, embedded: r.embedded === 1, page: r.page ?? null });
   return map;
 }
 
@@ -421,22 +431,22 @@ function deleteChunk(chunkId: string): void {
 export function syncDocChunks(
   docId: string,
   realmId: string,
-  chunks: { seq: number; text: string; hash: string }[]
+  chunks: { seq: number; text: string; hash: string; page?: number | null }[]
 ): void {
   const existing = getChunkHashes(docId);
   const tx = db.transaction(() => {
     for (const [seq, row] of existing) {
       const next = chunks.find((c) => c.seq === seq);
-      if (!next || next.hash !== row.hash) deleteChunk(row.id);
+      if (!next || next.hash !== row.hash || (next.page ?? null) !== row.page) deleteChunk(row.id);
     }
     const insert = db.prepare(
-      'INSERT INTO doc_chunks (id, doc_id, realm_id, seq, text, content_hash, embedded, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?)'
+      'INSERT INTO doc_chunks (id, doc_id, realm_id, seq, text, content_hash, embedded, updated_at, page) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)'
     );
     const now = Date.now();
     for (const c of chunks) {
       const prev = existing.get(c.seq);
-      if (prev && prev.hash === c.hash) continue; // unchanged
-      insert.run(generateId(), docId, realmId, c.seq, c.text, c.hash, now);
+      if (prev && prev.hash === c.hash && prev.page === (c.page ?? null)) continue; // unchanged
+      insert.run(generateId(), docId, realmId, c.seq, c.text, c.hash, now, c.page ?? null);
     }
   });
   tx();
@@ -474,7 +484,7 @@ function knnRaw(realmId: string, embedding: Float32Array, k: number) {
   if (getEmbedDim() === null) return [];
   const knnStmt = db.prepare('SELECT chunk_id, distance FROM vec_chunks WHERE embedding MATCH ? AND k = ?');
   const joinStmt = db.prepare(
-    `SELECT c.id AS chunkId, c.text AS text, c.doc_id AS docId, d.title AS title, d.type AS type
+    `SELECT c.id AS chunkId, c.text AS text, c.doc_id AS docId, d.title AS title, d.type AS type, c.page AS page
      FROM doc_chunks c
      JOIN documents d ON d.id = c.doc_id
      WHERE c.realm_id = ? AND c.id IN (SELECT value FROM json_each(?))`
@@ -516,13 +526,14 @@ export function knnChunks(
   realmId: string,
   embedding: Float32Array,
   k: number
-): { docId: string; title: string; type: string; text: string; score: number }[] {
+): { docId: string; title: string; type: string; text: string; score: number; page: number | null }[] {
   return knnRaw(realmId, embedding, k).map((r) => ({
     docId: r.docId,
     title: r.title,
     type: r.type,
     text: r.text,
     score: Math.max(0, 1 - r.distance),
+    page: r.page ?? null,
   }));
 }
 
@@ -590,6 +601,30 @@ export function getDocForChunking(docId: string): { id: string; realmId: string;
   const row = db.prepare('SELECT id, realm_id, title, content, type FROM documents WHERE id = ?').get(docId) as any;
   if (!row) return null;
   return { id: row.id, realmId: row.realm_id, title: row.title, text: docIndexText({ id: row.id, type: row.type, content: row.content }) };
+}
+
+/**
+ * Chunkable segments of a document. PDFs yield one segment per extracted page
+ * (so chunks know their page and citations can deep-link); other docs yield a
+ * single page-less segment.
+ */
+export function getDocChunkSegments(
+  docId: string
+): { id: string; realmId: string; title: string; segments: { text: string; page: number | null }[] } | null {
+  const row = db.prepare('SELECT id, realm_id, title, content, type FROM documents WHERE id = ?').get(docId) as any;
+  if (!row) return null;
+  if (row.type === 'core/pdf') {
+    const pages = getPdfPageRows(docId);
+    if (pages.length) {
+      return { id: row.id, realmId: row.realm_id, title: row.title, segments: pages.map((p) => ({ text: p.text, page: p.page })) };
+    }
+  }
+  return {
+    id: row.id,
+    realmId: row.realm_id,
+    title: row.title,
+    segments: [{ text: docIndexText({ id: row.id, type: row.type, content: row.content }), page: null }],
+  };
 }
 
 // ---------- Realms ----------
