@@ -1,0 +1,10 @@
+{
+  "id": "community/word-count",
+  "name": "Contagem de palavras",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "Estatísticas de palavras das notas do universo ativo, em uma aba do workspace.",
+  "author": "Mythril (exemplo)",
+  "permissions": ["ui", "commands", "events", "docs:read"],
+  "main": "main.js"
+}
