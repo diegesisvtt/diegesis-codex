@@ -307,6 +307,50 @@ body,
   min-height: 0;
 }
 
+/* Chat mode (assistant messages) — compact, read-only, transparent bg */
+.mythril-bn.chat,
+.mythril-bn.chat .bn-editor,
+.mythril-bn.chat.bn-dark-theme,
+.mythril-bn.chat .bn-container {
+  background: transparent;
+}
+.mythril-bn.chat .bn-editor {
+  max-width: none;
+  font-size: 13.5px;
+  line-height: 1.65;
+  padding: 6px 12px;
+  min-height: 0;
+  cursor: default;
+}
+.mythril-bn.chat .bn-editor .bn-block-outer:not(:first-child) {
+  margin-top: 0.2em;
+}
+.mythril-bn.chat .bn-editor h1,
+.mythril-bn.chat .bn-editor h2,
+.mythril-bn.chat .bn-editor h3 {
+  margin-top: 0.55em;
+}
+
+/* Inline RAG citation badges ([n] → mythril.source links) */
+.mythril-bn.chat .bn-editor a[href^="https://mythril.source/"] {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 0 4px;
+  margin-inline: 1px;
+  border-radius: 4px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-ink);
+  text-decoration: none;
+  vertical-align: super;
+  cursor: pointer;
+}
+.mythril-bn.chat .bn-editor a[href^="https://mythril.source/"]:hover {
+  background: var(--color-accent);
+  color: #fff;
+}
+
 /* ============================================================
    Whiteboard — static note preview (cached HTML)
    ============================================================ */
