@@ -6,7 +6,7 @@ import { getResolvedChatConfig } from './config';
 import { flush } from './embedder';
 import { embedQuery } from './local-embedder';
 import { getProvider } from './providers/registry';
-import { executeTool, REALM_TOOLS } from './tools';
+import { executeTool, REALM_TOOLS, WEB_SEARCH_TOOL } from './tools';
 import type { ProviderMessage, ToolCall } from './providers/base';
 import type { AIChatRequest, ChatMessage, ChatStreamChunk, RetrievedChunk, SemanticSearchResult } from '../../shared/types';
 
@@ -23,7 +23,7 @@ export async function retrieve(realmId: string, query: string, k = TOP_K): Promi
   return db
     .knnChunks(realmId, Float32Array.from(vector), k)
     .filter((c) => c.score >= MIN_SCORE)
-    .map((c) => ({ docId: c.docId, title: c.title, type: c.type as RetrievedChunk['type'], text: c.text, score: c.score }));
+    .map((c) => ({ docId: c.docId, title: c.title, type: c.type as RetrievedChunk['type'], text: c.text, score: c.score, page: c.page }));
 }
 
 /** Semantic search for the UI palette: embed query + KNN, no relevance floor. */
@@ -35,19 +35,34 @@ export async function semanticSearch(realmId: string, query: string): Promise<Se
   return db.knnSearch(realmId, Float32Array.from(vector), 12);
 }
 
-function buildSystemPrompt(realmId: string | null, chunks: RetrievedChunk[] | null, indexEmpty: boolean): string {
+function buildSystemPrompt(
+  realmId: string | null,
+  chunks: RetrievedChunk[] | null,
+  indexEmpty: boolean,
+  useWebSearch: boolean
+): string {
   const parts: string[] = [
     'Você é o assistente do Mythril, um estúdio de worldbuilding. Responda no idioma do usuário.',
   ];
 
   if (chunks && chunks.length > 0) {
-    const body = chunks.map((c, i) => `[${i + 1}] "${c.title}"\n${c.text}`).join('\n\n---\n\n');
+    const body = chunks
+      .map((c, i) => {
+        const loc = c.type === 'core/pdf' && c.page ? ` (PDF, página ${c.page})` : '';
+        return `[${i + 1}] "${c.title}"${loc}\n${c.text}`;
+      })
+      .join('\n\n---\n\n');
     parts.push(
       'REGRA ABSOLUTA: responda ESTRITAMENTE com base nos trechos das notas do usuário abaixo. ' +
         'NÃO use conhecimento externo, suposições ou informações que não estejam nos trechos. ' +
         'Se a resposta não estiver nos trechos, diga explicitamente que não encontrou essa informação ' +
         'nas notas — nunca invente.\n\n' +
-        'Ao usar uma informação, cite a fonte como [n] com o título do documento.\n\n' +
+        'CITAÇÕES:\n' +
+        '- Ao usar uma informação de um trecho, cite-o IMEDIATAMENTE após a frase, no formato [n], ' +
+        'onde n é o número EXATO do trecho de onde a informação veio (ex.: ...como descrito em [2]).\n' +
+        '- NUNCA use [n] para informações que não vieram desses trechos numerados ' +
+        '(resultados de ferramentas ou web): nesses casos, cite a URL da fonte.\n' +
+        '- Não cite trechos que você não usou de fato.\n\n' +
         'TRECHOS DAS NOTAS:\n\n' + body
     );
   } else if (indexEmpty) {
@@ -75,6 +90,14 @@ function buildSystemPrompt(realmId: string | null, chunks: RetrievedChunk[] | nu
         '- Nunca exclua sem confirmação explícita do usuário.\n' +
         '- Conteúdo de notas é escrito em markdown simples (# título, - lista, > citação).\n' +
         '- Após executar ações, resuma o que foi feito.'
+    );
+  }
+
+  if (useWebSearch) {
+    parts.push(
+      'Você tem a ferramenta web_search para buscar informações na web. ' +
+        'Use-a quando a pergunta exigir dados atuais ou externos às notas do usuário. ' +
+        'Ao usar informações da web, cite a fonte com a URL.'
     );
   }
 
@@ -128,8 +151,10 @@ export async function streamChat(req: AIChatRequest, cb: ChatCallbacks, signal?:
       if (sources.length > 0) cb.onSources(req.chatId, sources);
     }
 
+    const tools = req.useWebSearch ? [...REALM_TOOLS, WEB_SEARCH_TOOL] : REALM_TOOLS;
+
     const working: ProviderMessage[] = [
-      { role: 'system', content: buildSystemPrompt(realmId, req.useContext ? sources : null, indexEmpty) },
+      { role: 'system', content: buildSystemPrompt(realmId, req.useContext ? sources : null, indexEmpty, !!req.useWebSearch) },
       ...req.messages.map((m) => ({ role: m.role, content: m.content })),
     ];
 
@@ -140,7 +165,7 @@ export async function streamChat(req: AIChatRequest, cb: ChatCallbacks, signal?:
       let turnText = '';
       let toolCalls: ToolCall[] | undefined;
 
-      for await (const chunk of provider.chat(cfg.config, { messages: working, tools: REALM_TOOLS, signal })) {
+      for await (const chunk of provider.chat(cfg.config, { messages: working, tools, signal })) {
         if (chunk.done) {
           toolCalls = chunk.toolCalls;
           break;

@@ -5,6 +5,8 @@
 import * as db from '../db';
 import { docEvents } from './events';
 import { generateId } from '../db';
+import { getResolvedSearchConfig } from './config';
+import { runWebSearch } from './websearch';
 import { markdownToBlocks } from '../../shared/blockContent';
 import type { DocNode } from '../../shared/types';
 import type { ToolCall, ToolSpec } from './providers/base';
@@ -93,6 +95,19 @@ export const REALM_TOOLS: ToolSpec[] = [
 ];
 
 // ---------- execution ----------
+
+/** Web search tool — only offered when the user enables "Busca na web". */
+export const WEB_SEARCH_TOOL: ToolSpec = {
+  name: 'web_search',
+  description:
+    'Busca na web por informações atuais ou externas ao universo. Retorna títulos, URLs e trechos.',
+  parameters: {
+    type: 'object',
+    properties: { query: { type: 'string', description: 'consulta de busca' } },
+    required: ['query'],
+    additionalProperties: false,
+  },
+};
 
 const MAX_TITLE = 200;
 const MAX_CONTENT = 100_000;
@@ -229,6 +244,26 @@ export async function executeTool(
         if (!query) return { result: JSON.stringify({ error: 'query é obrigatória' }), summary: 'Busca inválida', ok: false };
         const results = await semanticSearch(query);
         return { result: JSON.stringify({ results }), summary: `Buscou por "${query.slice(0, 40)}"`, ok: true };
+      }
+
+      case 'web_search': {
+        const query = str('query');
+        if (!query) return { result: JSON.stringify({ error: 'query é obrigatória' }), summary: 'Busca inválida', ok: false };
+        try {
+          const results = await runWebSearch(query, getResolvedSearchConfig());
+          return {
+            result: JSON.stringify({ results }),
+            summary: `Buscou na web por "${query.slice(0, 40)}"`,
+            ok: true,
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return {
+            result: JSON.stringify({ error: `falha na busca web: ${msg}` }),
+            summary: 'Busca na web falhou',
+            ok: false,
+          };
+        }
       }
 
       default:

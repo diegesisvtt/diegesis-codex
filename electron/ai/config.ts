@@ -5,9 +5,11 @@
 import { safeStorage } from 'electron';
 import { getDb } from '../db';
 import { getProvider } from './providers/registry';
-import { SECRET_MASK, type AIProviderConfig, type AISettings } from '../../shared/types';
+import { getSearchProvider } from './websearch';
+import { SECRET_MASK, type AIProviderConfig, type AISettings, type ProviderInfo } from '../../shared/types';
 
 const CHAT_KEY = 'ai_chat_provider';
+const SEARCH_KEY = 'ai_search_provider';
 const ENC_PREFIX = 'enc:';
 
 function encrypt(value: string): string {
@@ -26,8 +28,8 @@ function decrypt(value: string): string {
   return value;
 }
 
-function readRaw(): AIProviderConfig | null {
-  const row = getDb().prepare('SELECT value FROM settings WHERE key = ?').get(CHAT_KEY) as { value: string } | undefined;
+function readRaw(key: string): AIProviderConfig | null {
+  const row = getDb().prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
   if (!row) return null;
   try {
     return JSON.parse(row.value) as AIProviderConfig;
@@ -36,43 +38,47 @@ function readRaw(): AIProviderConfig | null {
   }
 }
 
-function writeRaw(cfg: AIProviderConfig | null): void {
+function writeRaw(key: string, cfg: AIProviderConfig | null): void {
   if (cfg === null) {
-    getDb().prepare('DELETE FROM settings WHERE key = ?').run(CHAT_KEY);
+    getDb().prepare('DELETE FROM settings WHERE key = ?').run(key);
     return;
   }
   getDb()
     .prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
-    .run(CHAT_KEY, JSON.stringify(cfg));
+    .run(key, JSON.stringify(cfg));
+}
+
+type ProviderLookup = (id: string) => ProviderInfo | undefined;
+
+function secretKeys(lookup: ProviderLookup, providerId: string): Set<string> {
+  return new Set(lookup(providerId)?.fields.filter((f) => f.secret).map((f) => f.key) ?? []);
 }
 
 /** Masks secret fields before sending config to the renderer. */
-function mask(cfg: AIProviderConfig): AIProviderConfig {
-  const provider = getProvider(cfg.providerId);
-  const secretKeys = new Set(provider?.info.fields.filter((f) => f.secret).map((f) => f.key) ?? []);
+function mask(lookup: ProviderLookup, cfg: AIProviderConfig): AIProviderConfig {
+  const secrets = secretKeys(lookup, cfg.providerId);
   const config = { ...cfg.config };
   for (const k of Object.keys(config)) {
-    if (secretKeys.has(k)) config[k] = config[k] ? SECRET_MASK : '';
+    if (secrets.has(k)) config[k] = config[k] ? SECRET_MASK : '';
   }
   return { ...cfg, config };
 }
 
-export function getAISettings(): AISettings {
-  const chat = readRaw();
-  return { chat: chat && getProvider(chat.providerId) ? mask(chat) : null };
+function readMasked(lookup: ProviderLookup, key: string): AIProviderConfig | null {
+  const raw = readRaw(key);
+  return raw && lookup(raw.providerId) ? mask(lookup, raw) : null;
 }
 
-export function setChatProvider(cfg: AIProviderConfig | null): void {
+function writeConfig(lookup: ProviderLookup, key: string, cfg: AIProviderConfig | null): void {
   if (cfg === null) {
-    writeRaw(null);
+    writeRaw(key, null);
     return;
   }
-  const prev = readRaw();
-  const provider = getProvider(cfg.providerId);
-  const secretKeys = new Set(provider?.info.fields.filter((f) => f.secret).map((f) => f.key) ?? []);
+  const prev = readRaw(key);
+  const secrets = secretKeys(lookup, cfg.providerId);
   const config: Record<string, string> = {};
   for (const [k, v] of Object.entries(cfg.config)) {
-    if (secretKeys.has(k)) {
+    if (secrets.has(k)) {
       if (v === SECRET_MASK) {
         // keep the stored secret only when editing the same provider; the mask
         // must never be encrypted/persisted as if it were a real key
@@ -84,34 +90,64 @@ export function setChatProvider(cfg: AIProviderConfig | null): void {
       config[k] = v;
     }
   }
-  writeRaw({ providerId: cfg.providerId, config });
+  writeRaw(key, { providerId: cfg.providerId, config });
+}
+
+/** Returns the stored config with secrets decrypted (main-process use only). */
+function readResolved(lookup: ProviderLookup, key: string): AIProviderConfig | null {
+  const raw = readRaw(key);
+  if (!raw || !lookup(raw.providerId)) return null;
+  const secrets = secretKeys(lookup, raw.providerId);
+  const config = { ...raw.config };
+  for (const k of Object.keys(config)) {
+    if (secrets.has(k) && config[k]) config[k] = decrypt(config[k]);
+  }
+  return { ...raw, config };
+}
+
+export function getAISettings(): AISettings {
+  return { chat: readMasked(getProviderInfo, CHAT_KEY), search: readMasked(getSearchProvider, SEARCH_KEY) };
+}
+
+const getProviderInfo: ProviderLookup = (id) => getProvider(id)?.info;
+
+export function setChatProvider(cfg: AIProviderConfig | null): void {
+  writeConfig(getProviderInfo, CHAT_KEY, cfg);
 }
 
 /** Returns the stored chat config with secrets decrypted (main-process use only). */
 export function getResolvedChatConfig(): AIProviderConfig | null {
-  const raw = readRaw();
-  if (!raw || !getProvider(raw.providerId)) return null;
-  const provider = getProvider(raw.providerId)!;
-  const secretKeys = new Set(provider.info.fields.filter((f) => f.secret).map((f) => f.key));
-  const config = { ...raw.config };
-  for (const k of Object.keys(config)) {
-    if (secretKeys.has(k) && config[k]) config[k] = decrypt(config[k]);
-  }
-  return { ...raw, config };
+  return readResolved(getProviderInfo, CHAT_KEY);
+}
+
+export function setSearchProvider(cfg: AIProviderConfig | null): void {
+  writeConfig(getSearchProvider, SEARCH_KEY, cfg);
+}
+
+/** Returns the stored search config with secrets decrypted; null = DuckDuckGo default. */
+export function getResolvedSearchConfig(): AIProviderConfig | null {
+  return readResolved(getSearchProvider, SEARCH_KEY);
 }
 
 /**
  * Replaces SECRET_MASK placeholders in an incoming config with the stored secret,
  * so "test connection" works without retyping the API key.
  */
-export function resolveMaskedSecrets(providerId: string, incoming: Record<string, string>): Record<string, string> {
-  const provider = getProvider(providerId);
-  const secretKeys = new Set(provider?.info.fields.filter((f) => f.secret).map((f) => f.key) ?? []);
-  const stored = readRaw();
+function resolveMasked(lookup: ProviderLookup, settingsKey: string, providerId: string, incoming: Record<string, string>): Record<string, string> {
+  const secrets = secretKeys(lookup, providerId);
+  const stored = readRaw(settingsKey);
   const out = { ...incoming };
-  for (const key of secretKeys) {
+  for (const key of secrets) {
     if (out[key] !== SECRET_MASK) continue;
     out[key] = stored && stored.providerId === providerId && stored.config[key] ? decrypt(stored.config[key]) : '';
   }
   return out;
+}
+
+export function resolveMaskedSecrets(providerId: string, incoming: Record<string, string>): Record<string, string> {
+  return resolveMasked(getProviderInfo, CHAT_KEY, providerId, incoming);
+}
+
+export function resolveMaskedSearchSecrets(providerId: string, incoming: Record<string, string>): Record<string, string> {
+  return resolveMasked(getSearchProvider, SEARCH_KEY, providerId, incoming);
 }

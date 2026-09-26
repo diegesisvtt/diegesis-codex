@@ -91,6 +91,8 @@ export interface AIProviderConfig {
 
 export interface AISettings {
   chat: AIProviderConfig | null;
+  /** web search provider; null = DuckDuckGo default (keyless) */
+  search: AIProviderConfig | null;
 }
 
 /** sentinel returned in place of stored secret values */
@@ -126,6 +128,8 @@ export interface RetrievedChunk {
   type: DocumentType;
   text: string;
   score: number;
+  /** source page for PDF chunks; null for other doc types */
+  page?: number | null;
 }
 
 export interface AIChatRequest {
@@ -134,6 +138,8 @@ export interface AIChatRequest {
   realmId: string | null;
   messages: ChatMessage[];
   useContext: boolean;
+  /** when true, the assistant may call the web_search tool (DuckDuckGo, no API key) */
+  useWebSearch?: boolean;
 }
 
 export interface Conversation {
@@ -225,6 +231,9 @@ export interface MythrilApi {
     testProvider(providerId: string, config: Record<string, string>): Promise<ProviderTestResult>;
     getSettings(): Promise<AISettings>;
     setChatProvider(cfg: AIProviderConfig | null): Promise<void>;
+    searchProviders(): Promise<ProviderInfo[]>;
+    testSearchProvider(providerId: string, config: Record<string, string>): Promise<ProviderTestResult>;
+    setSearchProvider(cfg: AIProviderConfig | null): Promise<void>;
     indexStatus(): Promise<AIIndexStatus>;
     rebuildIndex(): Promise<void>;
     onIndexStatus(cb: (status: AIIndexStatus) => void): () => void;

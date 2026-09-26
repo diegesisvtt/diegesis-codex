@@ -8,6 +8,7 @@ import * as embedder from './ai/embedder';
 import { docEvents } from './ai/events';
 import { semanticSearch, streamChat } from './ai/rag';
 import { getProvider, listProviders } from './ai/providers/registry';
+import { listSearchProviders, runWebSearch } from './ai/websearch';
 import type { AIChatRequest, AIProviderConfig, DocChanges, DocInput, UiState } from '../shared/types';
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
@@ -61,6 +62,18 @@ function registerIpc(): void {
   ipcMain.handle('ai:settings:get', () => aiConfig.getAISettings());
   ipcMain.handle('ai:settings:setChat', (_e, cfg: AIProviderConfig | null) => {
     aiConfig.setChatProvider(cfg);
+  });
+  ipcMain.handle('ai:providers:search', () => listSearchProviders());
+  ipcMain.handle('ai:search:test', async (_e, providerId: string, config: Record<string, string>) => {
+    try {
+      await runWebSearch('mythril test', { providerId, config: aiConfig.resolveMaskedSearchSecrets(providerId, config) });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('ai:settings:setSearch', (_e, cfg: AIProviderConfig | null) => {
+    aiConfig.setSearchProvider(cfg);
   });
   ipcMain.handle('ai:index:status', () => embedder.currentStatus());
   ipcMain.handle('ai:index:rebuild', () => embedder.rebuildIndex());
