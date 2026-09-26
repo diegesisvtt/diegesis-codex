@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { BookOpen, Plus, ChevronDown, Search, Sparkles, Pencil, Trash2, FileDown, FileUp } from 'lucide-react';
+import { BookOpen, Plus, ChevronDown, Search, Settings2, Sparkles, Pencil, Trash2, FileDown, FileUp } from 'lucide-react';
 import { useStore } from '../state/store';
 import { Modal, Button } from './ui';
 import type { Realm } from '@shared/types';
 
 export function TitleBar({ onOpenSearch }: { onOpenSearch(): void }) {
-  const { realms, activeRealmId, setActiveRealm, createRealm, renameRealm, deleteRealm, exportRealm, importRealm, openPanel } =
+  const { realms, activeRealmId, setActiveRealm, createRealm, renameRealm, deleteRealm, exportRealm, importRealm, openPanel, aiChatOpen, toggleAiChat } =
     useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -70,9 +70,13 @@ export function TitleBar({ onOpenSearch }: { onOpenSearch(): void }) {
 
       <div className="flex items-center gap-1.5">
         <button
-          onClick={() => openPanel('ai-chat')}
+          onClick={toggleAiChat}
           title="Assistente IA"
-          className="flex items-center gap-2 text-[12px] text-ink-3 hover:text-ink-2 px-2.5 py-1.5 rounded-md hover:bg-hover transition-colors border border-line bg-sidebar"
+          className={`flex items-center gap-2 text-[12px] px-2.5 py-1.5 rounded-md transition-colors border ${
+            aiChatOpen
+              ? 'text-accent-ink bg-accent-soft border-accent/40'
+              : 'text-ink-3 hover:text-ink-2 hover:bg-hover border-line bg-sidebar'
+          }`}
         >
           <Sparkles size={13} />
           <span>IA</span>
@@ -84,6 +88,13 @@ export function TitleBar({ onOpenSearch }: { onOpenSearch(): void }) {
           <Search size={13} />
           <span>Buscar</span>
           <kbd className="text-[10px] text-ink-3 bg-overlay rounded px-1 py-px font-sans">Ctrl K</kbd>
+        </button>
+        <button
+          onClick={() => openPanel('settings')}
+          title="Configurações"
+          className="flex items-center text-ink-3 hover:text-ink-2 p-2 rounded-md hover:bg-hover transition-colors border border-line bg-sidebar"
+        >
+          <Settings2 size={13} />
         </button>
 
         <div className="relative">

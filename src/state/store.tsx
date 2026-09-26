@@ -3,7 +3,7 @@ import type { DocNode, DocChanges, DocumentType, PdfImportResult, Realm, RealmTr
 
 const generateId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
-export type PanelKind = 'ai-chat' | 'ai-settings';
+export type PanelKind = 'ai-chat' | 'settings';
 
 /** Pending navigation into a PDF tab: jump to a pin, highlight or page once focused. */
 export interface PdfFocus {
@@ -21,6 +21,8 @@ interface StoreState {
   uiState: UiState;
   /** draft message consumed by the AI chat panel (set by editor commands) */
   aiDraft: string | null;
+  /** AI chat right-side panel visibility */
+  aiChatOpen: boolean;
   /** pending PDF navigation (set by the Explorer, consumed by PdfReader) */
   pdfFocus: PdfFocus | null;
 }
@@ -48,9 +50,11 @@ interface StoreActions {
   registerOpenDocument(fn: (docId: string) => void): void;
   onDocumentDeleted(docId: string): void;
   registerOnDocumentDeleted(fn: (docId: string) => void): void;
-  /** opens a singleton app panel (AI chat, AI settings…) as a workspace tab */
+  /** opens a singleton app panel: 'settings' as a workspace tab, 'ai-chat' as the right-side panel */
   openPanel(panel: PanelKind): void;
   registerOpenPanel(fn: (panel: PanelKind) => void): void;
+  setAiChatOpen(open: boolean): void;
+  toggleAiChat(): void;
   setAiDraft(draft: string | null): void;
   /** ask the open PDF tab to jump to a pin or page (consumable, one-shot) */
   focusPdf(focus: PdfFocus): void;
@@ -88,6 +92,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     docs: [],
     uiState: {},
     aiDraft: null,
+    aiChatOpen: false,
     pdfFocus: null,
   });
 
@@ -106,7 +111,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ? ui.activeRealmId
           : realms[0]?.id ?? null;
       const docs = activeRealmId ? await window.mythril.docs.listByRealm(activeRealmId) : [];
-      setState({ ready: true, realms, activeRealmId, docs, uiState: ui ?? {}, aiDraft: null, pdfFocus: null });
+      setState({ ready: true, realms, activeRealmId, docs, uiState: ui ?? {}, aiDraft: null, aiChatOpen: false, pdfFocus: null });
     })();
   }, []);
 
@@ -295,6 +300,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const setAiDraft = useCallback((draft: string | null) => {
     setState((s) => ({ ...s, aiDraft: draft }));
   }, []);
+  const setAiChatOpen = useCallback((open: boolean) => {
+    setState((s) => ({ ...s, aiChatOpen: open }));
+  }, []);
+  const toggleAiChat = useCallback(() => {
+    setState((s) => ({ ...s, aiChatOpen: !s.aiChatOpen }));
+  }, []);
   const focusPdf = useCallback((focus: PdfFocus) => {
     setState((s) => ({ ...s, pdfFocus: focus }));
   }, []);
@@ -328,6 +339,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       openPanel: (panel: PanelKind) => openPanelRef.current?.(panel),
       registerOpenPanel,
       setAiDraft,
+      setAiChatOpen,
+      toggleAiChat,
       focusPdf,
       clearPdfFocus,
       subscribeExternalDocChange,
@@ -350,6 +363,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       registerOnDocumentDeleted,
       registerOpenPanel,
       setAiDraft,
+      setAiChatOpen,
+      toggleAiChat,
       focusPdf,
       clearPdfFocus,
       subscribeExternalDocChange,

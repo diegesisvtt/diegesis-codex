@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { StoreProvider, useStore } from './state/store';
 import { TitleBar } from './components/TitleBar';
 import { Workspace } from './components/Workspace';
+import { AIChatPanel } from './components/AIChatPanel';
 import { SearchPalette } from './components/SearchPalette';
 
 function Shell() {
-  const { ready, activeRealmId } = useStore();
+  const { ready, activeRealmId, aiChatOpen } = useStore();
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
@@ -32,7 +33,14 @@ function Shell() {
       <TitleBar onOpenSearch={() => setSearchOpen(true)} />
       {/* Remount workspace per realm so tabs/layout stay realm-scoped */}
       {activeRealmId ? (
-        <Workspace key={activeRealmId} />
+        <div className="flex-1 flex min-h-0">
+          <Workspace key={activeRealmId} />
+          {aiChatOpen && (
+            <aside className="w-[380px] shrink-0 border-l border-line flex flex-col min-h-0 bg-app">
+              <AIChatPanel />
+            </aside>
+          )}
+        </div>
       ) : (
         <div className="flex-1 flex items-center justify-center text-ink-3 text-sm">
           Crie um universo para começar.

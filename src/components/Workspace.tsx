@@ -5,8 +5,7 @@ import { useStore, type PanelKind } from '../state/store';
 import { Explorer } from './Explorer';
 import { HighlightsPanel } from './HighlightsPanel';
 import { DocumentContainer } from './DocumentContainer';
-import { AIChatPanel } from './AIChatPanel';
-import { AISettingsPanel } from './AISettingsPanel';
+import { SettingsPanel } from './SettingsPanel';
 
 const MAIN_TABSET_ID = 'main-tabset';
 const WELCOME_TAB_ID = '__welcome__';
@@ -18,9 +17,8 @@ const HIGHLIGHTS_TAB: IJsonTabNode = {
   enableClose: false,
 };
 
-const PANEL_TABS: Record<PanelKind, { id: string; name: string }> = {
-  'ai-chat': { id: '__ai_chat__', name: 'Assistente IA' },
-  'ai-settings': { id: '__ai_settings__', name: 'Configurações de IA' },
+const PANEL_TABS: Partial<Record<PanelKind, { id: string; name: string }>> = {
+  settings: { id: '__settings__', name: 'Configurações' },
 };
 
 function defaultModel(): IJsonModel {
@@ -69,8 +67,10 @@ function sanitizeModel(json: IJsonModel, validDocIds: Set<string>): IJsonModel {
 
   const sanitizeChildren = (children: any[]) => {
     for (const child of children) {
-      if (child.type === 'tab' && child.component === 'document') {
-        child.__dead = !validDocIds.has(child.config?.docId);
+      if (child.type === 'tab') {
+        if (child.component === 'document') child.__dead = !validDocIds.has(child.config?.docId);
+        // migration: the AI chat is a right-side panel now, not a tab
+        if (child.component === 'ai-chat') child.__dead = true;
       }
       if (child.children) sanitizeChildren(child.children);
       if (child.tabs) sanitizeChildren(child.tabs);
@@ -143,7 +143,7 @@ function Welcome() {
 }
 
 export function Workspace() {
-  const { docs, uiState, saveUiState, registerOpenDocument, registerOnDocumentDeleted, registerOpenPanel } = useStore();
+  const { docs, uiState, saveUiState, registerOpenDocument, registerOnDocumentDeleted, registerOpenPanel, setAiChatOpen } = useStore();
   const layoutRef = useRef<Layout>(null);
   const docsRef = useRef(docs);
   docsRef.current = docs;
@@ -225,7 +225,13 @@ export function Workspace() {
     });
 
     registerOpenPanel((panel: PanelKind) => {
+      // the AI chat lives in the right-side panel, not in a tab
+      if (panel === 'ai-chat') {
+        setAiChatOpen(true);
+        return;
+      }
       const tab = PANEL_TABS[panel];
+      if (!tab) return;
       if (model.getNodeById(tab.id)) {
         model.doAction(Actions.selectTab(tab.id));
         return;
@@ -262,10 +268,9 @@ export function Workspace() {
         return <HighlightsPanel />;
       case 'document':
         return <DocumentContainer docId={node.getConfig().docId} />;
-      case 'ai-chat':
-        return <AIChatPanel />;
-      case 'ai-settings':
-        return <AISettingsPanel />;
+      case 'settings':
+      case 'ai-settings': // legacy tab id from saved layouts
+        return <SettingsPanel />;
       case 'welcome':
         return <Welcome />;
       default:
