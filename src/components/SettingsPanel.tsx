@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Database, Info, Loader2, Plug, RefreshCw, Sparkles, XCircle } from 'lucide-react';
+import { CheckCircle2, Database, FolderOpen, Info, Loader2, Plug, RefreshCw, Sparkles, XCircle } from 'lucide-react';
 import type { AIIndexStatus, AIProviderConfig, AISettings, ProviderInfo, ProviderTestResult } from '@shared/types';
+import { useExternalPlugins, usePluginManager, usePlugins, type PluginInfo } from '../plugins';
 import { Button } from './ui';
 
-type SettingsSectionId = 'general' | 'ai';
+type SettingsSectionId = 'general' | 'ai' | 'plugins';
 
 const SECTIONS: { id: SettingsSectionId; name: string; icon: typeof Info }[] = [
   { id: 'general', name: 'Geral', icon: Info },
   { id: 'ai', name: 'IA', icon: Sparkles },
+  { id: 'plugins', name: 'Plugins', icon: Plug },
 ];
 
 // ---------- shared provider form (chat & web search) ----------
@@ -333,6 +335,143 @@ function AISection() {
   );
 }
 
+function PluginRow({
+  plugin: p,
+  busy,
+  onToggle,
+}: {
+  plugin: PluginInfo;
+  busy: boolean;
+  onToggle(id: string, enabled: boolean): void;
+}) {
+  return (
+    <li className="flex items-center gap-3 py-3">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[13px] font-medium text-ink-1">{p.manifest.name}</span>
+          <span className="text-[10px] text-ink-3 bg-overlay rounded px-1.5 py-px">v{p.manifest.version}</span>
+          {p.error && (
+            <span className="text-[10px] text-danger bg-danger/10 rounded px-1.5 py-px" title={p.error}>
+              erro
+            </span>
+          )}
+        </div>
+        {p.manifest.description && <p className="text-[12px] text-ink-3 mt-0.5 leading-snug">{p.manifest.description}</p>}
+        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+          <span className="text-[10px] text-ink-3/70 font-mono">{p.manifest.id}</span>
+          {p.manifest.external && p.manifest.permissions && p.manifest.permissions.length > 0 && (
+            <span className="flex items-center gap-1 flex-wrap">
+              {p.manifest.permissions.map((perm) => (
+                <span key={perm} className="text-[9px] text-ink-3 bg-overlay rounded px-1 py-px font-mono">
+                  {perm}
+                </span>
+              ))}
+            </span>
+          )}
+        </div>
+      </div>
+      {p.manifest.required ? (
+        <span className="text-[10px] text-ink-3 bg-overlay rounded px-1.5 py-1 shrink-0" title="Plugin essencial do aplicativo">
+          sempre ativo
+        </span>
+      ) : (
+        <button
+          role="switch"
+          aria-checked={p.active}
+          disabled={busy}
+          onClick={() => onToggle(p.manifest.id, !p.active)}
+          className={`relative w-9 h-5 rounded-full transition-colors shrink-0 disabled:opacity-40 ${
+            p.active ? 'bg-accent' : 'bg-line-strong'
+          }`}
+          title={p.active ? 'Desativar plugin' : 'Ativar plugin'}
+        >
+          <span
+            className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+              p.active ? 'translate-x-4.5 left-0' : 'translate-x-0.5 left-0'
+            }`}
+          />
+        </button>
+      )}
+    </li>
+  );
+}
+
+function PluginsSection() {
+  const plugins = usePlugins();
+  const manager = usePluginManager();
+  const external = useExternalPlugins();
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const core = plugins.filter((p) => !p.manifest.external);
+  const community = plugins.filter((p) => p.manifest.external);
+
+  const toggle = async (id: string, enabled: boolean) => {
+    setBusy(id);
+    try {
+      await manager.setEnabled(id, enabled);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <section className="bg-elevated border border-line rounded-lg p-5">
+      <h3 className="text-[14px] font-semibold text-ink-1 flex items-center gap-2 mb-1">
+        <Plug size={15} className="text-accent-ink" />
+        Plugins instalados
+      </h3>
+      <p className="text-[12px] text-ink-3 mb-4 leading-relaxed">
+        Os recursos do Mythril são plugins sobre a mesma API pública. Desativar um plugin remove seus comandos,
+        painéis e botões da interface; reativar os restaura.
+      </p>
+
+      {/* core plugins */}
+      <h4 className="text-[11px] font-semibold uppercase tracking-widest text-ink-3 mb-1">Core</h4>
+      <ul className="flex flex-col divide-y divide-line">
+        {core.map((p) => (
+          <PluginRow key={p.manifest.id} plugin={p} busy={busy === p.manifest.id} onToggle={toggle} />
+        ))}
+      </ul>
+
+      {/* community plugins */}
+      <div className="flex items-center justify-between mt-6 mb-1">
+        <h4 className="text-[11px] font-semibold uppercase tracking-widest text-ink-3">Comunidade</h4>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => window.mythril.plugins.openFolder()}
+            title="Abrir pasta de plugins da comunidade"
+            className="flex items-center gap-1.5 text-[11px] text-ink-3 hover:text-ink-2 px-2 py-1 rounded-md hover:bg-hover transition-colors border border-line bg-sidebar"
+          >
+            <FolderOpen size={12} />
+            Pasta
+          </button>
+          <button
+            onClick={() => external?.reload()}
+            disabled={!external || external.reloading}
+            title="Recarregar plugins da comunidade da pasta"
+            className="flex items-center gap-1.5 text-[11px] text-ink-3 hover:text-ink-2 px-2 py-1 rounded-md hover:bg-hover transition-colors border border-line bg-sidebar disabled:opacity-40"
+          >
+            <RefreshCw size={12} className={external?.reloading ? 'animate-spin' : ''} />
+            Recarregar
+          </button>
+        </div>
+      </div>
+      {community.length > 0 ? (
+        <ul className="flex flex-col divide-y divide-line">
+          {community.map((p) => (
+            <PluginRow key={p.manifest.id} plugin={p} busy={busy === p.manifest.id} onToggle={toggle} />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[12px] text-ink-3/80 border border-dashed border-line rounded-md px-3 py-4 leading-relaxed">
+          Nenhum plugin de comunidade instalado. Para instalar, copie a pasta do plugin (com{' '}
+          <code className="text-ink-2">manifest.json</code>) para a pasta de plugins e clique em Recarregar.
+        </p>
+      )}
+    </section>
+  );
+}
+
 // ---------- panel ----------
 
 export function SettingsPanel() {
@@ -360,7 +499,7 @@ export function SettingsPanel() {
       {/* content */}
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         <div className="max-w-2xl mx-auto px-6 py-8 flex flex-col gap-5">
-          {section === 'general' ? (
+          {section === 'general' && (
             <>
               <div>
                 <h2 className="text-lg font-semibold text-ink-1 tracking-tight">Geral</h2>
@@ -368,7 +507,8 @@ export function SettingsPanel() {
               </div>
               <GeneralSection />
             </>
-          ) : (
+          )}
+          {section === 'ai' && (
             <>
               <div>
                 <h2 className="text-lg font-semibold text-ink-1 tracking-tight">IA</h2>
@@ -378,6 +518,17 @@ export function SettingsPanel() {
                 </p>
               </div>
               <AISection />
+            </>
+          )}
+          {section === 'plugins' && (
+            <>
+              <div>
+                <h2 className="text-lg font-semibold text-ink-1 tracking-tight">Plugins</h2>
+                <p className="text-[13px] text-ink-3 mt-1 leading-relaxed">
+                  Gerencie os recursos ativos do aplicativo.
+                </p>
+              </div>
+              <PluginsSection />
             </>
           )}
         </div>
