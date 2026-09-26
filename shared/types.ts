@@ -47,6 +47,8 @@ export interface UiState {
   layout?: unknown; // serialized flexlayout model
   activeRealmId?: string;
   sidebarVisible?: boolean;
+  /** width (px) of the right-side AI chat panel */
+  aiPanelWidth?: number;
 }
 
 export interface SearchResult {
