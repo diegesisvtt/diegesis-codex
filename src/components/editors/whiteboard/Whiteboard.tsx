@@ -14,6 +14,7 @@ import {
   CheckSquare,
   Magnet,
   Grid3x3,
+  Swords,
   Image as ImageIcon,
 } from 'lucide-react';
 import type { DocNode } from '@shared/types';
@@ -75,6 +76,7 @@ const MIN_WIDTH: Record<WBShape['type'], number> = {
   note: 200,
   tracker: 230,
   clock: 170,
+  initiative: 260,
   group: 40,
   arrow: 0,
   image: 40,
@@ -1125,6 +1127,7 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
           { icon: StickyNote, label: 'Bloco de texto', onClick: () => createAt('note', ctxMenu.canvas) },
           { icon: Gauge, label: 'Tracker', onClick: () => createAt('tracker', ctxMenu.canvas) },
           { icon: Clock, label: 'Relógio', onClick: () => createAt('clock', ctxMenu.canvas) },
+          { icon: Swords, label: 'Iniciativa', onClick: () => createAt('initiative', ctxMenu.canvas) },
           { icon: ImageIcon, label: 'Imagem…', onClick: () => pickImage(ctxMenu.canvas) },
           'divider',
           { icon: CheckSquare, label: 'Selecionar tudo', shortcut: 'Ctrl+A', onClick: handleSelectAll },

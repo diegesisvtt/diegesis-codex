@@ -9,6 +9,7 @@ import {
   StickyNote,
   Gauge,
   Clock,
+  Swords,
   ArrowUpRight,
   Image,
   Group,
@@ -75,6 +76,7 @@ const CREATE_TOOLS: { tool: WBTool; label: string; icon: typeof Type }[] = [
   { tool: 'note', label: 'Bloco de texto (N)', icon: StickyNote },
   { tool: 'tracker', label: 'Tracker', icon: Gauge },
   { tool: 'clock', label: 'Relógio', icon: Clock },
+  { tool: 'initiative', label: 'Iniciativa', icon: Swords },
   { tool: 'arrow', label: 'Seta (A)', icon: ArrowUpRight },
   { tool: 'image', label: 'Imagem (I)', icon: Image },
 ];

@@ -5,13 +5,25 @@
    and store coordinates relative to the group origin.
    ============================================================ */
 
-export type ShapeType = 'group' | 'text' | 'note' | 'tracker' | 'clock' | 'arrow' | 'image';
+export type ShapeType = 'group' | 'text' | 'note' | 'tracker' | 'clock' | 'initiative' | 'arrow' | 'image';
 
 /** text shape style variant (plain text or header sizes) */
 export type TextSize = 'text' | 'h1' | 'h2' | 'h3';
 
 /** tracker variants: value/max with progress bar, or a single big value */
 export type TrackerKind = 'bar' | 'value';
+
+/** one combatant in the initiative tracker / one step in a sequence */
+export interface InitiativeEntry {
+  id: string;
+  name: string;
+  value: number;
+  /** optional detail line, shown in sequence mode */
+  note?: string;
+}
+
+/** initiative tracker modes: sorted by manual value, or a fixed step sequence */
+export type InitiativeMode = 'initiative' | 'sequence';
 
 /** arrow endpoint: free canvas point, or bound to a shape (renders on its border) */
 export interface ArrowPoint {
@@ -52,6 +64,14 @@ export const DEFAULT_PROPS: Record<ShapeType, Record<string, any>> = {
   note: { doc: '', html: '', w: 300 },
   tracker: { name: 'Novo Tracker', kind: 'bar' as TrackerKind, value: 10, max: 20 },
   clock: { name: 'Novo Relógio', segments: 4, filled: 0 },
+  initiative: {
+    title: 'Iniciativa',
+    mode: 'initiative' as InitiativeMode,
+    cycleLabel: 'Rodada',
+    entries: [] as InitiativeEntry[],
+    current: null as string | null,
+    round: 1,
+  },
   arrow: {
     start: { x: 0, y: 0, shapeId: null } as ArrowPoint,
     end: { x: 0, y: 0, shapeId: null } as ArrowPoint,
@@ -67,6 +87,7 @@ export const DEFAULT_SIZE: Record<ShapeType, { w: number; h: number }> = {
   note: { w: 300, h: 140 },
   tracker: { w: 288, h: 190 },
   clock: { w: 200, h: 250 },
+  initiative: { w: 300, h: 220 },
   arrow: { w: 0, h: 0 },
   image: { w: 320, h: 240 },
 };

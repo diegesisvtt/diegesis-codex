@@ -1,7 +1,17 @@
-import React, { useEffect, useRef } from 'react';
-import { BarChart3, Hash } from 'lucide-react';
-import type { WBShape, WBShapeMap, TextSize, TrackerKind } from './model';
-import { childrenOf } from './model';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  BarChart3,
+  Hash,
+  ChevronLeft,
+  ChevronRight,
+  GripVertical,
+  Plus,
+  X,
+  ArrowDownWideNarrow,
+  ListOrdered,
+} from 'lucide-react';
+import type { WBShape, WBShapeMap, TextSize, TrackerKind, InitiativeEntry, InitiativeMode } from './model';
+import { childrenOf, generateId } from './model';
 import { RichTextEditor } from '../shared/RichTextEditor';
 import { MathInput } from './MathInput';
 
@@ -211,6 +221,297 @@ function ClockShape({ shape, interactive, updateProps }: ShapeViewProps) {
 }
 
 /* ============================================================
+   Initiative shape — turn order manager with manual values,
+   or a fixed step sequence (OSE combat, dungeon turns, …)
+   ============================================================ */
+
+const INITIATIVE_MODES: { mode: InitiativeMode; label: string; icon: typeof Hash }[] = [
+  { mode: 'initiative', label: 'Iniciativa (ordenada por valor)', icon: ArrowDownWideNarrow },
+  { mode: 'sequence', label: 'Sequência (ordem fixa de etapas)', icon: ListOrdered },
+];
+
+function InitiativeShape({ shape, interactive, updateProps }: ShapeViewProps) {
+  const entries: InitiativeEntry[] = shape.props.entries ?? [];
+  const current: string | null = shape.props.current ?? null;
+  const round: number = shape.props.round ?? 1;
+  const mode: InitiativeMode = shape.props.mode ?? 'initiative';
+  const cycleLabel: string = shape.props.cycleLabel ?? 'Rodada';
+
+  // initiative sorts by value desc (stable: ties keep entry order); sequence keeps fixed order
+  const ordered = mode === 'initiative' ? [...entries].sort((a, b) => b.value - a.value) : entries;
+
+  const updateEntry = (id: string, patch: Partial<InitiativeEntry>) =>
+    updateProps({ entries: entries.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
+
+  const addEntry = () => {
+    const entry = {
+      id: generateId(),
+      name: mode === 'sequence' ? `Etapa ${entries.length + 1}` : `Participante ${entries.length + 1}`,
+      value: 0,
+    };
+    updateProps({ entries: [...entries, entry], current: current ?? entry.id });
+  };
+
+  const removeEntry = (id: string) =>
+    updateProps({
+      entries: entries.filter((e) => e.id !== id),
+      ...(current === id ? { current: null } : {}),
+    });
+
+  /** drag-and-drop reorder: insert the dragged entry at the target's position */
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  // rows only become draggable while their grip handle is held, so text selection in inputs still works
+  const [gripHeldId, setGripHeldId] = useState<string | null>(null);
+
+  const reorderEntry = (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    const from = entries.findIndex((e) => e.id === fromId);
+    const to = entries.findIndex((e) => e.id === toId);
+    if (from === -1 || to === -1) return;
+    const next = [...entries];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    updateProps({ entries: next });
+  };
+
+  const endDrag = () => {
+    setDragId(null);
+    setOverId(null);
+    setGripHeldId(null);
+  };
+
+  const stepTurn = (dir: 1 | -1) => {
+    if (ordered.length === 0) return;
+    const idx = ordered.findIndex((e) => e.id === current);
+    if (idx === -1) {
+      updateProps({ current: ordered[dir === 1 ? 0 : ordered.length - 1].id });
+      return;
+    }
+    const nextIdx = idx + dir;
+    if (nextIdx >= ordered.length) {
+      updateProps({ current: ordered[0].id, round: round + 1 });
+    } else if (nextIdx < 0) {
+      updateProps({ current: ordered[ordered.length - 1].id, round: Math.max(1, round - 1) });
+    } else {
+      updateProps({ current: ordered[nextIdx].id });
+    }
+  };
+
+  return (
+    <div
+      className="bg-elevated/95 backdrop-blur border border-line rounded-xl shadow-xl p-4 group/init"
+      style={{ width: shape.props.w ?? 300 }}
+    >
+      {/* header: title + mode switcher (revealed on hover) */}
+      <div className="relative mb-3">
+        <input
+          className="bg-transparent text-ink-1 font-semibold w-full border-none outline-none p-0 pr-12 text-[15px] placeholder-ink-3"
+          value={shape.props.title ?? ''}
+          placeholder={mode === 'sequence' ? 'Sequência' : 'Iniciativa'}
+          readOnly={!interactive}
+          onChange={(e) => updateProps({ title: e.target.value })}
+        />
+        {interactive && (
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 flex gap-0.5 opacity-0 group-hover/init:opacity-100 transition-opacity duration-150">
+            {INITIATIVE_MODES.map(({ mode: m, label, icon: Icon }) => (
+              <button
+                key={m}
+                title={label}
+                onClick={() => updateProps({ mode: m })}
+                className={`p-1 rounded-md transition-colors ${
+                  mode === m ? 'text-accent-ink bg-accent-soft' : 'text-ink-3 hover:text-ink-1 hover:bg-hover'
+                }`}
+              >
+                <Icon size={13} strokeWidth={1.75} />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {ordered.length === 0 ? (
+        <div className="text-ink-3 text-[13px] text-center py-4">
+          {mode === 'sequence' ? 'Sem etapas' : 'Sem participantes'}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-0.5" onDragLeave={(e) => {
+          // only clear when the pointer actually leaves the list (not when entering a child row)
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setOverId(null);
+        }}>
+          {ordered.map((entry, i) => {
+            const isCurrent = entry.id === current;
+            return (
+              <div
+                key={entry.id}
+                draggable={interactive && gripHeldId === entry.id}
+                onDragStart={(e) => {
+                  e.stopPropagation();
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', entry.id);
+                  setDragId(entry.id);
+                }}
+                onDragOver={(e) => {
+                  if (!dragId || dragId === entry.id) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (overId !== entry.id) setOverId(entry.id);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (dragId) reorderEntry(dragId, entry.id);
+                  endDrag();
+                }}
+                onDragEnd={endDrag}
+                onClick={() => interactive && updateProps({ current: entry.id })}
+                className={`group/row relative flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors ${
+                  isCurrent ? 'bg-accent-soft' : interactive ? 'hover:bg-hover cursor-pointer' : ''
+                } ${dragId === entry.id ? 'opacity-40' : ''}`}
+              >
+                {/* insertion indicator while dragging over this row */}
+                {overId === entry.id && dragId !== entry.id && (
+                  <div className="absolute -top-0.5 left-1 right-1 h-0.5 bg-accent rounded-full pointer-events-none" />
+                )}
+
+                {/* drag handle (hover) */}
+                {interactive && (
+                  <span
+                    title="Arrastar para reordenar"
+                    onMouseDown={() => setGripHeldId(entry.id)}
+                    onMouseUp={() => setGripHeldId(null)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="shrink-0 -ml-1.5 text-ink-3 hover:text-ink-1 cursor-grab active:cursor-grabbing opacity-0 group-hover/row:opacity-100 transition-opacity"
+                  >
+                    <GripVertical size={12} />
+                  </span>
+                )}
+                {/* turn indicator: chevron (initiative) or step number (sequence) */}
+                {mode === 'sequence' ? (
+                  <span
+                    className={`w-5 shrink-0 text-right text-[12px] tabular-nums ${
+                      isCurrent ? 'text-accent-ink font-bold' : 'text-ink-3'
+                    }`}
+                  >
+                    {i + 1}.
+                  </span>
+                ) : (
+                  <span className="w-4 shrink-0 flex items-center justify-center">
+                    {isCurrent && <ChevronRight size={13} strokeWidth={2.5} className="text-accent-ink" />}
+                  </span>
+                )}
+
+                {mode === 'sequence' ? (
+                  <div className="flex-1 min-w-0">
+                    <input
+                      className={`w-full bg-transparent border-none outline-none p-0 text-[13px] placeholder-ink-3 ${
+                        isCurrent ? 'text-ink-1 font-semibold' : 'text-ink-1'
+                      }`}
+                      value={entry.name}
+                      placeholder="Etapa"
+                      readOnly={!interactive}
+                      onChange={(e) => updateEntry(entry.id, { name: e.target.value })}
+                    />
+                    {(interactive || entry.note) && (
+                      <input
+                        className="w-full bg-transparent border-none outline-none p-0 text-[11px] text-ink-3 placeholder-ink-3/60"
+                        value={entry.note ?? ''}
+                        placeholder="Detalhe…"
+                        readOnly={!interactive}
+                        onChange={(e) => updateEntry(entry.id, { note: e.target.value })}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <input
+                    className={`flex-1 min-w-0 bg-transparent border-none outline-none p-0 text-[13px] placeholder-ink-3 ${
+                      isCurrent ? 'text-ink-1 font-semibold' : 'text-ink-2'
+                    }`}
+                    value={entry.name}
+                    placeholder="Nome"
+                    readOnly={!interactive}
+                    onChange={(e) => updateEntry(entry.id, { name: e.target.value })}
+                  />
+                )}
+
+                {mode === 'initiative' && (
+                  <MathInput
+                    value={entry.value}
+                    readOnly={!interactive}
+                    showSteppers={false}
+                    onCommit={(next) => updateEntry(entry.id, { value: next })}
+                    inputClassName={`w-14 bg-sidebar border rounded-md px-1 py-1 text-center text-[13px] font-semibold outline-none transition-colors ${
+                      isCurrent ? 'border-accent/50 text-ink-1' : 'border-line text-ink-2'
+                    } focus:border-accent`}
+                  />
+                )}
+
+                {interactive && (
+                  <button
+                    title="Remover"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeEntry(entry.id);
+                    }}
+                    className="shrink-0 p-0.5 rounded text-ink-3 hover:text-danger opacity-0 group-hover/row:opacity-100 transition-all"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {interactive && (
+        <button
+          onClick={addEntry}
+          className="w-full mt-2 flex items-center justify-center gap-1.5 py-1.5 rounded-md border border-dashed border-line-strong text-ink-3 hover:text-ink-1 hover:border-line-strong hover:bg-hover text-[12px] transition-colors"
+        >
+          <Plus size={13} /> {mode === 'sequence' ? 'Adicionar etapa' : 'Adicionar participante'}
+        </button>
+      )}
+
+      {/* footer: editable cycle label + counter + turn navigation */}
+      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-line">
+        <span className="flex items-baseline text-[10px] text-ink-3 uppercase font-semibold tracking-widest">
+          {interactive ? (
+            <input
+              className="bg-transparent border-none outline-none p-0 uppercase text-[10px] text-ink-3 font-semibold tracking-widest focus:text-ink-2"
+              style={{ width: `${Math.max(4, cycleLabel.length)}ch` }}
+              value={cycleLabel}
+              onChange={(e) => updateProps({ cycleLabel: e.target.value })}
+            />
+          ) : (
+            cycleLabel
+          )}
+          <span className="ml-1 tabular-nums">{round}</span>
+        </span>
+        {interactive && (
+          <div className="flex gap-0.5">
+            <button
+              title="Anterior"
+              onClick={() => stepTurn(-1)}
+              className="p-1 rounded-md text-ink-2 hover:text-ink-1 hover:bg-hover transition-colors"
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <button
+              title="Próximo"
+              onClick={() => stepTurn(1)}
+              className="p-1 rounded-md text-ink-2 hover:text-ink-1 hover:bg-hover transition-colors"
+            >
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
    Text shape — standalone text with a style variant (tldraw-like)
    size: 'text' | 'h1' | 'h2' | 'h3'
    ============================================================ */
@@ -386,6 +687,8 @@ export function ShapeView(props: ShapeViewProps & { shapes: WBShapeMap }) {
       return <TrackerShape {...props} />;
     case 'clock':
       return <ClockShape {...props} />;
+    case 'initiative':
+      return <InitiativeShape {...props} />;
     case 'text':
       return <TextShape {...props} />;
     case 'note':
