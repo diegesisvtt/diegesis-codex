@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { BookOpen, Plus, ChevronDown, Search, Settings2, Sparkles, Pencil, Trash2, FileDown, FileUp } from 'lucide-react';
+import { BookOpen, Plus, ChevronDown, Pencil, Trash2, FileDown, FileUp } from 'lucide-react';
 import { useStore } from '../state/store';
+import { usePluginManager, useRibbonItems } from '../plugins';
 import { Modal, Button } from './ui';
 import type { Realm } from '@shared/types';
 
-export function TitleBar({ onOpenSearch }: { onOpenSearch(): void }) {
-  const { realms, activeRealmId, setActiveRealm, createRealm, renameRealm, deleteRealm, exportRealm, importRealm, openPanel, aiChatOpen, toggleAiChat } =
+export function TitleBar() {
+  const { realms, activeRealmId, setActiveRealm, createRealm, renameRealm, deleteRealm, exportRealm, importRealm } =
     useStore();
+  const manager = usePluginManager();
+  const ribbonItems = useRibbonItems();
   const [menuOpen, setMenuOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
@@ -69,33 +72,31 @@ export function TitleBar({ onOpenSearch }: { onOpenSearch(): void }) {
       </div>
 
       <div className="flex items-center gap-1.5">
-        <button
-          onClick={toggleAiChat}
-          title="Assistente IA"
-          className={`flex items-center gap-2 text-[12px] px-2.5 py-1.5 rounded-md transition-colors border ${
-            aiChatOpen
-              ? 'text-accent-ink bg-accent-soft border-accent/40'
-              : 'text-ink-3 hover:text-ink-2 hover:bg-hover border-line bg-sidebar'
-          }`}
-        >
-          <Sparkles size={13} />
-          <span>IA</span>
-        </button>
-        <button
-          onClick={onOpenSearch}
-          className="flex items-center gap-2 text-[12px] text-ink-3 hover:text-ink-2 px-2.5 py-1.5 rounded-md hover:bg-hover transition-colors border border-line bg-sidebar"
-        >
-          <Search size={13} />
-          <span>Buscar</span>
-          <kbd className="text-[10px] text-ink-3 bg-overlay rounded px-1 py-px font-sans">Ctrl K</kbd>
-        </button>
-        <button
-          onClick={() => openPanel('settings')}
-          title="Configurações"
-          className="flex items-center text-ink-3 hover:text-ink-2 p-2 rounded-md hover:bg-hover transition-colors border border-line bg-sidebar"
-        >
-          <Settings2 size={13} />
-        </button>
+        {/* ribbon actions contributed by plugins */}
+        {ribbonItems.map((item) => {
+          const Icon = item.icon;
+          const active = item.isActive?.() ?? false;
+          return (
+            <button
+              key={item.id}
+              onClick={() => manager.commands.run(item.command)}
+              title={item.title}
+              className={`flex items-center gap-2 rounded-md transition-colors border ${
+                item.label ? 'text-[12px] px-2.5 py-1.5' : 'p-2'
+              } ${
+                active
+                  ? 'text-accent-ink bg-accent-soft border-accent/40'
+                  : 'text-ink-3 hover:text-ink-2 hover:bg-hover border-line bg-sidebar'
+              }`}
+            >
+              <Icon size={13} />
+              {item.label && <span>{item.label}</span>}
+              {item.kbd && (
+                <kbd className="text-[10px] text-ink-3 bg-overlay rounded px-1 py-px font-sans">{item.kbd}</kbd>
+              )}
+            </button>
+          );
+        })}
 
         <div className="relative">
           <button

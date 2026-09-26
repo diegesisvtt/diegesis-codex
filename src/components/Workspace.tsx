@@ -2,26 +2,34 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Layout, Model, TabNode, Actions, DockLocation, IJsonModel, IJsonTabNode } from 'flexlayout-react';
 import { BookOpen } from 'lucide-react';
 import { useStore, type PanelKind } from '../state/store';
-import { Explorer } from './Explorer';
-import { HighlightsPanel } from './HighlightsPanel';
+import { usePluginManager, useViews, type ViewContribution } from '../plugins';
 import { DocumentContainer } from './DocumentContainer';
-import { SettingsPanel } from './SettingsPanel';
 
 const MAIN_TABSET_ID = 'main-tabset';
 const WELCOME_TAB_ID = '__welcome__';
-const HIGHLIGHTS_TAB: IJsonTabNode = {
-  type: 'tab',
-  id: '__highlights__',
-  name: 'Destaques',
-  component: 'highlights',
-  enableClose: false,
-};
 
 const PANEL_TABS: Partial<Record<PanelKind, { id: string; name: string }>> = {
   settings: { id: '__settings__', name: 'Configurações' },
 };
 
-function defaultModel(): IJsonModel {
+/** Left-border tabs come from plugin-contributed views marked as default. */
+function defaultBorderTabs(views: ViewContribution[]): IJsonTabNode[] {
+  return views
+    .filter((v) => v.location === 'border-left' && v.tab?.default)
+    .map(
+      (v): IJsonTabNode => ({
+        type: 'tab',
+        id: v.tab!.id,
+        name: v.tab!.name,
+        component: v.id,
+        enableClose: false,
+        enableDrag: false,
+      })
+    );
+}
+
+function defaultModel(views: ViewContribution[]): IJsonModel {
+  const borderTabs = defaultBorderTabs(views);
   return {
     global: {
       tabEnableRename: false,
@@ -29,24 +37,8 @@ function defaultModel(): IJsonModel {
       splitterSize: 5,
       tabEnableFloat: false,
     },
-    borders: [
-      {
-        type: 'border',
-        location: 'left',
-        size: 290,
-        children: [
-          {
-            type: 'tab',
-            id: 'explorer',
-            name: 'Explorer',
-            component: 'explorer',
-            enableClose: false,
-            enableDrag: false,
-          },
-          HIGHLIGHTS_TAB,
-        ],
-      },
-    ],
+    // no border at all when every border plugin is disabled
+    borders: borderTabs.length > 0 ? [{ type: 'border', location: 'left', size: 290, children: borderTabs }] : [],
     layout: {
       type: 'row',
       children: [
@@ -61,16 +53,27 @@ function defaultModel(): IJsonModel {
   };
 }
 
-/** Removes tabs that reference documents that no longer exist (or belong to another realm). */
-function sanitizeModel(json: IJsonModel, validDocIds: Set<string>): IJsonModel {
+/**
+ * Removes tabs that reference documents that no longer exist (or belong to
+ * another realm) and tabs whose component is not a live view — e.g. legacy
+ * 'ai-chat' workspace tabs or views from disabled plugins.
+ */
+function sanitizeModel(json: IJsonModel, validDocIds: Set<string>, views: ViewContribution[]): IJsonModel {
   const clone = JSON.parse(JSON.stringify(json)) as IJsonModel;
+
+  // components the flexlayout factory can render: shell views + contributed
+  // views that live inside the layout (right-panel views do not)
+  const aliveComponents = new Set<string>([
+    'document',
+    'welcome',
+    ...views.filter((v) => v.location !== 'right-panel').map((v) => v.id),
+  ]);
 
   const sanitizeChildren = (children: any[]) => {
     for (const child of children) {
       if (child.type === 'tab') {
         if (child.component === 'document') child.__dead = !validDocIds.has(child.config?.docId);
-        // migration: the AI chat is a right-side panel now, not a tab
-        if (child.component === 'ai-chat') child.__dead = true;
+        else if (!child.component || !aliveComponents.has(child.component)) child.__dead = true;
       }
       if (child.children) sanitizeChildren(child.children);
       if (child.tabs) sanitizeChildren(child.tabs);
@@ -102,19 +105,30 @@ function sanitizeModel(json: IJsonModel, validDocIds: Set<string>): IJsonModel {
     });
   }
 
-  // migration: layouts saved before the highlights panel existed don't have it
-  const hasHighlights = JSON.stringify(clone.borders ?? []).includes('__highlights__');
-  if (!hasHighlights) {
+  // migration: layouts saved before a default border view existed (or after it
+  // was pruned while disabled) get the missing tabs of REGISTERED views only
+  const existingTabIds = new Set<string>();
+  const collectTabIds = (children: any[]) => {
+    for (const child of children) {
+      if (child.type === 'tab' && child.id) existingTabIds.add(child.id);
+      if (child.children) collectTabIds(child.children);
+      if (child.tabs) collectTabIds(child.tabs);
+    }
+  };
+  for (const border of clone.borders ?? []) collectTabIds((border as any).children ?? []);
+
+  const missingDefaultTabs = defaultBorderTabs(views).filter((t) => !existingTabIds.has(t.id!));
+  if (missingDefaultTabs.length > 0) {
     clone.borders = clone.borders ?? [];
     const left = (clone.borders as any[]).find((b) => b.location === 'left');
-    if (left) left.children.push({ ...HIGHLIGHTS_TAB });
+    if (left) left.children.push(...missingDefaultTabs);
     else
       (clone.borders as any[]).push({
         type: 'border',
         location: 'left',
         size: 290,
         selected: 0,
-        children: [{ ...HIGHLIGHTS_TAB }],
+        children: missingDefaultTabs,
       });
   }
   return clone;
@@ -143,7 +157,9 @@ function Welcome() {
 }
 
 export function Workspace() {
-  const { docs, uiState, saveUiState, registerOpenDocument, registerOnDocumentDeleted, registerOpenPanel, setAiChatOpen } = useStore();
+  const { docs, uiState, saveUiState, registerOpenDocument, registerOnDocumentDeleted, registerOpenPanel, registerOpenView, setAiChatOpen } = useStore();
+  const manager = usePluginManager();
+  const views = useViews();
   const layoutRef = useRef<Layout>(null);
   const docsRef = useRef(docs);
   docsRef.current = docs;
@@ -152,12 +168,12 @@ export function Workspace() {
     const validIds = new Set(docs.map((d) => d.id));
     if (uiState.layout) {
       try {
-        return Model.fromJson(sanitizeModel(uiState.layout as IJsonModel, validIds));
+        return Model.fromJson(sanitizeModel(uiState.layout as IJsonModel, validIds, views));
       } catch {
         /* fall through to default */
       }
     }
-    return Model.fromJson(defaultModel());
+    return Model.fromJson(defaultModel(views));
     // Model is intentionally built once per realm mount; doc updates flow through effects.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -247,8 +263,108 @@ export function Workspace() {
       );
       if (model.getNodeById(WELCOME_TAB_ID)) model.doAction(Actions.deleteTab(WELCOME_TAB_ID));
     });
+
+    // plugin-contributed workspace-tab views (tab id namespaced to avoid doc id clashes)
+    registerOpenView((viewId: string) => {
+      const view = manager.views.getView(viewId);
+      if (!view || view.location !== 'workspace-tab') return;
+      const tabId = `view:${viewId}`;
+      if (model.getNodeById(tabId)) {
+        model.doAction(Actions.selectTab(tabId));
+        return;
+      }
+      model.doAction(
+        Actions.addNode(
+          { type: 'tab', id: tabId, name: view.title, component: view.id } as IJsonTabNode,
+          MAIN_TABSET_ID,
+          DockLocation.CENTER,
+          -1,
+          true
+        )
+      );
+      if (model.getNodeById(WELCOME_TAB_ID)) model.doAction(Actions.deleteTab(WELCOME_TAB_ID));
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model]);
+
+  // Tabs only exist because a plugin registered their view through the API.
+  // When a view is unregistered (plugin disabled) its tabs are parked and
+  // removed; when it is registered again (re-enabled) they are restored —
+  // workspace tabs from the parked snapshot, border tabs from the view's
+  // default tab descriptor.
+  const parkedTabs = useRef(new Map<string, { json: IJsonTabNode; parentId?: string }>());
+
+  useEffect(() => {
+    const parked = parkedTabs.current;
+
+    const leftBorderId = () =>
+      model
+        .getBorderSet()
+        .getBorders()
+        .find((b) => b.getLocation().getName() === 'left')
+        ?.getId();
+
+    const syncTabsWithRegistry = () => {
+      // 1) park + remove tabs whose view is no longer registered
+      const dead: TabNode[] = [];
+      model.visitNodes((node) => {
+        if (node.getType() === 'tab') {
+          const component = (node as TabNode).getComponent();
+          if (component && component !== 'document' && component !== 'welcome' && !manager.views.getView(component)) {
+            dead.push(node as TabNode);
+          }
+        }
+      });
+      for (const tab of dead) {
+        parked.set(tab.getComponent()!, { json: tab.toJson(), parentId: tab.getParent()?.getId() });
+        model.doAction(Actions.deleteTab(tab.getId()));
+      }
+
+      // 2) restore parked workspace tabs whose view is registered again
+      for (const [component, entry] of parked) {
+        const view = manager.views.getView(component);
+        if (!view) continue;
+        parked.delete(component);
+        if (view.location !== 'workspace-tab') continue; // border tabs são cobertos pelo passo 3
+        if (entry.json.id && model.getNodeById(entry.json.id)) continue;
+        const parentAlive = entry.parentId ? model.getNodeById(entry.parentId) : undefined;
+        model.doAction(
+          Actions.addNode(entry.json, parentAlive?.getId() ?? MAIN_TABSET_ID, DockLocation.CENTER, -1, false)
+        );
+      }
+
+      // 3) re-add missing default border tabs of registered views
+      const borderId = leftBorderId();
+      if (borderId) {
+        for (const view of manager.views.listViews('border-left')) {
+          if (!view.tab?.default || model.getNodeById(view.tab.id)) continue;
+          model.doAction(
+            Actions.addNode(
+              {
+                type: 'tab',
+                id: view.tab.id,
+                name: view.tab.name,
+                component: view.id,
+                enableClose: false,
+                enableDrag: false,
+              } as IJsonTabNode,
+              borderId,
+              DockLocation.CENTER,
+              -1,
+              false
+            )
+          );
+        }
+      }
+    };
+
+    syncTabsWithRegistry();
+    const d = manager.views.subscribe(syncTabsWithRegistry);
+    return () => {
+      d.dispose();
+      parked.clear(); // parked snapshots are realm-scoped, like the model
+    };
+  }, [model, manager]);
 
   // Keep tab titles in sync with document titles
   useEffect(() => {
@@ -260,23 +376,24 @@ export function Workspace() {
     }
   }, [docs, model]);
 
-  const factory = useCallback((node: TabNode) => {
-    switch (node.getComponent()) {
-      case 'explorer':
-        return <Explorer />;
-      case 'highlights':
-        return <HighlightsPanel />;
-      case 'document':
-        return <DocumentContainer docId={node.getConfig().docId} />;
-      case 'settings':
-      case 'ai-settings': // legacy tab id from saved layouts
-        return <SettingsPanel />;
-      case 'welcome':
-        return <Welcome />;
-      default:
-        return <div className="p-6 text-zinc-500">Componente desconhecido</div>;
-    }
-  }, []);
+  // Tab components are resolved through the plugin view registry; 'document'
+  // and 'welcome' remain shell-provided. Tabs whose view is unregistered are
+  // pruned reactively above, so there is no "unknown component" fallback.
+  const factory = useCallback(
+    (node: TabNode) => {
+      const component = node.getComponent();
+      if (component === 'document') return <DocumentContainer docId={node.getConfig().docId} />;
+      if (component === 'welcome') return <Welcome />;
+      const view = component ? manager.views.getView(component) : undefined;
+      if (view) {
+        const View = view.component;
+        return <View node={node} />;
+      }
+      console.warn(`[workspace] aba sem view registrada: '${component}'`);
+      return null;
+    },
+    [manager]
+  );
 
   return (
     <div className="relative flex-1 h-full min-w-0">

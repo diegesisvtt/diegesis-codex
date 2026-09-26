@@ -53,6 +53,9 @@ interface StoreActions {
   /** opens a singleton app panel: 'settings' as a workspace tab, 'ai-chat' as the right-side panel */
   openPanel(panel: PanelKind): void;
   registerOpenPanel(fn: (panel: PanelKind) => void): void;
+  /** opens a plugin-contributed 'workspace-tab' view as a tab */
+  openView(viewId: string): void;
+  registerOpenView(fn: (viewId: string) => void): void;
   setAiChatOpen(open: boolean): void;
   toggleAiChat(): void;
   setAiDraft(draft: string | null): void;
@@ -100,6 +103,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const openDocRef = useRef<((docId: string) => void) | null>(null);
   const docDeletedRef = useRef<((docId: string) => void) | null>(null);
   const openPanelRef = useRef<((panel: PanelKind) => void) | null>(null);
+  const openViewRef = useRef<((viewId: string) => void) | null>(null);
   const externalDocListeners = useRef(new Set<(doc: DocNode) => void>());
 
   // ---- bootstrap ----
@@ -297,6 +301,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const registerOpenPanel = useCallback((fn: (panel: PanelKind) => void) => {
     openPanelRef.current = fn;
   }, []);
+  const registerOpenView = useCallback((fn: (viewId: string) => void) => {
+    openViewRef.current = fn;
+  }, []);
   const setAiDraft = useCallback((draft: string | null) => {
     setState((s) => ({ ...s, aiDraft: draft }));
   }, []);
@@ -338,6 +345,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       registerOnDocumentDeleted,
       openPanel: (panel: PanelKind) => openPanelRef.current?.(panel),
       registerOpenPanel,
+      openView: (viewId: string) => openViewRef.current?.(viewId),
+      registerOpenView,
       setAiDraft,
       setAiChatOpen,
       toggleAiChat,
@@ -362,6 +371,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       registerOpenDocument,
       registerOnDocumentDeleted,
       registerOpenPanel,
+      registerOpenView,
       setAiDraft,
       setAiChatOpen,
       toggleAiChat,

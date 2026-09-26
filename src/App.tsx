@@ -1,20 +1,45 @@
 import { useEffect, useRef, useState } from 'react';
 import { StoreProvider, useStore } from './state/store';
+import { PluginProvider, builtinPlugins, usePluginEvent, useViews } from './plugins';
 import { TitleBar } from './components/TitleBar';
 import { Workspace } from './components/Workspace';
-import { AIChatPanel } from './components/AIChatPanel';
 import { SearchPalette } from './components/SearchPalette';
+import { CommandPalette } from './components/CommandPalette';
 
 const AI_PANEL_MIN = 300;
 const AI_PANEL_MAX = 720;
 const AI_PANEL_DEFAULT = 380;
 
+function Loading() {
+  return (
+    <div className="h-screen flex items-center justify-center bg-app text-accent-ink font-medium animate-pulse text-sm">
+      Carregando workspace…
+    </div>
+  );
+}
+
 function Shell() {
-  const { ready, activeRealmId, aiChatOpen, uiState, saveUiState } = useStore();
+  const { activeRealmId, aiChatOpen, setAiChatOpen, uiState, saveUiState } = useStore();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const [aiWidth, setAiWidth] = useState(uiState.aiPanelWidth ?? AI_PANEL_DEFAULT);
   const widthRef = useRef(aiWidth);
   widthRef.current = aiWidth;
+
+  // the right panel is contributed by a plugin (core/ai-chat)
+  const aiChatView = useViews('right-panel').find((v) => v.id === 'ai-chat');
+
+  // the panel is the plugin's responsibility: if the plugin is deactivated
+  // while open, close it rather than keeping orphan state
+  useEffect(() => {
+    if (aiChatOpen && !aiChatView) setAiChatOpen(false);
+  }, [aiChatOpen, aiChatView, setAiChatOpen]);
+
+  // plugins request palettes through the event bus (Mod+K / Mod+Shift+P commands)
+  usePluginEvent('palette:toggle', ({ palette }) => {
+    if (palette === 'search') setSearchOpen((v) => !v);
+    if (palette === 'command') setCommandOpen((v) => !v);
+  });
 
   // drag-to-resize the AI panel (width = distance from the window's right edge)
   const startAiDrag = (e: React.MouseEvent) => {
@@ -35,33 +60,16 @@ function Shell() {
     window.addEventListener('mouseup', onUp);
   };
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setSearchOpen((v) => !v);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  if (!ready) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-app text-accent-ink font-medium animate-pulse text-sm">
-        Carregando workspace…
-      </div>
-    );
-  }
+  const AiChatComponent = aiChatView?.component;
 
   return (
     <div className="h-screen w-full bg-app text-ink-1 flex flex-col overflow-hidden selection:bg-accent-soft">
-      <TitleBar onOpenSearch={() => setSearchOpen(true)} />
+      <TitleBar />
       {/* Remount workspace per realm so tabs/layout stay realm-scoped */}
       {activeRealmId ? (
         <div className="flex-1 flex min-h-0">
           <Workspace key={activeRealmId} />
-          {aiChatOpen && (
+          {aiChatOpen && AiChatComponent && (
             <>
               <div
                 onMouseDown={startAiDrag}
@@ -69,7 +77,7 @@ function Shell() {
                 title="Arraste para redimensionar"
               />
               <aside style={{ width: aiWidth }} className="shrink-0 border-l border-line flex flex-col min-h-0 bg-app">
-                <AIChatPanel />
+                <AiChatComponent />
               </aside>
             </>
           )}
@@ -80,14 +88,26 @@ function Shell() {
         </div>
       )}
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} />
     </div>
+  );
+}
+
+/** Boots the plugin host once the store is ready (plugin settings live in uiState). */
+function PluginGate() {
+  const { ready } = useStore();
+  if (!ready) return <Loading />;
+  return (
+    <PluginProvider plugins={builtinPlugins} fallback={<Loading />}>
+      <Shell />
+    </PluginProvider>
   );
 }
 
 export default function App() {
   return (
     <StoreProvider>
-      <Shell />
+      <PluginGate />
     </StoreProvider>
   );
 }
