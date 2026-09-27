@@ -11,13 +11,31 @@ import {
 } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/ariakit';
 import { pt } from '@blocknote/core/locales';
+import { BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core';
 import { Sparkles } from 'lucide-react';
 import type { DocNode } from '@shared/types';
 import { parseNoteContent } from '@shared/blockContent';
 import { useStore } from '../../state/store';
 import { DocIconPicker } from './shared/DocIconPicker';
+import { AudioBlock } from './note/audioBlock';
 
-async function uploadImage(file: File): Promise<string> {
+/** note schema: defaults + the custom audio block (disk-backed, loop-capable) */
+const schema = BlockNoteSchema.create({
+  blockSpecs: {
+    ...defaultBlockSpecs,
+    audio: AudioBlock(),
+  },
+});
+
+/** Media upload routing: audio files go to disk storage (streamed via the
+ *  mythril-audio:// protocol); everything else (images) stays inline base64. */
+async function uploadMedia(file: File): Promise<string> {
+  if (file.type.startsWith('audio/')) {
+    const buf = await file.arrayBuffer();
+    const result = await window.mythril.audio.save(file.name, buf);
+    if (!result.asset) throw new Error(result.error ?? 'Falha ao importar o áudio.');
+    return result.asset.url;
+  }
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => resolve(reader.result as string);
@@ -44,9 +62,10 @@ export function NoteEditor({
 
   const editor = useCreateBlockNote(
     {
+      schema,
       dictionary: pt,
       initialContent: parseNoteContent(doc.content) as never,
-      uploadFile: uploadImage,
+      uploadFile: uploadMedia,
       autofocus: false,
     },
     [doc.id]
