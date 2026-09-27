@@ -8,6 +8,8 @@ import type {
   DocChanges,
   DocInput,
   MythrilApi,
+  PlayerMythrilApi,
+  SecondWindowState,
   UiState,
 } from '../shared/types';
 
@@ -68,6 +70,10 @@ const api: MythrilApi = {
     readThumb: (docId: string, page: number) => ipcRenderer.invoke('pdf:thumb:read', docId, page),
     writeThumb: (docId: string, page: number, base64: string) => ipcRenderer.invoke('pdf:thumb:write', docId, page, base64),
   },
+  audio: {
+    import: () => ipcRenderer.invoke('audio:import'),
+    save: (name: string, data: ArrayBuffer) => ipcRenderer.invoke('audio:save', name, data),
+  },
   app: {
     platform: () => ipcRenderer.invoke('app:platform'),
     version: () => ipcRenderer.invoke('app:version'),
@@ -77,6 +83,34 @@ const api: MythrilApi = {
     read: (dir: string) => ipcRenderer.invoke('plugins:read', dir),
     openFolder: () => ipcRenderer.invoke('plugins:openFolder'),
   },
+  secondWindow: {
+    open: () => ipcRenderer.invoke('second-window:open'),
+    close: () => ipcRenderer.invoke('second-window:close'),
+    status: () => ipcRenderer.invoke('second-window:status'),
+    send: (state) => ipcRenderer.invoke('second-window:send', state),
+    onState: (cb) => subscribe<SecondWindowState>('second-window:state', cb),
+    onStatus: (cb) => subscribe<{ open: boolean }>('second-window:status', cb),
+  },
 };
 
-contextBridge.exposeInMainWorld('mythril', api);
+// The player-facing second window (?window=player) is shown to semi-trusted
+// viewers: expose only the read-only surface it needs, never the full GM API
+// (doc mutation, realm deletion, AI, etc.).
+const locationSearch = (globalThis as { location?: { search?: string } }).location?.search ?? '';
+const isPlayerWindow = new URLSearchParams(locationSearch).get('window') === 'player';
+
+if (isPlayerWindow) {
+  const playerApi: PlayerMythrilApi = {
+    docs: {
+      listByRealm: api.docs.listByRealm,
+      onChanged: api.docs.onChanged,
+    },
+    secondWindow: {
+      status: api.secondWindow.status,
+      onState: api.secondWindow.onState,
+    },
+  };
+  contextBridge.exposeInMainWorld('mythril', playerApi);
+} else {
+  contextBridge.exposeInMainWorld('mythril', api);
+}

@@ -1,0 +1,198 @@
+/* Player-facing second window: idle screen + ancient parchment notes. */
+
+.pw-root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--color-app);
+  color: #e8e2d6;
+}
+
+/* ---------- idle screen ---------- */
+
+.pw-idle {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  opacity: 0.55;
+}
+
+.pw-idle-rune {
+  width: 54px;
+  height: 54px;
+  border: 1.5px solid #8a7a5a;
+  transform: rotate(45deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pw-pulse 3.2s ease-in-out infinite;
+}
+
+.pw-idle-rune::before {
+  content: '';
+  width: 26px;
+  height: 26px;
+  border: 1px solid #6a5d43;
+}
+
+.pw-idle-text {
+  font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
+  font-size: 15px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #a39477;
+}
+
+@keyframes pw-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+/* ---------- parchment note ---------- */
+
+.pw-scroll-wrap {
+  height: 100%;
+  overflow-y: auto;
+  padding: 48px 24px 96px;
+  display: flex;
+  justify-content: center;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(120, 90, 40, 0.12), transparent 60%),
+    var(--color-app);
+}
+
+.pw-parchment {
+  width: min(760px, 100%);
+  height: fit-content;
+  padding: 64px 72px 80px;
+  font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
+  font-size: 17px;
+  line-height: 1.75;
+  color: #3a2c17;
+  background:
+    radial-gradient(ellipse 140% 60% at 50% -20%, rgba(255, 248, 220, 0.5), transparent 55%),
+    radial-gradient(ellipse 120% 70% at 50% 120%, rgba(120, 85, 35, 0.28), transparent 60%),
+    radial-gradient(ellipse 80% 90% at 8% 50%, rgba(120, 85, 35, 0.14), transparent 55%),
+    radial-gradient(ellipse 80% 90% at 96% 40%, rgba(120, 85, 35, 0.12), transparent 55%),
+    repeating-linear-gradient(0deg, transparent 0 26px, rgba(110, 80, 35, 0.018) 26px 27px),
+    linear-gradient(175deg, #efe0b8 0%, #e7d3a4 45%, #dfc793 100%);
+  border-radius: 6px 14px 8px 18px / 18px 8px 14px 6px;
+  box-shadow:
+    inset 0 0 60px rgba(96, 64, 20, 0.28),
+    inset 0 0 8px rgba(96, 64, 20, 0.22),
+    0 18px 50px rgba(0, 0, 0, 0.55);
+  position: relative;
+}
+
+/* scorched edges */
+.pw-parchment::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 34px rgba(58, 36, 8, 0.5),
+    inset 0 0 90px rgba(58, 36, 8, 0.28);
+}
+
+.pw-parchment h1,
+.pw-parchment h2,
+.pw-parchment h3 {
+  font-family: inherit;
+  font-variant: small-caps;
+  letter-spacing: 1.5px;
+  color: #2e2110;
+  border-bottom: 1px solid rgba(90, 62, 20, 0.35);
+  padding-bottom: 6px;
+  margin: 1.2em 0 0.55em;
+}
+
+.pw-parchment h1 { font-size: 30px; }
+.pw-parchment h2 { font-size: 24px; }
+.pw-parchment h3 { font-size: 20px; border-bottom: none; }
+
+.pw-parchment p { margin: 0.55em 0; }
+
+.pw-parchment ul,
+.pw-parchment ol { margin: 0.5em 0; padding-left: 1.6em; }
+
+.pw-parchment li { margin: 0.25em 0; }
+
+.pw-parchment blockquote {
+  margin: 0.8em 0;
+  padding: 4px 0 4px 18px;
+  border-left: 3px double rgba(90, 62, 20, 0.55);
+  font-style: italic;
+  color: #4d3a1e;
+}
+
+.pw-parchment code {
+  font-family: ui-monospace, 'Cascadia Mono', monospace;
+  font-size: 0.85em;
+  background: rgba(90, 62, 20, 0.14);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.pw-parchment pre {
+  background: rgba(46, 33, 16, 0.88);
+  color: #e8dcc0;
+  padding: 14px 18px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 14px;
+}
+
+.pw-parchment pre code { background: none; padding: 0; color: inherit; }
+
+.pw-parchment a { color: #6a4a12; text-decoration: underline; }
+
+.pw-parchment img { max-width: 100%; border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+
+.pw-parchment hr {
+  border: none;
+  border-top: 1px solid rgba(90, 62, 20, 0.4);
+  margin: 1.4em auto;
+  width: 60%;
+}
+
+.pw-check { display: flex; align-items: baseline; gap: 8px; }
+.pw-check-box {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid #6a4a12;
+  border-radius: 2px;
+  transform: translateY(1px);
+  flex-shrink: 0;
+}
+.pw-check-box.checked { background: #6a4a12; }
+.pw-check.done .pw-check-text { text-decoration: line-through; opacity: 0.65; }
+
+.pw-audio-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin: 0.6em 0;
+  border: 1px dashed rgba(90, 62, 20, 0.5);
+  border-radius: 6px;
+  font-style: italic;
+  color: #5a4423;
+}
+
+/* ---------- player map ---------- */
+
+.pw-map {
+  height: 100%;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  background: var(--color-app);
+}
+
+.pw-map svg { width: 100%; height: 100%; display: block; }

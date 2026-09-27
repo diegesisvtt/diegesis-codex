@@ -11,6 +11,18 @@ export interface AppEvents {
   'command:executed': { commandId: string };
   /** a plugin was activated or deactivated */
   'plugins:changed': { pluginId: string; enabled: boolean };
+  /** request to show a note (parchment view) in the second window */
+  'secondwindow:showNote': { docId: string };
+  /** request to show a hexcrawl map (player view) in the second window */
+  'secondwindow:showMap': { docId: string };
+  /** request to set the second window map viewport (hex-space world center + zoom) */
+  'secondwindow:setViewport': { x: number; y: number; zoom: number };
+  /** request to clear the second window (back to idle screen) */
+  'secondwindow:clear': undefined;
+  /** second window was opened/closed */
+  'secondwindow:status': { open: boolean };
+  /** a hexcrawl map editor camera moved (hex-space world center + zoom) */
+  'hexcrawl:camera': { docId: string; x: number; y: number; zoom: number };
 }
 
 type Handler<T> = (payload: T) => void;
