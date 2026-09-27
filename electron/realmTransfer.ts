@@ -8,14 +8,23 @@ import fs from 'node:fs';
 import AdmZip from 'adm-zip';
 import * as db from './db';
 import { pdfFilePath } from './pdf';
+import { audioFilePath, extractAudioRefs, isValidAudioData } from './audio';
 import type { ChatRole, DocumentType, RealmTransferResult, RetrievedChunk } from '../shared/types';
 
 const FORMAT = 'mythril-realm';
 const VERSION = 2;
 const MANIFEST = 'realm.json';
 const PDF_DIR = 'pdfs';
+const AUDIO_DIR = 'audios';
 const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB transfer file cap
-const VALID_TYPES: DocumentType[] = ['core/note', 'core/whiteboard', 'core/folder', 'core/pdf'];
+const VALID_TYPES: DocumentType[] = [
+  'core/note',
+  'core/whiteboard',
+  'core/folder',
+  'core/pdf',
+  'hexcrawl/map',
+  'mythril/timeline',
+];
 const VALID_ROLES: ChatRole[] = ['system', 'user', 'assistant'];
 
 interface RealmFileDoc {
@@ -121,6 +130,20 @@ export async function exportRealm(realmId: string): Promise<RealmTransferResult>
       }
     } catch {
       return { ok: false, error: `Falha ao ler o PDF "${doc.title}".` };
+    }
+  }
+  // audio files referenced by any document (notes, whiteboards, PDF highlights);
+  // asset ids are globally unique, so they travel unchanged in the content JSON
+  for (const doc of docs) {
+    for (const fileName of extractAudioRefs(doc.content)) {
+      try {
+        const file = audioFilePath(fileName);
+        if (fs.existsSync(file) && !zip.getEntry(`${AUDIO_DIR}/${fileName}`)) {
+          zip.addFile(`${AUDIO_DIR}/${fileName}`, await fs.promises.readFile(file));
+        }
+      } catch {
+        return { ok: false, error: `Falha ao ler o áudio "${fileName}".` };
+      }
     }
   }
   zip.addFile(MANIFEST, Buffer.from(JSON.stringify(payload), 'utf8'));
@@ -298,6 +321,15 @@ export async function importRealm(): Promise<RealmTransferResult> {
       const pages = parsed.pdfPages?.[d.id];
       if (Array.isArray(pages) && pages.length) db.restorePdfPages(newId, pages);
     }
+
+    // Restore audio binaries (ids are stable — content references stay valid).
+    for (const entry of zip.getEntries()) {
+      const m = /^audios\/([a-z0-9]+\.[a-z0-9]+)$/i.exec(entry.entryName);
+      if (!m || entry.isDirectory) continue;
+      const data = entry.getData();
+      if (!isValidAudioData(data)) continue; // skip oversized/invalid payloads
+      await fs.promises.writeFile(audioFilePath(m[1]), data);
+    }
   } catch (err) {
     // rollback: don't leave a half-imported realm behind
     if (realmId) db.deleteRealm(realmId);
@@ -309,6 +341,8 @@ export async function importRealm(): Promise<RealmTransferResult> {
           /* best-effort */
         }
       }
+      // audio binaries intentionally left in place: asset ids are stable, so a
+      // previously imported copy of this same realm may still reference them
     }
     return { ok: false, error: 'Falha ao importar o universo. O arquivo pode estar corrompido.' };
   }

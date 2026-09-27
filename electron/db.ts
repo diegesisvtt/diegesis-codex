@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import type { ChatRole, Conversation, DocChanges, DocInput, DocNode, Realm, RetrievedChunk, SearchResult, SemanticSearchResult, StoredChatMessage, UiState } from '../shared/types';
 import { blocksToPlainText, isTiptapDoc, tiptapToBlocks } from '../shared/blockContent';
+import { extractTimelineText } from '../shared/timeline';
 
 export const generateId = () => crypto.randomBytes(6).toString('hex');
 
@@ -209,6 +210,10 @@ export function extractPlainText(content: string | null): string {
       for (const hl of parsed.highlights ?? []) if (hl?.text) parts.push(String(hl.text));
       for (const bm of parsed.bookmarks ?? []) if (bm?.label) parts.push(String(bm.label));
       return parts.join(' ');
+    }
+    // timelines: títulos/descrições de eventos, eras, lanes, tags e luas
+    if (parsed && typeof parsed === 'object' && parsed.kind === 'mythril-timeline') {
+      return extractTimelineText(content);
     }
     // notes (BlockNote JSON), whiteboards and legacy content
     return blocksToPlainText(content);
@@ -652,9 +657,18 @@ export function deleteRealm(id: string): void {
   db.prepare('DELETE FROM realms WHERE id = ?').run(id);
 }
 
-/** Ids and types of every document in a realm (used for asset cleanup). */
-export function listRealmDocTypes(realmId: string): { id: string; type: string }[] {
-  return db.prepare('SELECT id, type FROM documents WHERE realm_id = ?').all(realmId) as { id: string; type: string }[];
+/** Contents of every document in every realm (asset reference counting / GC). */
+export function listAllDocContents(): (string | null)[] {
+  return (db.prepare('SELECT content FROM documents').all() as { content: string | null }[]).map((r) => r.content);
+}
+
+/** Ids, types and contents of every document in a realm (used for asset cleanup). */
+export function listRealmDocTypes(realmId: string): { id: string; type: string; content: string | null }[] {
+  return db.prepare('SELECT id, type, content FROM documents WHERE realm_id = ?').all(realmId) as {
+    id: string;
+    type: string;
+    content: string | null;
+  }[];
 }
 
 // ---------- Documents ----------
@@ -671,6 +685,11 @@ function rowToDoc(r: any): DocNode {
     position: r.position,
     updatedAt: r.updated_at,
   };
+}
+
+export function getDocRealmId(id: string): string | null {
+  const row = db.prepare('SELECT realm_id FROM documents WHERE id = ?').get(id) as { realm_id: string } | undefined;
+  return row?.realm_id ?? null;
 }
 
 export function listDocs(realmId: string): DocNode[] {
@@ -717,17 +736,17 @@ export function updateDoc(id: string, changes: DocChanges): void {
   }
 }
 
-/** Ids and types of a document and all its descendants (used for asset cleanup). */
-export function listSubtreeDocs(id: string): { id: string; type: string }[] {
+/** Ids, types and contents of a document and all its descendants (used for asset cleanup). */
+export function listSubtreeDocs(id: string): { id: string; type: string; content: string | null }[] {
   return db
     .prepare(
-      `WITH RECURSIVE sub(id, type) AS (
-         SELECT id, type FROM documents WHERE id = ?
+      `WITH RECURSIVE sub(id, type, content) AS (
+         SELECT id, type, content FROM documents WHERE id = ?
          UNION ALL
-         SELECT d.id, d.type FROM documents d JOIN sub s ON d.parent_id = s.id
-       ) SELECT id, type FROM sub`
+         SELECT d.id, d.type, d.content FROM documents d JOIN sub s ON d.parent_id = s.id
+       ) SELECT id, type, content FROM sub`
     )
-    .all(id) as { id: string; type: string }[];
+    .all(id) as { id: string; type: string; content: string | null }[];
 }
 
 export function deleteDoc(id: string): void {
