@@ -6,7 +6,7 @@ export const APP_VERSION = '1.0.0';
  * Plugin API compatibility version. External plugins declare the version they
  * were built against in manifest.json; the host refuses mismatched plugins.
  */
-export const PLUGIN_API_VERSION = 1;
+export const PLUGIN_API_VERSION = 2;
 
 /** manifest.json of an external (community) plugin folder. */
 export interface ExternalPluginManifest {
@@ -31,7 +31,13 @@ export interface ExternalPluginInfo {
   error?: string;
 }
 
-export type DocumentType = 'core/note' | 'core/whiteboard' | 'core/folder' | 'core/pdf';
+export type DocumentType =
+  | 'core/note'
+  | 'core/whiteboard'
+  | 'core/folder'
+  | 'core/pdf'
+  | 'hexcrawl/map'
+  | 'mythril/timeline';
 
 export interface Realm {
   id: string;
@@ -78,8 +84,33 @@ export interface UiState {
   sidebarVisible?: boolean;
   /** width (px) of the right-side AI chat panel */
   aiPanelWidth?: number;
+  /** width (px) of the hexcrawl map side panel */
+  hexmapPanelWidth?: number;
   /** plugin manager persistence (enabled state + per-plugin settings) */
   plugins?: PluginUiState;
+  /** audio player persistence */
+  audio?: { masterVolume?: number };
+  /** per-realm settings blobs, keyed by realm id */
+  realmSettings?: Record<string, RealmSettings>;
+}
+
+/** a user-uploaded font (data URL) available to editors in a realm */
+export interface CustomFont {
+  id: string;
+  /** display name, also used as the CSS font-family */
+  name: string;
+  /** data URL of the font file (ttf/otf/woff/woff2) */
+  src: string;
+}
+
+export interface RealmSettings {
+  /** custom fonts uploaded for this realm */
+  fonts?: CustomFont[];
+}
+
+export interface AudioUiState {
+  /** 0..1 multiplier applied to every playing instance */
+  masterVolume?: number;
 }
 
 export interface PluginUiState {
@@ -230,6 +261,23 @@ export interface PdfImportResult {
   error?: string;
 }
 
+/** An audio file copied into app storage (<userData>/audios). */
+export interface AudioAsset {
+  /** stored file name (<id>.<ext>) — also the protocol resource id */
+  id: string;
+  /** original file name, for display */
+  name: string;
+  /** mythril-audio:// URL used by players */
+  url: string;
+  size: number;
+}
+
+export interface AudioImportResult {
+  /** null when the user cancelled the file dialog */
+  asset: AudioAsset | null;
+  error?: string;
+}
+
 export interface RealmTransferResult {
   ok: boolean;
   /** true when the user dismissed the file dialog */
@@ -240,6 +288,23 @@ export interface RealmTransferResult {
   /** export only: where the file was written */
   filePath?: string;
 }
+
+// ---------- second window (player view) ----------
+
+/** hexcrawl viewport: CENTER of the view in hex-space world coordinates +
+ *  zoom. Window-size independent — each window rebuilds its own screen
+ *  transform from it. */
+export interface MapViewport {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+/** what the player-facing second window should display */
+export type SecondWindowState =
+  | { kind: 'none' }
+  | { kind: 'note'; realmId: string; docId: string }
+  | { kind: 'map'; realmId: string; docId: string; viewport?: MapViewport | null };
 
 export interface MythrilApi {
   realms: {
@@ -259,7 +324,7 @@ export interface MythrilApi {
     delete(id: string): Promise<void>; // deletes subtree
     move(id: string, parentId: string | null, position: number): Promise<void>;
     search(realmId: string, query: string): Promise<SearchResult[]>;
-    /** fired when documents are changed outside the renderer (e.g. AI tools) */
+    /** fired when documents change in ANY window (user edits, AI tools) */
     onChanged(cb: (realmId: string) => void): () => void;
   };
   ui: {
@@ -298,6 +363,12 @@ export interface MythrilApi {
     readThumb(docId: string, page: number): Promise<string | null>;
     writeThumb(docId: string, page: number, base64: string): Promise<void>;
   };
+  audio: {
+    /** opens a file dialog and copies the chosen audio into app storage */
+    import(): Promise<AudioImportResult>;
+    /** stores an audio file the renderer already holds (paste/drop in editors) */
+    save(name: string, data: ArrayBuffer): Promise<AudioImportResult>;
+  };
   app: {
     platform(): Promise<NodeJS.Platform>;
     version(): Promise<string>;
@@ -310,4 +381,24 @@ export interface MythrilApi {
     /** reveals the plugins folder in the OS file manager */
     openFolder(): Promise<void>;
   };
+  secondWindow: {
+    open(): Promise<void>;
+    close(): Promise<void>;
+    /** open state + last pushed content (used by the player window on load) */
+    status(): Promise<{ open: boolean; state: SecondWindowState }>;
+    /** pushes content to the player window (called from the GM window) */
+    send(state: SecondWindowState): Promise<void>;
+    /** player window: content pushed by the GM window */
+    onState(cb: (state: SecondWindowState) => void): () => void;
+    /** GM window: the second window was opened/closed */
+    onStatus(cb: (status: { open: boolean }) => void): () => void;
+  };
+}
+
+/** Reduced API surface exposed to the player-facing second window — read-only
+ *  (the window is shown to semi-trusted viewers, so no doc mutation, realm
+ *  management or AI capabilities). */
+export interface PlayerMythrilApi {
+  docs: Pick<MythrilApi['docs'], 'listByRealm' | 'onChanged'>;
+  secondWindow: Pick<MythrilApi['secondWindow'], 'status' | 'onState'>;
 }
