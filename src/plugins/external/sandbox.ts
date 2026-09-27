@@ -159,6 +159,14 @@ export function gateContext(ctx: PluginContext, perms: Set<PluginPermission>, is
           },
         }
       : (denied('ui', pluginId, ['add', 'addRibbonItem']) as unknown as PluginContext['views']),
+    editors: perms.has('ui')
+      ? {
+          add: (editor) => {
+            assertLive();
+            return ctx.editors.add(editor);
+          },
+        }
+      : (denied('ui', pluginId, ['add']) as unknown as PluginContext['editors']),
     settings,
   };
 }

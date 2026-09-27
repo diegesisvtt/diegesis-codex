@@ -3,6 +3,9 @@ import type { TabNode } from 'flexlayout-react';
 import type { AppEvents, EventBus } from './events';
 import type { Command } from './commands';
 import type { RibbonItem, ViewContribution } from './views';
+import type { EditorContribution } from './editors';
+import type { DocTypeContribution } from './docTypes';
+import type { MenuItemContribution } from './menus';
 
 import { PLUGIN_API_VERSION } from '@shared/types';
 
@@ -58,6 +61,11 @@ export interface AppFacade {
   openView(viewId: string): void;
   setAiChatOpen(open: boolean): void;
   readonly aiChatOpen: boolean;
+  /** introspection into other plugins' lifecycle state */
+  readonly plugins: {
+    /** true when the plugin is registered AND currently active */
+    isActive(pluginId: string): boolean;
+  };
 }
 
 /** Per-plugin key/value settings, persisted in the SQLite-backed UI state. */
@@ -78,6 +86,18 @@ export interface PluginContext {
   readonly views: {
     add(view: ViewContribution): Disposable;
     addRibbonItem(item: RibbonItem): Disposable;
+  };
+  readonly editors: {
+    /** register an editor component for a plugin-owned document type */
+    add(editor: EditorContribution): Disposable;
+  };
+  readonly docTypes: {
+    /** register a creatable document type (label, icon, defaults) shown in creation UIs */
+    add(contribution: DocTypeContribution): Disposable;
+  };
+  readonly menus: {
+    /** contribute an item to a host context menu (e.g. 'explorer:item') */
+    add(item: MenuItemContribution): Disposable;
   };
   readonly settings: PluginSettings;
   /** collect an arbitrary disposable for deactivation cleanup */

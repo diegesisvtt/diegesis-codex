@@ -13,10 +13,12 @@ export type {
 export type { AppEvents, EventBus, TypedEventBus } from './api/events';
 export type { Command, CommandRegistry } from './api/commands';
 export type { RibbonItem, ViewContribution, ViewLocation, ViewRegistry } from './api/views';
+export type { EditorComponent, EditorContribution, EditorProps, EditorRegistry } from './api/editors';
 export {
   PluginManager,
   PluginProvider,
   useCommands,
+  useEditor,
   useExternalPlugins,
   usePluginEvent,
   usePluginManager,

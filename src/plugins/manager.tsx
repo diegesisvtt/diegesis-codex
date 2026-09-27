@@ -11,6 +11,10 @@ import React, {
 import { useStore } from '../state/store';
 import { CommandRegistry, type Command } from './api/commands';
 import { ViewRegistry, type RibbonItem, type ViewContribution, type ViewLocation } from './api/views';
+import { EditorRegistry, type EditorContribution } from './api/editors';
+import { DocTypeRegistry, type DocTypeContribution } from './api/docTypes';
+import { MenuRegistry, type MenuItemContribution, type MenuLocation } from './api/menus';
+import { File, Folder, LayoutGrid } from 'lucide-react';
 import { TypedEventBus, type AppEvents } from './api/events';
 import {
   PLUGIN_API_VERSION,
@@ -55,7 +59,39 @@ interface SettingsAdapter {
 export class PluginManager {
   readonly commands = new CommandRegistry();
   readonly views = new ViewRegistry();
+  readonly editors = new EditorRegistry();
+  readonly docTypes = new DocTypeRegistry();
+  readonly menus = new MenuRegistry();
   readonly events = new TypedEventBus<AppEvents>();
+
+  constructor() {
+    // core creatable types live in the same registry as plugin types so
+    // creation UIs (e.g. the Explorer's "new document" popover) render
+    // everything from one source
+    this.docTypes.addCore({
+      docType: 'core/note',
+      label: 'Nota',
+      icon: File,
+      iconColor: 'text-note',
+      defaultTitle: 'Nova Nota',
+      defaultContent: () => JSON.stringify([{ type: 'paragraph' }]),
+    });
+    this.docTypes.addCore({
+      docType: 'core/whiteboard',
+      label: 'Quadro',
+      icon: LayoutGrid,
+      iconColor: 'text-board',
+      defaultTitle: 'Novo Quadro',
+      defaultContent: () => JSON.stringify({ nodes: [] }),
+    });
+    this.docTypes.addCore({
+      docType: 'core/folder',
+      label: 'Pasta',
+      icon: Folder,
+      iconColor: 'text-ink-3',
+      defaultTitle: 'Nova Pasta',
+    });
+  }
 
   private records = new Map<string, PluginRecord>();
   private listeners = new Set<() => void>();
@@ -268,6 +304,15 @@ export class PluginManager {
         add: (view: ViewContribution) => collect(this.views.addView(view)),
         addRibbonItem: (item: RibbonItem) => collect(this.views.addRibbonItem(item)),
       },
+      editors: {
+        add: (editor: EditorContribution) => collect(this.editors.addEditor(editor)),
+      },
+      docTypes: {
+        add: (contribution: DocTypeContribution) => collect(this.docTypes.add(contribution)),
+      },
+      menus: {
+        add: (item: MenuItemContribution) => collect(this.menus.add(item)),
+      },
       settings,
       register: (d) => collect(d),
     };
@@ -323,6 +368,24 @@ export function useRibbonItems(): RibbonItem[] {
   const manager = usePluginManager();
   useRegistryVersion(manager.views);
   return manager.views.listRibbonItems();
+}
+
+export function useEditor(docType: string): EditorContribution | undefined {
+  const manager = usePluginManager();
+  useRegistryVersion(manager.editors);
+  return manager.editors.getEditor(docType);
+}
+
+export function useDocTypes(): DocTypeContribution[] {
+  const manager = usePluginManager();
+  useRegistryVersion(manager.docTypes);
+  return manager.docTypes.list();
+}
+
+export function useMenuItems(location: MenuLocation): MenuItemContribution[] {
+  const manager = usePluginManager();
+  useRegistryVersion(manager.menus);
+  return manager.menus.list(location);
 }
 
 export function usePlugins(): PluginInfo[] {
@@ -406,6 +469,9 @@ export function PluginProvider({
       openPanel: (panel) => storeRef.current.openPanel(panel),
       openView: (viewId) => storeRef.current.openView(viewId),
       setAiChatOpen: (open) => storeRef.current.setAiChatOpen(open),
+      plugins: {
+        isActive: (pluginId) => manager.isActive(pluginId),
+      },
     };
 
     // The adapter owns the authoritative copy of UiState.plugins: it is the
