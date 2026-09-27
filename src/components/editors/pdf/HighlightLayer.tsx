@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { Music } from 'lucide-react';
 import { HIGHLIGHT_COLORS, REDACTION_COLOR, type PdfHighlight } from './model';
 
 export interface HighlightPopoverState {
@@ -90,7 +91,17 @@ export function HighlightLayer({ highlights, onClick }: HighlightLayerProps) {
                 e.stopPropagation();
                 onClick?.(hl);
               }}
-            />
+            >
+              {/* audio attachment badge on the first rect */}
+              {i === 0 && hl.audioUrl && (
+                <span
+                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-elevated border border-line flex items-center justify-center pointer-events-none"
+                  style={{ mixBlendMode: 'normal', opacity: 1 }}
+                >
+                  <Music size={9} className="text-accent-ink" />
+                </span>
+              )}
+            </div>
           );
         })
       )}

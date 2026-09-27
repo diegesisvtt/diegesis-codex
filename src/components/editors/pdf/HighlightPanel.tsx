@@ -1,9 +1,10 @@
 // Docked panel for a highlight: quote, color, label and — once converted —
 // the linked note edited inline with the main editor (embedded mode).
-import { MapPin, Trash2, X } from 'lucide-react';
+import { MapPin, Music, Trash2, X } from 'lucide-react';
 import { useStore } from '../../../state/store';
 import { HIGHLIGHT_COLORS, REDACTION_COLOR, type PdfDocContent, type PdfHighlight } from './model';
 import { NoteEditor } from '../NoteEditor';
+import { AudioPlayerCard } from '../../audio/AudioPlayerCard';
 import type { usePdfAnnotations } from './useAnnotations';
 
 type Annotations = ReturnType<typeof usePdfAnnotations>;
@@ -75,6 +76,49 @@ export function HighlightPanel({
               })
             }
           />
+        </div>
+
+        {/* attached audio clip */}
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-3 mb-1">Áudio</div>
+          {hl.audioUrl ? (
+            <div className="flex items-center gap-1 rounded-lg bg-app/60 border border-line/60 px-2 py-1.5">
+              <div className="flex-1 min-w-0">
+                <AudioPlayerCard
+                  id={`hl:${hl.id}`}
+                  src={hl.audioUrl}
+                  name={hl.audioName || 'Áudio'}
+                  loop={hl.audioLoop ?? false}
+                  onLoopChange={(loop) => annotations.updateHighlight(hl.id, { audioLoop: loop })}
+                  kind={hl.audioKind ?? 'music'}
+                  onKindChange={(kind) => annotations.updateHighlight(hl.id, { audioKind: kind })}
+                />
+              </div>
+              <button
+                title="Remover áudio"
+                onClick={() =>
+                  annotations.updateHighlight(hl.id, { audioUrl: undefined, audioName: undefined, audioLoop: undefined })
+                }
+                className="p-1 text-ink-3 hover:text-danger rounded hover:bg-hover shrink-0"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ) : (
+            <button
+              className="flex items-center gap-1.5 text-[11.5px] text-accent-ink hover:text-accent px-2 py-1 rounded hover:bg-accent-soft"
+              title="Anexar um arquivo de áudio a este destaque"
+              onClick={() => {
+                void window.mythril.audio.import().then((result) => {
+                  if (!result.asset) return;
+                  annotations.updateHighlight(hl.id, { audioUrl: result.asset.url, audioName: result.asset.name });
+                });
+              }}
+            >
+              <Music size={12} strokeWidth={1.75} />
+              Anexar áudio…
+            </button>
+          )}
         </div>
 
         {/* linked note (main editor, embedded) or convert action */}
