@@ -7,12 +7,25 @@ import { flush } from './embedder';
 import { embedQuery } from './local-embedder';
 import { getProvider } from './providers/registry';
 import { executeTool, REALM_TOOLS, WEB_SEARCH_TOOL } from './tools';
+import { routeGeneration } from './specialists/router';
+import { runGeneration } from './specialists/orchestrator';
 import type { ProviderMessage, ToolCall } from './providers/base';
 import type { AIChatRequest, ChatMessage, ChatStreamChunk, RetrievedChunk, SemanticSearchResult } from '../../shared/types';
 
 const TOP_K = 6;
 const MIN_SCORE = 0.25; // drop chunks that are clearly irrelevant
 const MAX_TOOL_TURNS = 8;
+
+/**
+ * Cheap pre-filter: only pay the router LLM call when the message plausibly
+ * asks for content creation. The router itself makes the final call.
+ */
+const GENERATION_HINT =
+  /\b(crie|criar|cria|gere|gerar|gera|invente|inventar|monte|montar|escreva|descreva|descrever|nomeie|nomes?\b|aventura|npc|npcs|monstro|monstros|encontro|vilão|vilao|personagem|personagens|descrição|generate|create|invent|describe|adventure|encounter|monster|villain|character)\b/i;
+
+function looksLikeGeneration(text: string): boolean {
+  return GENERATION_HINT.test(text);
+}
 
 export async function retrieve(realmId: string, query: string, k = TOP_K): Promise<RetrievedChunk[]> {
   // index freshly edited notes before searching
@@ -132,6 +145,33 @@ export async function streamChat(req: AIChatRequest, cb: ChatCallbacks, signal?:
       db.touchConversation(conversation.id, lastUser.content);
     }
 
+    // router: generation requests go to the specialist pipeline instead of RAG chat
+    if (lastUser && !signal?.aborted && looksLikeGeneration(lastUser.content)) {
+      let decision;
+      try {
+        decision = await routeGeneration({ provider, config: cfg.config }, req.messages, signal);
+      } catch (err) {
+        if (signal?.aborted) {
+          send('', true);
+          return;
+        }
+        decision = { mode: 'chat' as const }; // router failure must never break chat
+      }
+      if (decision.mode === 'generate') {
+        const generated = await runGeneration(decision, req.messages, {
+          llm: { provider, config: cfg.config },
+          realmId,
+          retrieve: req.useContext ? (query) => retrieve(realmId, query) : null,
+          send,
+          onProgress: (summary) => cb.onTool(req.chatId, summary, true),
+          signal,
+        });
+        if (generated.trim()) db.addChatMessage(conversation.id, 'assistant', generated);
+        send('', true);
+        return;
+      }
+    }
+
     let sources: RetrievedChunk[] = [];
     let indexEmpty = false;
 
@@ -193,6 +233,11 @@ export async function streamChat(req: AIChatRequest, cb: ChatCallbacks, signal?:
     }
     send('', true);
   } catch (err) {
+    // user-cancelled is not an error
+    if (signal?.aborted) {
+      send('', true);
+      return;
+    }
     send('', true, err instanceof Error ? err.message : String(err));
   }
 }

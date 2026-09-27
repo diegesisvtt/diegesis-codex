@@ -148,7 +148,11 @@ export async function executeTool(
                 ? 'whiteboard'
                 : d.type === 'core/pdf'
                   ? 'pdf'
-                  : 'note',
+                  : d.type === 'hexcrawl/map'
+                    ? 'hexmap'
+                    : d.type === 'mythril/timeline'
+                      ? 'timeline'
+                      : 'note',
           parentId: d.parentId,
         }));
         return { result: JSON.stringify({ documents: docs }), summary: 'Listou os documentos', ok: true };

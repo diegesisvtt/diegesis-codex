@@ -54,6 +54,11 @@ async function* parseSSE(res: Response): AsyncGenerator<any> {
       }
     }
   } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      /* stream already closed */
+    }
     reader.releaseLock();
   }
 }
@@ -102,9 +107,16 @@ export function createOpenAICompatProvider(overrides: Partial<ProviderInfo> & { 
                   type: 'function',
                   function: { name: t.name, description: t.description, parameters: t.parameters },
                 })),
-                tool_choice: 'auto',
+                tool_choice:
+                  !req.toolChoice || req.toolChoice === 'auto'
+                    ? 'auto'
+                    : req.toolChoice === 'none'
+                      ? 'none'
+                      : { type: 'function', function: { name: req.toolChoice } },
               }
             : {}),
+          ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+          ...(req.maxTokens !== undefined ? { max_tokens: req.maxTokens } : {}),
         }),
       });
       if (!res.ok || !res.body) throw new Error(await readError(res));

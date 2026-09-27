@@ -19,6 +19,15 @@ export interface ChatRequest {
   model?: string;
   /** OpenAI-style function tools; when present, the model may answer with tool calls */
   tools?: ToolSpec[];
+  /**
+   * 'auto' (default): model decides; 'none': forbid tools;
+   * any other string: force a call to the tool with that name.
+   */
+  toolChoice?: 'auto' | 'none' | string;
+  /** sampling temperature (0-2); omitted = provider default */
+  temperature?: number;
+  /** max tokens to generate; omitted = provider default */
+  maxTokens?: number;
   /** aborts the HTTP request mid-stream */
   signal?: AbortSignal;
 }
