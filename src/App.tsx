@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { StoreProvider, useStore } from './state/store';
+import { StoreProvider, useStore, RealmFontsStyle } from './state/store';
 import { PluginProvider, builtinPlugins, usePluginEvent, useViews } from './plugins';
 import { TitleBar } from './components/TitleBar';
 import { Workspace } from './components/Workspace';
@@ -64,6 +64,7 @@ function Shell() {
 
   return (
     <div className="h-screen w-full bg-app text-ink-1 flex flex-col overflow-hidden selection:bg-accent-soft">
+      <RealmFontsStyle />
       <TitleBar />
       {/* Remount workspace per realm so tabs/layout stay realm-scoped */}
       {activeRealmId ? (

@@ -1,12 +1,14 @@
-import { useState } from 'react';
-import { BookOpen, Plus, ChevronDown, Pencil, Trash2, FileDown, FileUp } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { BookOpen, Plus, ChevronDown, Pencil, Trash2, FileDown, FileUp, Settings2, Type, Upload } from 'lucide-react';
 import { useStore } from '../state/store';
 import { usePluginManager, useRibbonItems } from '../plugins';
 import { Modal, Button } from './ui';
-import type { Realm } from '@shared/types';
+import type { CustomFont, Realm } from '@shared/types';
+
+const generateId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
 export function TitleBar() {
-  const { realms, activeRealmId, setActiveRealm, createRealm, renameRealm, deleteRealm, exportRealm, importRealm } =
+  const { realms, activeRealmId, setActiveRealm, createRealm, renameRealm, deleteRealm, exportRealm, importRealm, uiState, saveUiState } =
     useStore();
   const manager = usePluginManager();
   const ribbonItems = useRibbonItems();
@@ -16,6 +18,7 @@ export function TitleBar() {
   const [renaming, setRenaming] = useState<Realm | null>(null);
   const [renameName, setRenameName] = useState('');
   const [deleting, setDeleting] = useState<Realm | null>(null);
+  const [settingsRealm, setSettingsRealm] = useState<Realm | null>(null);
   const [transferError, setTransferError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -138,6 +141,17 @@ export function TitleBar() {
                       <span className="truncate">{r.name}</span>
                     </button>
                     <span className="hidden group-hover:flex group-focus-within:flex items-center shrink-0">
+                      <button
+                        title="Configurações do universo"
+                        disabled={busy}
+                        onClick={() => {
+                          setSettingsRealm(r);
+                          setMenuOpen(false);
+                        }}
+                        className="p-1 rounded text-ink-3 hover:text-ink-1 hover:bg-overlay transition-colors disabled:opacity-40"
+                      >
+                        <Settings2 size={12} />
+                      </button>
                       <button
                         title="Renomear universo"
                         disabled={busy}
@@ -278,6 +292,118 @@ export function TitleBar() {
       >
         <p>{transferError}</p>
       </Modal>
+
+      <Modal
+        isOpen={settingsRealm !== null}
+        onClose={() => setSettingsRealm(null)}
+        title={`Configurações — ${settingsRealm?.name ?? ''}`}
+        actions={<Button onClick={() => setSettingsRealm(null)}>Fechar</Button>}
+      >
+        {settingsRealm && (
+          <RealmFontsEditor
+            fonts={uiState.realmSettings?.[settingsRealm.id]?.fonts ?? []}
+            onChange={(fonts) => {
+              const realmSettings = {
+                ...(uiState.realmSettings ?? {}),
+                [settingsRealm.id]: { ...(uiState.realmSettings?.[settingsRealm.id] ?? {}), fonts },
+              };
+              saveUiState({ realmSettings });
+            }}
+          />
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+/** uploads and manages custom fonts for a realm (usable in map labels, notes…) */
+function RealmFontsEditor({ fonts, onChange }: { fonts: CustomFont[]; onChange(fonts: CustomFont[]): void }) {
+  // multiple async FileReaders must append to the latest list, not a stale closure
+  const fontsRef = useRef(fonts);
+  fontsRef.current = fonts;
+  const [deleting, setDeleting] = useState<CustomFont | null>(null);
+
+  const upload = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.ttf,.otf,.woff,.woff2';
+    input.multiple = true;
+    input.onchange = () => {
+      for (const file of Array.from(input.files ?? [])) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const name = file.name.replace(/\.(ttf|otf|woff2?)$/i, '');
+          onChange([...fontsRef.current, { id: generateId(), name, src: String(reader.result) }]);
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    input.click();
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <Type size={14} className="text-ink-3" />
+        <span className="text-[13px] font-medium text-ink-1">Fontes personalizadas</span>
+      </div>
+      <p className="text-[12px] text-ink-3 mb-3">
+        Arquivos .ttf, .otf, .woff ou .woff2. Ficam disponíveis nos seletores de fonte dos editores (mapas, notas) deste
+        universo.
+      </p>
+      {fonts.length === 0 ? (
+        <p className="text-[12px] text-ink-3 italic mb-3">Nenhuma fonte adicionada.</p>
+      ) : (
+        <div className="space-y-1 mb-3 max-h-48 overflow-y-auto custom-scrollbar">
+          {fonts.map((f) => (
+            <div key={f.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md border border-line">
+              <span className="flex-1 truncate text-[13px] text-ink-1" style={{ fontFamily: `"${f.name}"` }}>
+                {f.name}
+              </span>
+              <button
+                title="Remover fonte"
+                onClick={() => setDeleting(f)}
+                className="p-1 rounded text-ink-3 hover:text-danger hover:bg-hover"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Modal
+        isOpen={deleting !== null}
+        onClose={() => setDeleting(null)}
+        title="Remover fonte"
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setDeleting(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                if (deleting) onChange(fonts.filter((x) => x.id !== deleting.id));
+                setDeleting(null);
+              }}
+            >
+              Remover
+            </Button>
+          </>
+        }
+      >
+        <p>
+          Remover a fonte <strong className="text-ink-1">{deleting?.name}</strong> deste universo? Textos que a utilizam
+          passam a usar a fonte padrão.
+        </p>
+      </Modal>
+      <button
+        onClick={upload}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-line text-[12px] text-ink-2 hover:border-accent hover:text-accent transition-colors"
+      >
+        <Upload size={13} /> Adicionar fonte…
+      </button>
     </div>
   );
 }

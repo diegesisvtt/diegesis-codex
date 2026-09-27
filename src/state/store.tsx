@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { DocNode, DocChanges, DocumentType, PdfImportResult, Realm, RealmTransferResult, UiState } from '@shared/types';
+import type { CustomFont, DocNode, DocChanges, DocumentType, PdfImportResult, Realm, RealmTransferResult, UiState } from '@shared/types';
 
 const generateId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
@@ -37,7 +37,7 @@ interface StoreActions {
   /** opens a file dialog and switches to the imported realm on success */
   importRealm(): Promise<RealmTransferResult>;
 
-  createDocument(type: DocumentType, parentId: string | null, title?: string): Promise<DocNode>;
+  createDocument(type: DocumentType, parentId: string | null, title?: string, content?: string | null): Promise<DocNode>;
   /** imports a PDF via native file dialog; doc is null when cancelled */
   importPdf(parentId: string | null): Promise<PdfImportResult>;
   updateDocument(id: string, changes: DocChanges): void; // optimistic + debounced persist
@@ -74,13 +74,15 @@ export const useStore = () => {
   return ctx;
 };
 
+// Fallbacks for programmatic creation without an explicit title/content;
+// creation UIs resolve defaults from the docTypes plugin registry instead.
 function defaultContent(type: DocumentType): string | null {
   if (type === 'core/note') return JSON.stringify([{ type: 'paragraph' }]);
   if (type === 'core/whiteboard') return JSON.stringify({ nodes: [] });
   return null;
 }
 
-const DEFAULT_TITLES: Record<DocumentType, string> = {
+const DEFAULT_TITLES: Partial<Record<DocumentType, string>> = {
   'core/note': 'Nova Nota',
   'core/whiteboard': 'Novo Quadro',
   'core/folder': 'Nova Pasta',
@@ -199,7 +201,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   // ---- documents ----
   const createDocument = useCallback(
-    async (type: DocumentType, parentId: string | null, title?: string): Promise<DocNode> => {
+    async (type: DocumentType, parentId: string | null, title?: string, content?: string | null): Promise<DocNode> => {
       const realmId = state.activeRealmId;
       if (!realmId) throw new Error('No active realm');
       const doc = await window.mythril.docs.create({
@@ -207,8 +209,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         realmId,
         parentId,
         type,
-        title: title ?? DEFAULT_TITLES[type],
-        content: defaultContent(type),
+        title: title ?? DEFAULT_TITLES[type] ?? 'Novo Documento',
+        content: content === undefined ? defaultContent(type) : content,
       });
       setState((s) => ({ ...s, docs: [...s.docs, doc] }));
       return doc;
@@ -382,4 +384,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
+}
+
+/* ---------- realm-level custom fonts ---------- */
+
+/** fonts uploaded in the active realm's settings (available to editors) */
+export function useRealmFonts(): CustomFont[] {
+  const { uiState, activeRealmId } = useStore();
+  return (activeRealmId ? uiState.realmSettings?.[activeRealmId]?.fonts : undefined) ?? [];
+}
+
+/** injects @font-face rules for the active realm's custom fonts */
+export function RealmFontsStyle() {
+  const fonts = useRealmFonts();
+  if (fonts.length === 0) return null;
+  const css = fonts
+    .map((f) => `@font-face { font-family: ${JSON.stringify(f.name)}; src: url(${JSON.stringify(f.src)}); font-display: swap; }`)
+    .join('\n');
+  return <style data-realm-fonts="">{css}</style>;
 }
