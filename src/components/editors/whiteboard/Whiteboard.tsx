@@ -16,10 +16,12 @@ import {
   Grid3x3,
   Swords,
   Image as ImageIcon,
+  Music,
 } from 'lucide-react';
 import type { DocNode } from '@shared/types';
 import { REF_DRAG_MIME, parseExplorerDragRef } from '@shared/dragDrop';
 import { useStore } from '../../../state/store';
+import { audioPlayer } from '../../../state/audioPlayer';
 import {
   createShape,
   generateId,
@@ -44,8 +46,8 @@ import { ShapeView } from './ShapeView';
 import { ArrowsLayer } from './ArrowsLayer';
 import { WhiteboardToolbar } from './Toolbar';
 import type { WBTool } from './Toolbar';
-import { ContextMenu } from './ContextMenu';
-import type { CtxMenuEntry } from './ContextMenu';
+import { ContextMenu } from '../../ContextMenu';
+import type { CtxMenuEntry } from '../../ContextMenu';
 
 /** px the pointer must travel before a press becomes a drag (tldraw "pointing" state) */
 const DRAG_THRESHOLD = 4;
@@ -81,6 +83,7 @@ const MIN_WIDTH: Record<WBShape['type'], number> = {
   group: 40,
   arrow: 0,
   image: 40,
+  audio: 240,
 };
 const MIN_GROUP_SIZE = 40;
 const MIN_IMAGE_SIZE = 40;
@@ -339,10 +342,14 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
 
   const handleDelete = useCallback(() => {
     if (selectedIds.size === 0) return;
+    // stop playback of deleted audio shapes so no ghost rows linger in the bar
+    for (const id of selectedIds) {
+      if (latestRef.current[id]?.type === 'audio') audioPlayer.stop(`wb:${id}`);
+    }
     save(deleteShapes(latestRef.current, [...selectedIds]));
     setSelectedIds(new Set());
     setEditingId(null);
-  }, [save, selectedIds]);
+  }, [save, selectedIds, audioPlayer]);
 
   const handleGroup = useCallback(() => {
     const result = groupShapes(latestRef.current, [...selectedIds]);
@@ -787,36 +794,71 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
     fileInputRef.current?.click();
   }, []);
 
+  /** drops an image shape centered at `point` (shared by the file input and OS drops) */
+  const insertImageShape = useCallback(
+    (src: string, name: string, point: { x: number; y: number }) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, 480 / (img.naturalWidth || 480));
+        const w = Math.max(MIN_IMAGE_SIZE, snapVal(img.naturalWidth * scale));
+        const h = Math.max(MIN_IMAGE_SIZE, snapVal(img.naturalHeight * scale));
+        const shape: WBShape = {
+          id: generateId(),
+          type: 'image',
+          x: Math.max(0, snapVal(point.x - w / 2)),
+          y: Math.max(0, snapVal(point.y - h / 2)),
+          parentId: null,
+          props: { src, w, h, name },
+        };
+        save({ ...latestRef.current, [shape.id]: shape });
+        setSelectedIds(new Set([shape.id]));
+      };
+      img.src = src;
+    },
+    [save]
+  );
+
   const onImageChosen = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       e.target.value = ''; // allow picking the same file again
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => {
-        const src = String(reader.result);
-        const img = new Image();
-        img.onload = () => {
-          const scale = Math.min(1, 480 / (img.naturalWidth || 480));
-          const w = Math.max(MIN_IMAGE_SIZE, snapVal(img.naturalWidth * scale));
-          const h = Math.max(MIN_IMAGE_SIZE, snapVal(img.naturalHeight * scale));
-          const point = imagePointRef.current ?? { x: 200, y: 200 };
-          const shape: WBShape = {
-            id: generateId(),
-            type: 'image',
-            x: Math.max(0, snapVal(point.x - w / 2)),
-            y: Math.max(0, snapVal(point.y - h / 2)),
-            parentId: null,
-            props: { src, w, h, name: file.name },
-          };
-          save({ ...latestRef.current, [shape.id]: shape });
-          setSelectedIds(new Set([shape.id]));
-        };
-        img.src = src;
-      };
+      reader.onload = () => insertImageShape(String(reader.result), file.name, imagePointRef.current ?? { x: 200, y: 200 });
       reader.readAsDataURL(file);
     },
+    [insertImageShape]
+  );
+
+  /* ---------- audio ---------- */
+
+  /** drops an audio shape centered at `point` (shared by the import dialog and OS drops) */
+  const insertAudioShape = useCallback(
+    (asset: { url: string; name: string }, point: { x: number; y: number }) => {
+      const size = DEFAULT_SIZE.audio;
+      const shape: WBShape = {
+        id: generateId(),
+        type: 'audio',
+        x: Math.max(0, snapVal(point.x - size.w / 2)),
+        y: Math.max(0, snapVal(point.y - size.h / 2)),
+        parentId: null,
+        props: { src: asset.url, name: asset.name, w: size.w, loop: false },
+      };
+      save({ ...latestRef.current, [shape.id]: shape });
+      setSelectedIds(new Set([shape.id]));
+    },
     [save]
+  );
+
+  /** audio tool / context menu: pick a file (main-process dialog), drop a card at `point` */
+  const pickAudio = useCallback(
+    (point: { x: number; y: number }) => {
+      void window.mythril.audio.import().then((result) => {
+        if (!result.asset) return; // cancelled or failed (main shows no dialog on error)
+        insertAudioShape(result.asset, point);
+      });
+    },
+    [insertAudioShape]
   );
 
   /* ---------- selection ---------- */
@@ -898,13 +940,43 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes(REF_DRAG_MIME)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
+    if (e.dataTransfer.types.includes(REF_DRAG_MIME) || e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }
   }, []);
+
+  /** OS file drops: audio files become audio shapes, images become image shapes */
+  const handleFileDrop = useCallback(
+    (e: React.DragEvent) => {
+      const files = [...(e.dataTransfer.files ?? [])].filter(
+        (f) => f.type.startsWith('audio/') || f.type.startsWith('image/')
+      );
+      if (files.length === 0) return false;
+      e.preventDefault();
+      const point = toCanvas(e.clientX, e.clientY);
+      files.forEach((file, i) => {
+        // cascade multiple drops so cards don't stack exactly on top of each other
+        const p = { x: point.x + i * SNAP, y: point.y + i * SNAP };
+        if (file.type.startsWith('audio/')) {
+          void file.arrayBuffer().then(async (buf) => {
+            const result = await window.mythril.audio.save(file.name, buf);
+            if (result.asset) insertAudioShape(result.asset, p);
+          });
+        } else {
+          const reader = new FileReader();
+          reader.onload = () => insertImageShape(String(reader.result), file.name, p);
+          reader.readAsDataURL(file);
+        }
+      });
+      return true;
+    },
+    [toCanvas, insertAudioShape, insertImageShape]
+  );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
+      if (handleFileDrop(e)) return;
       const ref = parseExplorerDragRef(e.dataTransfer.getData(REF_DRAG_MIME));
       if (!ref) return;
       e.preventDefault();
@@ -942,7 +1014,7 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
       save({ ...latestRef.current, [shape.id]: shape });
       setSelectedIds(new Set([shape.id]));
     },
-    [docs, toCanvas, applySnap, save]
+    [docs, toCanvas, applySnap, save, handleFileDrop]
   );
 
   const createAt = useCallback(
@@ -988,6 +1060,11 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
       }
       if (tool === 'image') {
         pickImage(point);
+        setTool('select');
+        return;
+      }
+      if (tool === 'audio') {
+        pickAudio(point);
         setTool('select');
         return;
       }
@@ -1047,7 +1124,7 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
       window.addEventListener('pointerup', onUp);
       window.addEventListener('pointercancel', onCancel);
     },
-    [tool, handActive, beginPan, beginArrowDraft, createAt, pickImage, selectedIds, toCanvas]
+    [tool, handActive, beginPan, beginArrowDraft, createAt, pickImage, pickAudio, selectedIds, toCanvas]
   );
 
   /* ---------- context menu ---------- */
@@ -1135,7 +1212,15 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
           setEditingId(shape.id);
         }
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-        const keyTool: Record<string, WBTool> = { v: 'select', h: 'hand', t: 'text', n: 'note', a: 'arrow', i: 'image' };
+        const keyTool: Record<string, WBTool> = {
+          v: 'select',
+          h: 'hand',
+          t: 'text',
+          n: 'note',
+          a: 'arrow',
+          i: 'image',
+          m: 'audio',
+        };
         const next = keyTool[e.key.toLowerCase()];
         if (next) setTool(next);
       }
@@ -1211,6 +1296,7 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
           { icon: Clock, label: 'Relógio', onClick: () => createAt('clock', ctxMenu.canvas) },
           { icon: Swords, label: 'Iniciativa', onClick: () => createAt('initiative', ctxMenu.canvas) },
           { icon: ImageIcon, label: 'Imagem…', onClick: () => pickImage(ctxMenu.canvas) },
+          { icon: Music, label: 'Áudio…', onClick: () => pickAudio(ctxMenu.canvas) },
           'divider',
           { icon: CheckSquare, label: 'Selecionar tudo', shortcut: 'Ctrl+A', onClick: handleSelectAll },
           'divider',

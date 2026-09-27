@@ -12,6 +12,7 @@ import {
   Swords,
   ArrowUpRight,
   Image,
+  Music,
   Group,
   Ungroup,
   Trash2,
@@ -79,6 +80,7 @@ const CREATE_TOOLS: { tool: WBTool; label: string; icon: typeof Type }[] = [
   { tool: 'initiative', label: 'Iniciativa', icon: Swords },
   { tool: 'arrow', label: 'Seta (A)', icon: ArrowUpRight },
   { tool: 'image', label: 'Imagem (I)', icon: Image },
+  { tool: 'audio', label: 'Áudio (M)', icon: Music },
 ];
 
 const TEXT_STYLES: { size: TextSize; label: string; icon: typeof Type }[] = [

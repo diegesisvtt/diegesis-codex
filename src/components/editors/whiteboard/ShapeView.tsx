@@ -14,6 +14,13 @@ import {
   MapPin,
   Bookmark,
   Highlighter,
+  Pause,
+  Play,
+  Repeat,
+  Volume2,
+  AlertTriangle,
+  Music,
+  Zap,
 } from 'lucide-react';
 import type { WBShape, WBShapeMap, TextSize, TrackerKind, InitiativeEntry, InitiativeMode } from './model';
 import { childrenOf, generateId } from './model';
@@ -21,7 +28,10 @@ import { blocksToPlainText } from '@shared/blockContent';
 import { pinIcon } from '../pdf/rpg';
 import { parsePdfContent } from '../pdf/model';
 import { useStore } from '../../../state/store';
+import { audioPlayer, useAudioInstance, type AudioKind } from '../../../state/audioPlayer';
 import { RichTextEditor } from '../shared/RichTextEditor';
+import { Waveform } from '../../audio/Waveform';
+import { formatTime } from '../../audio/AudioPlayerCard';
 import { MathInput } from './MathInput';
 
 /* ============================================================
@@ -746,6 +756,147 @@ function ImageShape({ shape }: ShapeViewProps) {
 }
 
 /* ============================================================
+   Audio shape — Syrinscape-style player card: big play toggle,
+   real waveform with progress + seek, loop and volume controls.
+   Playback state lives in the global audioPlayer store.
+   ============================================================ */
+
+function AudioShape({ shape, updateProps }: ShapeViewProps) {
+  const id = `wb:${shape.id}`;
+  const inst = useAudioInstance(id);
+  const playing = inst?.playing ?? false;
+  const currentTime = inst?.currentTime ?? 0;
+  const duration = inst?.duration ?? NaN;
+  const loop = inst?.loop ?? shape.props.loop ?? false;
+  const kind: AudioKind = inst?.kind ?? shape.props.kind ?? 'music';
+  const volume = inst?.volume ?? 1;
+  const errored = inst?.error ?? false;
+  const progress = Number.isFinite(duration) && duration > 0 ? currentTime / duration : 0;
+
+  // mirror store → shape: loop/kind toggled from the global panel persists here
+  useEffect(() => {
+    if (inst && inst.loop !== (shape.props.loop ?? false)) updateProps({ loop: inst.loop });
+  }, [inst?.loop]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (inst && inst.kind !== (shape.props.kind ?? 'music')) updateProps({ kind: inst.kind });
+  }, [inst?.kind]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggle = () => {
+    audioPlayer.toggle({ id, src: shape.props.src, name: shape.props.name || 'Áudio', kind, loop });
+  };
+
+  return (
+    <div
+      className={`rounded-xl border px-3 py-2.5 backdrop-blur transition-colors ${
+        errored
+          ? 'bg-[#211518]/95 border-danger/50 shadow-xl'
+          : playing
+            ? 'bg-[#1a2230]/95 border-accent/60 shadow-[0_0_24px_rgba(35,131,226,0.25)]'
+            : 'bg-[#151a21]/95 border-line shadow-xl'
+      }`}
+      style={{ width: shape.props.w ?? 320 }}
+    >
+      <div className="flex items-center gap-2.5">
+        {/* big Syrinscape-style play toggle */}
+        <button
+          title={errored ? 'Arquivo de áudio não encontrado' : playing ? 'Pausar' : 'Reproduzir'}
+          onClick={toggle}
+          disabled={errored}
+          className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+            errored
+              ? 'bg-danger-soft text-danger cursor-default'
+              : playing
+                ? 'bg-accent text-white shadow-[0_0_12px_rgba(35,131,226,0.5)]'
+                : 'bg-accent-soft text-accent-ink hover:bg-accent hover:text-white hover:shadow-[0_0_12px_rgba(35,131,226,0.4)]'
+          }`}
+        >
+          {errored ? (
+            <AlertTriangle size={16} strokeWidth={2} />
+          ) : playing ? (
+            <Pause size={16} strokeWidth={2.25} />
+          ) : (
+            <Play size={16} strokeWidth={2.25} className="ml-0.5" />
+          )}
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1">
+            <span className="flex-1 min-w-0 truncate text-[12px] font-medium text-ink-1 leading-tight">
+              {shape.props.name || 'Áudio'}
+            </span>
+            <button
+              title={
+                kind === 'music'
+                  ? 'Música (participa do crossfade) — clique para virar efeito'
+                  : 'Efeito (toca por cima) — clique para virar música'
+              }
+              onClick={() => {
+                const next: AudioKind = kind === 'music' ? 'sfx' : 'music';
+                if (inst) audioPlayer.setKind(id, next);
+                else updateProps({ kind: next });
+              }}
+              className={`shrink-0 p-1 rounded transition-colors ${
+                kind === 'music' ? 'text-accent-ink bg-accent-soft' : 'text-ink-3 hover:text-ink-1 hover:bg-hover'
+              }`}
+            >
+              {kind === 'music' ? <Music size={12} strokeWidth={1.75} /> : <Zap size={12} strokeWidth={1.75} />}
+            </button>
+            <button
+              title={loop ? 'Repetição ativada' : 'Repetir'}
+              onClick={() => {
+                if (inst) audioPlayer.toggleLoop(id);
+                else updateProps({ loop: !loop });
+              }}
+              className={`shrink-0 p-1 rounded transition-colors ${
+                loop ? 'text-accent-ink bg-accent-soft' : 'text-ink-3 hover:text-ink-1 hover:bg-hover'
+              }`}
+            >
+              <Repeat size={12} strokeWidth={1.75} />
+            </button>
+          </div>
+
+          <div className="mt-1">
+            <Waveform
+              src={shape.props.src}
+              progress={progress}
+              onSeek={
+                inst && !errored
+                  ? (f) => {
+                      if (Number.isFinite(duration)) audioPlayer.seek(id, f * duration);
+                    }
+                  : undefined
+              }
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 mt-1">
+            <span className="text-[10px] text-ink-3 tabular-nums">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+            <span className="flex-1" />
+            {inst && (
+              <>
+                <Volume2 size={11} strokeWidth={1.75} className="text-ink-3 shrink-0" />
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={volume}
+                  onChange={(e) => audioPlayer.setVolume(id, Number(e.target.value))}
+                  className="audio-seek w-14"
+                  title={`Volume: ${Math.round(volume * 100)}%`}
+                />
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
    Group shape — renders children as static previews
    ============================================================ */
 
@@ -783,6 +934,8 @@ export function ShapeView(props: ShapeViewProps & { shapes: WBShapeMap }) {
       return <NoteShape {...props} />;
     case 'image':
       return <ImageShape {...props} />;
+    case 'audio':
+      return <AudioShape {...props} />;
     case 'group':
       return <GroupShape shape={shape} shapes={props.shapes} />;
     default:

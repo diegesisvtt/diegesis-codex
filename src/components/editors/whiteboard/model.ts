@@ -5,7 +5,7 @@
    and store coordinates relative to the group origin.
    ============================================================ */
 
-export type ShapeType = 'group' | 'text' | 'note' | 'tracker' | 'clock' | 'initiative' | 'arrow' | 'image';
+export type ShapeType = 'group' | 'text' | 'note' | 'tracker' | 'clock' | 'initiative' | 'arrow' | 'image' | 'audio';
 
 /** text shape style variant (plain text or header sizes) */
 export type TextSize = 'text' | 'h1' | 'h2' | 'h3';
@@ -91,6 +91,7 @@ export const DEFAULT_PROPS: Record<ShapeType, Record<string, any>> = {
     text: '',
   },
   image: { src: '', w: 320, h: 240, name: '' },
+  audio: { src: '', name: '', w: 340, loop: false, kind: 'music' },
 };
 
 /** Fallback sizes used before a shape has been measured on screen */
@@ -103,6 +104,7 @@ export const DEFAULT_SIZE: Record<ShapeType, { w: number; h: number }> = {
   initiative: { w: 300, h: 220 },
   arrow: { w: 0, h: 0 },
   image: { w: 320, h: 240 },
+  audio: { w: 340, h: 86 },
 };
 
 export function createShape(type: ShapeType, x: number, y: number): WBShape {
