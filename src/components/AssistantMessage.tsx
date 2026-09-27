@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/ariakit';
 import { pt } from '@blocknote/core/locales';
-import { BookOpen, FileText, Presentation } from 'lucide-react';
+import { BookOpen, FileText, History, Map, Presentation } from 'lucide-react';
 import type { RetrievedChunk } from '@shared/types';
 
 const SOURCE_URL = 'https://mythril.source/';
@@ -140,6 +140,10 @@ export function AssistantMessage({
               <FileText size={12} className="shrink-0 text-pdf" />
             ) : tipSource.type === 'core/whiteboard' ? (
               <Presentation size={12} className="shrink-0 text-board" />
+            ) : tipSource.type === 'hexcrawl/map' ? (
+              <Map size={12} className="shrink-0 text-map" />
+            ) : tipSource.type === 'mythril/timeline' ? (
+              <History size={12} className="shrink-0 text-timeline" />
             ) : (
               <BookOpen size={12} className="shrink-0 text-note" />
             )}
@@ -149,7 +153,15 @@ export function AssistantMessage({
             <div className="flex items-center justify-between">
               <dt className="text-ink-3">Tipo</dt>
               <dd className="text-ink-2">
-                {tipSource.type === 'core/pdf' ? 'PDF' : tipSource.type === 'core/whiteboard' ? 'Quadro branco' : 'Nota'}
+                {tipSource.type === 'core/pdf'
+                  ? 'PDF'
+                  : tipSource.type === 'core/whiteboard'
+                    ? 'Quadro branco'
+                    : tipSource.type === 'hexcrawl/map'
+                      ? 'Mapa hex'
+                      : tipSource.type === 'mythril/timeline'
+                        ? 'Timeline'
+                        : 'Nota'}
               </dd>
             </div>
             {tipSource.type === 'core/pdf' && tipSource.page != null && (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { File, LayoutGrid, Search, Sparkles, BookOpen } from 'lucide-react';
+import { File, LayoutGrid, Search, Sparkles, BookOpen, Map, History } from 'lucide-react';
 import type { SearchResult, SemanticSearchResult } from '@shared/types';
 import { useStore } from '../state/store';
 
@@ -186,8 +186,26 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose(): voi
             </div>
           ) : (
             results.map((r, i) => {
-              const Icon = r.type === 'core/whiteboard' ? LayoutGrid : r.type === 'core/pdf' ? BookOpen : File;
-              const color = r.type === 'core/whiteboard' ? 'text-board' : r.type === 'core/pdf' ? 'text-pdf' : 'text-note';
+              const Icon =
+                r.type === 'core/whiteboard'
+                  ? LayoutGrid
+                  : r.type === 'core/pdf'
+                    ? BookOpen
+                    : r.type === 'hexcrawl/map'
+                      ? Map
+                      : r.type === 'mythril/timeline'
+                        ? History
+                        : File;
+              const color =
+                r.type === 'core/whiteboard'
+                  ? 'text-board'
+                  : r.type === 'core/pdf'
+                    ? 'text-pdf'
+                    : r.type === 'hexcrawl/map'
+                      ? 'text-map'
+                      : r.type === 'mythril/timeline'
+                        ? 'text-timeline'
+                        : 'text-note';
               return (
                 <button
                   key={r.docId}
