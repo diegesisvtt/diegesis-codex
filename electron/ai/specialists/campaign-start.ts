@@ -25,7 +25,7 @@ export const campaignStartSpecialist: Specialist<CampaignStartInput, CampaignSta
       {
         role: 'system',
         content:
-          'Você é o especialista em aberturas de campanha do Mythril. A primeira sessão tem TRABALHO ' +
+          'Você é o especialista em aberturas de campanha do Diegesis Codex. A primeira sessão tem TRABALHO ' +
           'a fazer: apresentar o mundo, dar motivação aos personagens e terminar com caminhos claros.\n\n' +
           'Regras:\n' +
           '- PROPÓSITO CLARO: session one não é só "começar". Ela deve estabelecer (1) o tom e a cara ' +

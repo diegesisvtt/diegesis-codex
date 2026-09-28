@@ -108,7 +108,7 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
         // notes, PDF pins and bookmarks (capture phase: react-dnd stops
         // propagation in its own native dragstart handler)
         if (pin) {
-          e.dataTransfer.setData('application/x-mythril-pin-note', `${pin.pdfDocId}:${data.id}`);
+          e.dataTransfer.setData('application/x-diegesis-pin-note', `${pin.pdfDocId}:${data.id}`);
           e.dataTransfer.setData(
             REF_DRAG_MIME,
             JSON.stringify({ kind: 'pin', docId: data.id, pdfDocId: pin.pdfDocId, pinId: pin.pinId, color: pin.color })
@@ -369,7 +369,7 @@ export function Explorer() {
           </button>
         </div>
       </div>
-      <div ref={containerRef} className="flex-1 overflow-hidden py-1.5 mythril-tree">
+      <div ref={containerRef} className="flex-1 overflow-hidden py-1.5 diegesis-tree">
         {data.length === 0 ? (
           <div className="px-4 py-6 text-[12px] text-ink-3 leading-relaxed">
             Nada por aqui ainda.

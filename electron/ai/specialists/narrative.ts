@@ -25,7 +25,7 @@ export const narrativeSpecialist: Specialist<NarrativeInput, Narrative> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em descrição narrativa do Mythril. Você escreve prosa de RPG que ' +
+          'Você é o especialista em descrição narrativa do Diegesis Codex. Você escreve prosa de RPG que ' +
           'o mestre lê em voz alta e notas de bastidores.\n\n' +
           'Regras:\n' +
           '- textoReadAloud: segunda pessoa ("vocês..."), sensorial (visão, som, cheiro, textura), ' +

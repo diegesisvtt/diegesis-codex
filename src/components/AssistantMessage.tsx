@@ -8,7 +8,7 @@ import { pt } from '@blocknote/core/locales';
 import { BookOpen, FileText, History, Map, Presentation, Table } from 'lucide-react';
 import type { RetrievedChunk } from '@shared/types';
 
-const SOURCE_URL = 'https://mythril.source/';
+const SOURCE_URL = 'https://diegesis.source/';
 const SOURCE_LINK = `a[href^="${SOURCE_URL}"]`;
 
 /** Rewrites `[n]` citation markers as links so BlockNote renders them inline. */
@@ -122,7 +122,7 @@ export function AssistantMessage({
         sideMenu={false}
         formattingToolbar={false}
         slashMenu={false}
-        className="mythril-bn chat"
+        className="diegesis-bn chat"
       />
 
       {tip && tipSource && (
@@ -142,9 +142,9 @@ export function AssistantMessage({
               <Presentation size={12} className="shrink-0 text-board" />
             ) : tipSource.type === 'hexcrawl/map' ? (
               <Map size={12} className="shrink-0 text-map" />
-            ) : tipSource.type === 'mythril/timeline' ? (
+            ) : tipSource.type === 'diegesis/timeline' ? (
               <History size={12} className="shrink-0 text-timeline" />
-            ) : tipSource.type === 'mythril/table' ? (
+            ) : tipSource.type === 'diegesis/table' ? (
               <Table size={12} className="shrink-0 text-table" />
             ) : (
               <BookOpen size={12} className="shrink-0 text-note" />
@@ -161,9 +161,9 @@ export function AssistantMessage({
                     ? 'Quadro branco'
                     : tipSource.type === 'hexcrawl/map'
                       ? 'Mapa hex'
-                      : tipSource.type === 'mythril/timeline'
+                      : tipSource.type === 'diegesis/timeline'
                         ? 'Timeline'
-                        : tipSource.type === 'mythril/table'
+                        : tipSource.type === 'diegesis/table'
                           ? 'Tabela'
                           : 'Nota'}
               </dd>

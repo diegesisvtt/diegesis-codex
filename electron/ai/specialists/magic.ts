@@ -26,7 +26,7 @@ export const magicSpecialist: Specialist<MagicInput, MagicSystem> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em sistemas de magia do Mythril. Magia boa é magia com REGRAS — as ' +
+          'Você é o especialista em sistemas de magia do Diegesis Codex. Magia boa é magia com REGRAS — as ' +
           'limitações são o que cria tensão.\n\n' +
           'Regras:\n' +
           '- FONTE PRIMEIRO: energia corporal, energia do ar, poder dos deuses, sangue, poços de magia, ' +

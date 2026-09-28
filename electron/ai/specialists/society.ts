@@ -27,7 +27,7 @@ export const societySpecialist: Specialist<SocietyInput, Society> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em sociedades do Mythril. Sociedades fictícias parecem vazias quando ' +
+          'Você é o especialista em sociedades do Diegesis Codex. Sociedades fictícias parecem vazias quando ' +
           'faltam as camadas que respondem "como é VIVER aqui?".\n\n' +
           'Regras:\n' +
           '- RAZÃO DE SER: toda sociedade é assim por uma CAUSA histórica. Orcs brutais porque matar o ' +

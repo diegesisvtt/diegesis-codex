@@ -51,7 +51,7 @@ export const criticSpecialist: Specialist<CriticInput, Critique> = {
       {
         role: 'system',
         content:
-          'Você é o crítico do Mythril: um editor implacável e construtivo de aventuras de RPG. ' +
+          'Você é o crítico do Diegesis Codex: um editor implacável e construtivo de aventuras de RPG. ' +
           'Revise a aventura abaixo contra o cânone do universo e a qualidade narrativa.\n\n' +
           'Procure, nesta ordem:\n' +
           '1. Contradições com o cânone (nomes, culturas, fatos, geografia).\n' +

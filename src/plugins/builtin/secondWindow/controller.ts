@@ -57,12 +57,12 @@ export class SecondWindowController {
       if (this.shown && this.shown.realmId !== realmId) this.clear();
     });
 
-    this.disposeStatus = window.mythril.secondWindow.onStatus(({ open }) => {
+    this.disposeStatus = window.diegesis.secondWindow.onStatus(({ open }) => {
       this.windowOpen = open;
       this.ctx.events.emit('secondwindow:status', { open });
       this.notify();
     });
-    void window.mythril.secondWindow.status().then(({ open }) => {
+    void window.diegesis.secondWindow.status().then(({ open }) => {
       this.windowOpen = open;
       this.notify();
     });
@@ -73,7 +73,7 @@ export class SecondWindowController {
 
   dispose(): void {
     this.disposeStatus?.();
-    void window.mythril.secondWindow.close();
+    void window.diegesis.secondWindow.close();
   }
 
   /* ---------- React store ---------- */
@@ -94,9 +94,9 @@ export class SecondWindowController {
   /* ---------- commands ---------- */
 
   toggleWindow(): void {
-    if (this.windowOpen) void window.mythril.secondWindow.close();
+    if (this.windowOpen) void window.diegesis.secondWindow.close();
     else {
-      void window.mythril.secondWindow.open();
+      void window.diegesis.secondWindow.open();
       // re-push so a reopened window shows the current content immediately
       if (this.shown) this.push();
     }
@@ -129,7 +129,7 @@ export class SecondWindowController {
     this.shown = null;
     this.manualViewport = null;
     this.persistShown();
-    void window.mythril.secondWindow.send({ kind: 'none' });
+    void window.diegesis.secondWindow.send({ kind: 'none' });
     this.notify();
   }
 
@@ -158,6 +158,6 @@ export class SecondWindowController {
         this.manualViewport ?? (this.mirrorViewport ? (this.gmCamera.get(this.shown.docId) ?? null) : null);
       state = { kind: 'map', realmId: this.shown.realmId, docId: this.shown.docId, viewport };
     }
-    void window.mythril.secondWindow.send(state);
+    void window.diegesis.secondWindow.send(state);
   }
 }

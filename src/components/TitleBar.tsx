@@ -71,7 +71,7 @@ export function TitleBar() {
         <div className="w-6 h-6 rounded-md bg-accent-soft flex items-center justify-center">
           <BookOpen size={13} className="text-accent-ink" />
         </div>
-        <span className="font-semibold text-[13px] tracking-tight text-ink-1">Mythril</span>
+        <span className="font-semibold text-[13px] tracking-tight text-ink-1">Diegesis Codex</span>
       </div>
 
       <div className="flex items-center gap-1.5">

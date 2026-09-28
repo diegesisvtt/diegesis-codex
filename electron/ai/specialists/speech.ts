@@ -26,7 +26,7 @@ export const speechSpecialist: Specialist<SpeechInput, Speech> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em discursos do Mythril. Confiança sozinha não faz discurso — discurso ' +
+          'Você é o especialista em discursos do Diegesis Codex. Confiança sozinha não faz discurso — discurso ' +
           'é persuasão estruturada.\n\n' +
           'Regras:\n' +
           '- TESE ÚNICA: o discurso existe para CONVENCER de uma coisa (o exército de que vencerá; os ' +

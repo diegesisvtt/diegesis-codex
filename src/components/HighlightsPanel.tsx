@@ -161,7 +161,7 @@ export function HighlightsPanel() {
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
-      <div ref={containerRef} className="flex-1 overflow-hidden py-1.5 mythril-tree">
+      <div ref={containerRef} className="flex-1 overflow-hidden py-1.5 diegesis-tree">
         {data.length === 0 ? (
           <div className="px-4 py-6 text-[12px] text-ink-3 leading-relaxed">
             {query

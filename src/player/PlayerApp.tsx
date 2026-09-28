@@ -25,11 +25,11 @@ export default function PlayerApp() {
   useEffect(() => {
     let cancelled = false;
     let gotLivePush = false;
-    const unsubscribe = window.mythril.secondWindow.onState((s) => {
+    const unsubscribe = window.diegesis.secondWindow.onState((s) => {
       gotLivePush = true;
       setState(s);
     });
-    window.mythril.secondWindow.status().then((s) => {
+    window.diegesis.secondWindow.status().then((s) => {
       // a live push that arrived first is newer than the cached state
       if (!cancelled && !gotLivePush) setState(s.state);
     });
@@ -50,11 +50,11 @@ export default function PlayerApp() {
     }
     let cancelled = false;
     const load = async () => {
-      const docs = await window.mythril.docs.listByRealm(realmId);
+      const docs = await window.diegesis.docs.listByRealm(realmId);
       if (!cancelled) setDoc(docs.find((d) => d.id === docId) ?? null);
     };
     void load();
-    const unsubscribe = window.mythril.docs.onChanged((changedRealm) => {
+    const unsubscribe = window.diegesis.docs.onChanged((changedRealm) => {
       if (changedRealm === realmId) void load();
     });
     return () => {

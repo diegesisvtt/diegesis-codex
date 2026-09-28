@@ -53,7 +53,7 @@ export interface PdfHighlight {
   text: string;
   /** set when the highlight was converted into a note */
   noteId?: string;
-  /** attached audio clip (mythril-audio:// URL) */
+  /** attached audio clip (diegesis-audio:// URL) */
   audioUrl?: string;
   audioName?: string;
   audioLoop?: boolean;

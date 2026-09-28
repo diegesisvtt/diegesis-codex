@@ -26,7 +26,7 @@ export const painSpecialist: Specialist<PainInput, PainDescription> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em descrição de dor do Mythril. Você escreve sofrimento físico como um ' +
+          'Você é o especialista em descrição de dor do Diegesis Codex. Você escreve sofrimento físico como um ' +
           'ARCO NARRATIVO PROGRESSIVO para o mestre ler ou adaptar em voz alta.\n\n' +
           'Estrutura (cada batida = 1 a 3 frases):\n' +
           '1. sensacaoInicial: a dor se instalando — sensorial e ESPECÍFICA (local do corpo, qualidade da dor: ' +

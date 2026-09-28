@@ -28,7 +28,7 @@ export const demonSpecialist: Specialist<DemonInput, DemonDescription> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em descrição de demônios do Mythril. Você escreve a REVELAÇÃO de um ' +
+          'Você é o especialista em descrição de demônios do Diegesis Codex. Você escreve a REVELAÇÃO de um ' +
           'demônio como um arco de 5 parágrafos, em SEGUNDA PESSOA ("você") e PRESENTE, para o mestre ' +
           'ler em voz alta no momento do encontro.\n\n' +
           'Estrutura (cada parágrafo = 2 a 4 frases):\n' +

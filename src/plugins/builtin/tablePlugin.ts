@@ -4,26 +4,26 @@ import { TableEditor } from '../../components/editors/table/TableEditor';
 import { createDefaultTable, serializeTable } from '@shared/table';
 
 /**
- * Tabela Interativa — documento próprio ('mythril/table') estilo Foundry
+ * Tabela Interativa — documento próprio ('diegesis/table') estilo Foundry
  * RollTable: linhas com peso, fórmula de dado opcional (faixas derivadas dos
  * pesos), link de resultados para outros documentos, colar de planilha e
  * rolagem simples. Pode ser embutida em notas via bloco "Tabela interativa".
  */
 export const tablePlugin: Plugin = {
   manifest: {
-    id: 'mythril/table',
+    id: 'diegesis/table',
     name: 'Tabela Interativa',
     version: '1.0.0',
     apiVersion: PLUGIN_API_VERSION,
     description:
       'Tabelas roláveis estilo Foundry: linhas com peso, fórmula de dado, links para documentos, importação por colagem e rolagem simples.',
-    author: 'Mythril',
+    author: 'Diegesis Codex',
     permissions: ['ui', 'docs:read'],
   },
   activate(ctx) {
-    ctx.editors.add({ docType: 'mythril/table', component: TableEditor });
+    ctx.editors.add({ docType: 'diegesis/table', component: TableEditor });
     ctx.docTypes.add({
-      docType: 'mythril/table',
+      docType: 'diegesis/table',
       label: 'Tabela Interativa',
       icon: Table,
       iconColor: 'text-table',

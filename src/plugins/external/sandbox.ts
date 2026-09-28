@@ -66,21 +66,21 @@ function docsApi(perms: Set<PluginPermission>, assertLive: () => void): External
   if (perms.has('docs:read')) {
     api.listByRealm = (realmId) => {
       assertLive();
-      return window.mythril.docs.listByRealm(realmId);
+      return window.diegesis.docs.listByRealm(realmId);
     };
     api.search = (realmId, query) => {
       assertLive();
-      return window.mythril.docs.search(realmId, query);
+      return window.diegesis.docs.search(realmId, query);
     };
   }
   if (perms.has('docs:write')) {
     api.create = (doc) => {
       assertLive();
-      return window.mythril.docs.create(doc);
+      return window.diegesis.docs.create(doc);
     };
     api.update = (id, changes) => {
       assertLive();
-      return window.mythril.docs.update(id, changes);
+      return window.diegesis.docs.update(id, changes);
     };
   }
   return api;
@@ -187,7 +187,7 @@ function sandboxRequire(name: string): unknown {
 
 /**
  * Avalia o código do plugin num "soft sandbox": os globals poderosos
- * (window, document, mythril, fetch, localStorage…) são sombreados dentro do
+ * (window, document, diegesis, fetch, localStorage…) são sombreados dentro do
  * escopo da função, e `require` só resolve módulos hospedados. É isolamento
  * de nível dissuasório — a fronteira real de segurança é o gateContext, que
  * torna as capacidades não declaradas inacessíveis estruturalmente.
@@ -215,7 +215,7 @@ export function evaluatePlugin(
     'top',
     'parent',
     'frames',
-    'mythril',
+    'diegesis',
     'fetch',
     'XMLHttpRequest',
     'WebSocket',
@@ -236,7 +236,7 @@ export function evaluatePlugin(
     shadow, // top
     shadow, // parent
     shadow, // frames
-    shadow, // mythril
+    shadow, // diegesis
     sandboxedFetch,
     shadow, // XMLHttpRequest
     shadow, // WebSocket

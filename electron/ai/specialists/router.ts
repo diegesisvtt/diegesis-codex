@@ -190,7 +190,7 @@ export async function routeGeneration(
         {
           role: 'system',
           content:
-            'Você é o roteador do Mythril, um estúdio de worldbuilding de RPG. Classifique a ÚLTIMA mensagem ' +
+            'Você é o roteador do Diegesis Codex, um estúdio de worldbuilding de RPG. Classifique a ÚLTIMA mensagem ' +
             'do usuário (no contexto da conversa) chamando a ferramenta route.\n\n' +
             '- mode="generate": o usuário pede para criar/inventar/gerar conteúdo novo — nomes, NPCs, vilões, ' +
             'personagens, motivações, monstros, criaturas, demônios, diálogos, discursos, tramas/plots, cenas, ' +

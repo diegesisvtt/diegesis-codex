@@ -8,9 +8,9 @@ GlobalWorkerOptions.workerSrc = workerUrl;
 
 export type { PDFDocumentProxy, PDFPageProxy };
 
-/** URL served by the custom `mythril-pdf` protocol registered in the main process. */
+/** URL served by the custom `diegesis-pdf` protocol registered in the main process. */
 export function pdfDocUrl(docId: string): string {
-  return `mythril-pdf://doc/${docId}`;
+  return `diegesis-pdf://doc/${docId}`;
 }
 
 // pdf.js shares ONE worker across all getDocument() calls — destroying a

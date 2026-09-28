@@ -30,7 +30,7 @@ import { usePluginManager } from '../../../plugins/manager';
 import { DocLinkPicker } from './DocLinkPicker';
 
 /**
- * Editor de Tabela Interativa (mythril/table) — linhas com peso, fórmula de
+ * Editor de Tabela Interativa (diegesis/table) — linhas com peso, fórmula de
  * dado opcional (faixas derivadas dos pesos, estilo Foundry), edição fluida
  * (Enter nova linha, colar de planilha/markdown, drag-and-drop p/ reordenar)
  * e rolagem encadeada (resultado que vincula outra tabela rola nela também).
@@ -126,7 +126,7 @@ export function TableEditor({ doc }: { doc: DocNode }) {
   /** resolve um docId vinculado para outra tabela do universo (rolagem encadeada) */
   const resolveTable = (docId: string) => {
     const d = docs.find((x) => x.id === docId);
-    return d && d.type === 'mythril/table'
+    return d && d.type === 'diegesis/table'
       ? { title: d.title || 'Sem título', table: parseTable(d.content) }
       : null;
   };
@@ -256,7 +256,7 @@ export function TableEditor({ doc }: { doc: DocNode }) {
             {finalStep.result.row.details && (
               <div className="text-[12px] text-ink-2 mt-1 whitespace-pre-wrap">{finalStep.result.row.details}</div>
             )}
-            {finalStep.result.row.docId && docs.find((d) => d.id === finalStep.result.row.docId)?.type !== 'mythril/table' && (
+            {finalStep.result.row.docId && docs.find((d) => d.id === finalStep.result.row.docId)?.type !== 'diegesis/table' && (
               <button
                 type="button"
                 onClick={() => openDocument(finalStep.result.row.docId!)}
@@ -383,13 +383,13 @@ export function TableEditor({ doc }: { doc: DocNode }) {
                         type="button"
                         onClick={() => openDocument(row.docId!)}
                         title={
-                          linkedDoc?.type === 'mythril/table'
+                          linkedDoc?.type === 'diegesis/table'
                             ? `Rola na tabela "${linkedDoc.title}" (encadeado)`
                             : docTitle(row.docId)
                         }
-                        className={`p-1 rounded ${linkedDoc?.type === 'mythril/table' ? 'text-table hover:bg-table/20' : 'text-accent-ink hover:bg-accent-soft'}`}
+                        className={`p-1 rounded ${linkedDoc?.type === 'diegesis/table' ? 'text-table hover:bg-table/20' : 'text-accent-ink hover:bg-accent-soft'}`}
                       >
-                        {linkedDoc?.type === 'mythril/table' ? <Dices size={12} /> : <Link2 size={12} />}
+                        {linkedDoc?.type === 'diegesis/table' ? <Dices size={12} /> : <Link2 size={12} />}
                       </button>
                     )}
                   </span>
@@ -419,7 +419,7 @@ export function TableEditor({ doc }: { doc: DocNode }) {
                       onChange={(id) => updateRow(row.id, { docId: id })}
                       onOpenDoc={openDocument}
                     />
-                    {linkedDoc?.type === 'mythril/table' && (
+                    {linkedDoc?.type === 'diegesis/table' && (
                       <div className="text-[10.5px] text-table select-none">
                         Vinculada a uma tabela: ao ser sorteada, rola automaticamente em "{linkedDoc.title}".
                       </div>

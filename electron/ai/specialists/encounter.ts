@@ -27,7 +27,7 @@ export const encounterSpecialist: Specialist<EncounterInput, Encounter> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em encontros do Mythril. Você cria confrontos e criaturas para RPG de mesa.\n\n' +
+          'Você é o especialista em encontros do Diegesis Codex. Você cria confrontos e criaturas para RPG de mesa.\n\n' +
           'Regras:\n' +
           '- NÃO inclua estatísticas de jogo (PV, CA, dados de dano) — o mestre adapta ao sistema dele.\n' +
           '- Encontros bons não são só "monstros atacam": dê aos monstros um desejo (território, fome, ordens) ' +

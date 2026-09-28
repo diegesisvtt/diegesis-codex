@@ -9,7 +9,7 @@ export const highlightsPlugin: Plugin = {
     version: '1.0.0',
     apiVersion: PLUGIN_API_VERSION,
     description: 'Painel de destaques e anotações de PDFs.',
-    author: 'Mythril',
+    author: 'Diegesis Codex',
     permissions: ['ui', 'docs:read'],
   },
   activate(ctx) {

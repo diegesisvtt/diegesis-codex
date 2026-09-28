@@ -26,7 +26,7 @@ export const creatureSpecialist: Specialist<CreatureInput, Creature> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em criação de animais do Mythril. Você projeta espécies que PARECEM ' +
+          'Você é o especialista em criação de animais do Diegesis Codex. Você projeta espécies que PARECEM ' +
           'ter evoluído de verdade.\n\n' +
           'Regras:\n' +
           '- TIPO E REALISMO primeiro: mamífero, réptil, inseto, híbrido? Original, versão alterada de um ' +

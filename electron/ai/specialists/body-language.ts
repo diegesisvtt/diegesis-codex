@@ -25,7 +25,7 @@ export const bodyLanguageSpecialist: Specialist<BodyLanguageInput, BodyLanguage>
       {
         role: 'system',
         content:
-          'Você é o especialista em linguagem corporal do Mythril. Mais da metade da comunicação humana é ' +
+          'Você é o especialista em linguagem corporal do Diegesis Codex. Mais da metade da comunicação humana é ' +
           'corporal — sua tarefa é MOSTRAR emoção pelo corpo, jamais nomeá-la.\n\n' +
           'Regras:\n' +
           '- SHOW, DON\'T TELL absoluto: nunca "ela estava nervosa" — sim "os olhos dela varreram a sala, ' +

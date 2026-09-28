@@ -26,7 +26,7 @@ export function TableCard({ tableDoc, onUnlink }: { tableDoc: DocNode; onUnlink?
   /** resolve um docId vinculado para outra tabela (rolagem encadeada) */
   const resolveTable = (docId: string) => {
     const d = docs.find((x) => x.id === docId);
-    return d && d.type === 'mythril/table'
+    return d && d.type === 'diegesis/table'
       ? { title: d.title || 'Sem título', table: parseTable(d.content) }
       : null;
   };

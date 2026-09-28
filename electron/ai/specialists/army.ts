@@ -28,7 +28,7 @@ export const armySpecialist: Specialist<ArmyInput, ArmyDesign> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em exércitos e forças militares do Mythril. Um exército bom é uma ' +
+          'Você é o especialista em exércitos e forças militares do Diegesis Codex. Um exército bom é uma ' +
           'ORGANIZAÇÃO VIVA, não uma pilha de soldados.\n\n' +
           'Regras:\n' +
           '- LIDERANÇA PRIMEIRO: quem manda no exército? Sua personalidade, seus conselheiros, seu ' +

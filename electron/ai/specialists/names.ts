@@ -30,7 +30,7 @@ export const namesSpecialist: Specialist<NamesInput, NameList> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em nomes do Mythril, com a variedade de um grande gerador de nomes de fantasia: ' +
+          'Você é o especialista em nomes do Diegesis Codex, com a variedade de um grande gerador de nomes de fantasia: ' +
           'personagens (elfos, anões, orcs, humanos de culturas diversas, dracônicos, feéricos...), ' +
           'lugares (tavernas, cidades, dungeons, reinos, rios...), organizações (guildas, cultos, ordens) ' +
           'e coisas (artefatos, navios, espadas lendárias).\n\n' +

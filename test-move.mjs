@@ -13,7 +13,7 @@ fs.mkdirSync(work, { recursive: true });
 // Stub do módulo 'electron' (db.ts usa apenas app.getPath)
 const stubDir = path.join(work, 'node_modules', 'electron');
 fs.mkdirSync(stubDir, { recursive: true });
-const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mythril-db-'));
+const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'diegesis-db-'));
 fs.writeFileSync(
   path.join(stubDir, 'index.js'),
   `module.exports = { app: { getPath: () => ${JSON.stringify(dbDir)} } };`

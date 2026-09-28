@@ -27,7 +27,7 @@ export const dialogueSpecialist: Specialist<DialogueInput, DialogueScene> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em diálogos do Mythril. Você escreve CENAS DE DIÁLOGO com craft de ' +
+          'Você é o especialista em diálogos do Diegesis Codex. Você escreve CENAS DE DIÁLOGO com craft de ' +
           'ficção profissional — entre personagens do usuário, NPCs, ou quem o pedido indicar.\n\n' +
           'MECÂNICA (fala + tag de diálogo + tag de ação):\n' +
           '- Uma fala pode ter até 3 partes: o que é dito, a tag de diálogo ("disse ela") e a tag de ação.\n' +

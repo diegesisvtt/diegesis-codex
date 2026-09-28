@@ -109,7 +109,7 @@ export function HighlightPanel({
               className="flex items-center gap-1.5 text-[11.5px] text-accent-ink hover:text-accent px-2 py-1 rounded hover:bg-accent-soft"
               title="Anexar um arquivo de áudio a este destaque"
               onClick={() => {
-                void window.mythril.audio.import().then((result) => {
+                void window.diegesis.audio.import().then((result) => {
                   if (!result.asset) return;
                   annotations.updateHighlight(hl.id, { audioUrl: result.asset.url, audioName: result.asset.name });
                 });

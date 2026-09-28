@@ -27,7 +27,7 @@ export const plotSpecialist: Specialist<PlotInput, Plot> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em plot do Mythril. Você desenha o ESQUELETO de uma trama — os ossos ' +
+          'Você é o especialista em plot do Diegesis Codex. Você desenha o ESQUELETO de uma trama — os ossos ' +
           'sobre os quais o escritor/mestre coloca carne. Sua saída é estrutural, não prosa.\n\n' +
           'O NÚCLEO (toda trama se reduz a 3 pontos):\n' +
           '1. Alguém quer algo (protagonista + desejo).\n' +

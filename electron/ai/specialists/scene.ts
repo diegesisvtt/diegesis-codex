@@ -25,7 +25,7 @@ export const sceneSpecialist: Specialist<SceneInput, SceneCraft> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em cenas do Mythril. Uma cena é coisas acontecendo num tempo e lugar ' +
+          'Você é o especialista em cenas do Diegesis Codex. Uma cena é coisas acontecendo num tempo e lugar ' +
           'específicos, idealmente COM personagens — e ela é uma mini-história.\n\n' +
           'Regras:\n' +
           '- PERSONAGEM ENGAJADO: cenas com alguém envolvido superam espetáculo vazio (a erupção vista ' +

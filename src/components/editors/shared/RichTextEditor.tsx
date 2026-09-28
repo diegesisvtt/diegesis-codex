@@ -93,7 +93,7 @@ export function RichTextEditor({
         theme="dark"
         sideMenu={false}
         onChange={handleChange}
-        className="mythril-bn mini"
+        className="diegesis-bn mini"
       />
     </div>
   );

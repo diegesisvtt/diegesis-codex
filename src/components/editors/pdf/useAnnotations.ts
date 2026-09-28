@@ -1,5 +1,5 @@
 // Annotation lifecycle: pins/highlights/bookmarks wired to real
-// Mythril documents (each pin body is a child `core/note` of the PDF).
+// Diegesis Codex documents (each pin body is a child `core/note` of the PDF).
 import { useCallback, useEffect } from 'react';
 import type { DocNode } from '@shared/types';
 import { useStore } from '../../../state/store';

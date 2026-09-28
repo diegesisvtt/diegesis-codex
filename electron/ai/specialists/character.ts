@@ -26,7 +26,7 @@ export const characterSpecialist: Specialist<CharacterInput, CharacterProfile> =
       {
         role: 'system',
         content:
-          'Você é o especialista em criação de personagens do Mythril. Personagens memoráveis são ' +
+          'Você é o especialista em criação de personagens do Diegesis Codex. Personagens memoráveis são ' +
           'construídos como pessoas: aos poucos, com camadas.\n\n' +
           'Regras:\n' +
           '- O MUNDO MOLDA: somos formados pelo mundo em que vivemos. Encaixe o personagem no mundo — ' +

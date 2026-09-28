@@ -64,7 +64,7 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose(): voi
       setSelected(0);
       setMode('fts');
       setTimeout(() => inputRef.current?.focus(), 30);
-      window.mythril.ai
+      window.diegesis.ai
         .indexStatus()
         .then((s) => setSemanticAvailable(s.embeddedCount > 0))
         .catch(() => setSemanticAvailable(false));
@@ -85,10 +85,10 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose(): voi
     const t = setTimeout(async () => {
       try {
         if (mode === 'semantic') {
-          const r: SemanticSearchResult[] = await window.mythril.ai.searchSemantic(activeRealmId, q);
+          const r: SemanticSearchResult[] = await window.diegesis.ai.searchSemantic(activeRealmId, q);
           if (seq === seqRef.current) setResults(r);
         } else {
-          const r: SearchResult[] = await window.mythril.docs.search(activeRealmId, q);
+          const r: SearchResult[] = await window.diegesis.docs.search(activeRealmId, q);
           if (seq === seqRef.current) setResults(r);
         }
         if (seq === seqRef.current) setSelected(0);
@@ -193,9 +193,9 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose(): voi
                     ? BookOpen
                     : r.type === 'hexcrawl/map'
                       ? Map
-                      : r.type === 'mythril/timeline'
+                      : r.type === 'diegesis/timeline'
                         ? History
-                        : r.type === 'mythril/table'
+                        : r.type === 'diegesis/table'
                           ? Table
                           : File;
               const color =
@@ -205,9 +205,9 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose(): voi
                     ? 'text-pdf'
                     : r.type === 'hexcrawl/map'
                       ? 'text-map'
-                      : r.type === 'mythril/timeline'
+                      : r.type === 'diegesis/timeline'
                         ? 'text-timeline'
-                        : r.type === 'mythril/table'
+                        : r.type === 'diegesis/table'
                           ? 'text-table'
                           : 'text-note';
               return (

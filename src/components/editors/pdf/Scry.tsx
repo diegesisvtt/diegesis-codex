@@ -35,7 +35,7 @@ export async function ensurePageThumb(docId: string, pdf: PDFDocumentProxy, page
   const useDisk = width <= DISK_CACHE_MAX_WIDTH;
   if (useDisk) {
     try {
-      const disk = await window.mythril.pdf.readThumb(docId, page);
+      const disk = await window.diegesis.pdf.readThumb(docId, page);
       if (disk) {
         const url = `data:image/jpeg;base64,${disk}`;
         cache.set(page, url);
@@ -63,7 +63,7 @@ export async function ensurePageThumb(docId: string, pdf: PDFDocumentProxy, page
   }
   cache.set(page, url);
   if (useDisk) {
-    window.mythril.pdf.writeThumb(docId, page, url.split(',')[1]).catch(() => {});
+    window.diegesis.pdf.writeThumb(docId, page, url.split(',')[1]).catch(() => {});
   }
   return url;
 }

@@ -26,7 +26,7 @@ export const innerStorySpecialist: Specialist<InnerStoryInput, InnerStory> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em histórias dentro da história do Mythril. Uma história aninhada não é ' +
+          'Você é o especialista em histórias dentro da história do Diegesis Codex. Uma história aninhada não é ' +
           'enfeite — é uma ferramenta.\n\n' +
           'Regras:\n' +
           '- PROPÓSITO ANTES DE TUDO: por que contar como história em vez de resumir em duas frases? ' +

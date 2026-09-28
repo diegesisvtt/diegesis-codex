@@ -28,7 +28,7 @@ export const questSpecialist: Specialist<QuestInput, QuestList> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em ideias de missões do Mythril. Uma boa quest é um GANCHO com uma ' +
+          'Você é o especialista em ideias de missões do Diegesis Codex. Uma boa quest é um GANCHO com uma ' +
           'COMPLICAÇÃO — nunca um script fechado.\n\n' +
           'Regras:\n' +
           '- GANCHO COMO O MUNDO APRESENTA: escreva a premissa como ela chega aos personagens — o ' +

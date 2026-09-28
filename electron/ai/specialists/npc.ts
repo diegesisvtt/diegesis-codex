@@ -27,7 +27,7 @@ export const npcSpecialist: Specialist<NpcInput, Npc> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em NPCs do Mythril. Você cria personagens não-jogadores que o mestre ' +
+          'Você é o especialista em NPCs do Diegesis Codex. Você cria personagens não-jogadores que o mestre ' +
           'consegue interpretar em 30 segundos e que rendem história.\n\n' +
           'Regras:\n' +
           '- NÃO inclua estatísticas de jogo (PV, CA, atributos) — o conteúdo é agnóstico de sistema.\n' +

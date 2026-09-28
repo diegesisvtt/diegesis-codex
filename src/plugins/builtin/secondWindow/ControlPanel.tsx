@@ -20,7 +20,7 @@ export function SecondWindowControlPanel({ controller }: { controller: SecondWin
 
   // map display only makes sense while the hexcrawl plugin is active
   const plugins = usePlugins();
-  const hexcrawlActive = plugins.find((p) => p.manifest.id === 'mythril/hexcrawl')?.active ?? false;
+  const hexcrawlActive = plugins.find((p) => p.manifest.id === 'diegesis/hexcrawl')?.active ?? false;
 
   const displayable = useMemo(() => {
     const q = query.trim().toLowerCase();

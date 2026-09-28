@@ -16,7 +16,7 @@ let db: Database.Database;
 export function initDb(dbPath?: string): void {
   const dir = dbPath ? path.dirname(dbPath) : app.getPath('userData');
   fs.mkdirSync(dir, { recursive: true });
-  db = new Database(dbPath ?? path.join(dir, 'mythril.db'));
+  db = new Database(dbPath ?? path.join(dir, 'diegesis.db'));
   sqliteVec.load(db);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
@@ -173,7 +173,7 @@ function migrate(): void {
       {
         type: 'heading',
         props: { level: 1 },
-        content: [{ type: 'text', text: 'Bem-vindo ao Mythril', styles: {} }],
+        content: [{ type: 'text', text: 'Bem-vindo ao Diegesis Codex', styles: {} }],
       },
       {
         type: 'paragraph',
@@ -184,7 +184,7 @@ function migrate(): void {
     ];
     db.prepare(
       'INSERT INTO documents (id, realm_id, parent_id, type, title, content, position, updated_at) VALUES (?, ?, NULL, ?, ?, ?, 0, ?)'
-    ).run(generateId(), realmId, 'core/note', 'Bem-vindo ao Mythril', JSON.stringify(welcome), Date.now());
+    ).run(generateId(), realmId, 'core/note', 'Bem-vindo ao Diegesis Codex', JSON.stringify(welcome), Date.now());
 
     rebuildFts();
   }
@@ -220,11 +220,11 @@ export function extractPlainText(content: string | null): string {
       return parts.join(' ');
     }
     // timelines: títulos/descrições de eventos, eras, lanes, tags e luas
-    if (parsed && typeof parsed === 'object' && parsed.kind === 'mythril-timeline') {
+    if (parsed && typeof parsed === 'object' && parsed.kind === 'diegesis-timeline') {
       return extractTimelineText(content);
     }
     // tabelas interativas: resultados, detalhes e fórmula
-    if (parsed && typeof parsed === 'object' && parsed.kind === 'mythril-table') {
+    if (parsed && typeof parsed === 'object' && parsed.kind === 'diegesis-table') {
       return extractTableText(content);
     }
     // notes (BlockNote JSON), whiteboards and legacy content

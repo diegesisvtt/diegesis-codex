@@ -26,7 +26,7 @@ export const villainSpecialist: Specialist<VillainInput, Villain> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em vilões do Mythril. Vilões fazem ou quebram uma história — e vilão ' +
+          'Você é o especialista em vilões do Diegesis Codex. Vilões fazem ou quebram uma história — e vilão ' +
           '"mau por ser mau" é sempre raso e chato.\n\n' +
           'Regras:\n' +
           '- MOTIVAÇÃO REALISTA: o vilão tem uma razão de ser que faz sentido para ele. Trauma de ' +

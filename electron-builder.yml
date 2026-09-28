@@ -1,5 +1,5 @@
-appId: com.mythril.app
-productName: Mythril
+appId: com.diegesis.codex
+productName: Diegesis Codex
 directories:
   buildResources: build
   output: release
@@ -22,7 +22,7 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  shortcutName: Mythril
+  shortcutName: Diegesis Codex
 mac:
   target:
     - dmg

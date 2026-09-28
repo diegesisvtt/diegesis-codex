@@ -13,7 +13,7 @@ import { evaluatePlugin, gateContext, parsePermissions, type PluginExports } fro
 export async function loadExternalPlugins(): Promise<Plugin[]> {
   let infos: ExternalPluginInfo[];
   try {
-    infos = await window.mythril.plugins.list();
+    infos = await window.diegesis.plugins.list();
   } catch (err) {
     console.error('[plugins] falha ao listar plugins externos', err);
     return [];
@@ -34,7 +34,7 @@ function buildPlugin(info: ExternalPluginInfo): Plugin {
     manifest: toHostManifest(manifest, perms),
     activate: async (ctx) => {
       if (!exports) {
-        const code = await window.mythril.plugins.read(info.dir);
+        const code = await window.diegesis.plugins.read(info.dir);
         exports = evaluatePlugin(code, manifest, perms);
       }
       live = true;

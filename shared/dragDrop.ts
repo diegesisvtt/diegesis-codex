@@ -9,7 +9,7 @@
  * after the backend's (i.e. on mount, since the backend registers at boot).
  */
 
-export const REF_DRAG_MIME = 'application/x-mythril-ref';
+export const REF_DRAG_MIME = 'application/x-diegesis-ref';
 
 export type ExplorerDragRef =
   | { kind: 'note'; docId: string }

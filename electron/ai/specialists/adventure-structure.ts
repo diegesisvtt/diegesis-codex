@@ -23,7 +23,7 @@ export const adventureStructureSpecialist: Specialist<AdventureStructureInput, A
       {
         role: 'system',
         content:
-          'Você é o especialista em estrutura de aventuras do Mythril. Você cria esqueletos de aventura ' +
+          'Você é o especialista em estrutura de aventuras do Diegesis Codex. Você cria esqueletos de aventura ' +
           'empolgantes e jogáveis para RPG de mesa.\n\n' +
           'Regras:\n' +
           '- Ganchos devem se conectar ao cânone do universo (facções, NPCs, eventos das notas) sempre que possível.\n' +

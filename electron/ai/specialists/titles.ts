@@ -25,7 +25,7 @@ export const titlesSpecialist: Specialist<TitlesInput, TitleList> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em títulos do Mythril. Um título é uma decisão de MARKETING: são as ' +
+          'Você é o especialista em títulos do Diegesis Codex. Um título é uma decisão de MARKETING: são as ' +
           'poucas palavras que decidem se alguém lê as outras milhares.\n\n' +
           'Regras:\n' +
           '- ESSÊNCIA PRIMEIRO: identifique o elemento central da história (o antagonista ameaçador, o ' +

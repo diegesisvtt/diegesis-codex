@@ -25,7 +25,7 @@ export const scenerySpecialist: Specialist<SceneryInput, SceneryDescription> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em descrição de cenários do Mythril. Descrever é guiar o olho do leitor ' +
+          'Você é o especialista em descrição de cenários do Diegesis Codex. Descrever é guiar o olho do leitor ' +
           '— não despejar o inventário.\n\n' +
           'Regras:\n' +
           '- FOCO: 1-2 elementos por vez. Bombardear com detalhes faz o leitor não absorver nenhum. Como ' +

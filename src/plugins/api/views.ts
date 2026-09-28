@@ -21,7 +21,7 @@ export interface ViewContribution {
   order?: number;
 }
 
-/** A button contributed to the title bar (Mythril's ribbon). */
+/** A button contributed to the title bar (Diegesis Codex's ribbon). */
 export interface RibbonItem {
   id: string;
   title: string;

@@ -74,7 +74,7 @@ const processingDocs = new Set<string>();
 // ---------------------------------------------------------------------------
 
 // drag a pin note from the Explorer tree onto a page → link token
-const PIN_NOTE_MIME = 'application/x-mythril-pin-note';
+const PIN_NOTE_MIME = 'application/x-diegesis-pin-note';
 
 const PAGES_TABSET_ID = 'pdf-pages-tabset';
 const PAGES_TAB_ID = 'pdf-pages';
@@ -376,7 +376,7 @@ export function PdfReader({ doc }: { doc: DocNode }) {
         if (cover) c.file.coverThumb = cover;
       });
       setProcessing('Indexando texto…');
-      window.mythril.pdf.saveText(doc.id, pages).catch(console.error);
+      window.diegesis.pdf.saveText(doc.id, pages).catch(console.error);
       if (!cancelled) setProcessing(null);
     })().finally(() => processingDocs.delete(doc.id));
     return () => {
@@ -519,7 +519,7 @@ export function PdfReader({ doc }: { doc: DocNode }) {
         setCaptureError('Nenhum texto nessa região. Em PDFs escaneados (imagem) a extração não funciona.');
         return;
       }
-      const res = await window.mythril.ai.extractTable(text);
+      const res = await window.diegesis.ai.extractTable(text);
       if (!res.ok || !res.table) {
         setCaptureError(res.error ?? 'Falha ao extrair a tabela.');
         return;
@@ -527,7 +527,7 @@ export function PdfReader({ doc }: { doc: DocNode }) {
       const table = createDefaultTable();
       table.formula = res.table.formula;
       table.rows = res.table.linhas.map((l) => ({ ...createEmptyRow(), text: l.texto, weight: l.peso }));
-      const newDoc = await createDocument('mythril/table', null, res.table.titulo, serializeTable(table));
+      const newDoc = await createDocument('diegesis/table', null, res.table.titulo, serializeTable(table));
       openDocument(newDoc.id);
     } catch (err) {
       setCaptureError(err instanceof Error ? err.message : String(err));

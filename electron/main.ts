@@ -107,7 +107,7 @@ function registerIpc(): void {
   ipcMain.handle('ai:providers:search', () => listSearchProviders());
   ipcMain.handle('ai:search:test', async (_e, providerId: string, config: Record<string, string>) => {
     try {
-      await runWebSearch('mythril test', { providerId, config: aiConfig.resolveMaskedSearchSecrets(providerId, config) });
+      await runWebSearch('diegesis test', { providerId, config: aiConfig.resolveMaskedSearchSecrets(providerId, config) });
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -215,7 +215,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#18181b',
-    title: 'Mythril',
+    title: 'Diegesis Codex',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -261,7 +261,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  // No native menu: Mythril has its own title bar, and with autoHideMenuBar
+  // No native menu: Diegesis Codex has its own title bar, and with autoHideMenuBar
   // pressing Alt would reveal/focus the hidden menu bar — stealing focus and
   // breaking Alt as the snap-bypass modifier in the canvas editors.
   // (On macOS the menu is kept: the edit roles power Cmd+C/V in text fields.)

@@ -1,9 +1,9 @@
 /// <reference types="vite/client" />
-import type { MythrilApi } from '@shared/types';
+import type { DiegesisCodexApi } from '@shared/types';
 
 declare global {
   interface Window {
-    mythril: MythrilApi;
+    diegesis: DiegesisCodexApi;
   }
 }
 

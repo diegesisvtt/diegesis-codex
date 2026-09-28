@@ -1,13 +1,13 @@
 'use strict';
 /**
- * Plugin de exemplo para o Mythril — contagem de palavras do universo ativo.
+ * Plugin de exemplo para o Diegesis Codex — contagem de palavras do universo ativo.
  *
  * Instalação:
  *   1. No app: Configurações → Plugins → Pasta (abre a pasta de plugins)
  *   2. Copie esta pasta ("word-count") para lá
  *   3. Configurações → Plugins → Recarregar
  *
- * O código roda num soft sandbox: sem acesso a window/document/mythril — só
+ * O código roda num soft sandbox: sem acesso a window/document/diegesis — só
  * ao `ctx` recebido em activate(), limitado às permissões do manifest.json.
  * Módulos disponíveis via require: 'react', 'react/jsx-runtime', 'lucide-react'.
  */

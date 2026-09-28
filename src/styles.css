@@ -4,7 +4,7 @@
 @import "@blocknote/ariakit/style.css";
 
 /* ============================================================
-   MYTHRIL — Design tokens (Notion-inspired dark)
+   DIEGESIS CODEX — Design tokens (Notion-inspired dark)
    ============================================================ */
 @theme {
   --color-app: #191919;
@@ -174,17 +174,17 @@ body,
 /* ============================================================
    react-arborist — Notion sidebar rows
    ============================================================ */
-.mythril-tree [role="treeitem"] {
+.diegesis-tree [role="treeitem"] {
   outline: none;
 }
-.mythril-tree [role="tree"]:focus {
+.diegesis-tree [role="tree"]:focus {
   outline: none;
 }
 
 /* ============================================================
-   BlockNote — Mythril dark theme (Notion-inspired)
+   BlockNote — Diegesis Codex dark theme (Notion-inspired)
    ============================================================ */
-.mythril-bn {
+.diegesis-bn {
   --bn-colors-editor-text: var(--color-ink-1);
   --bn-colors-editor-background: transparent;
   --bn-colors-side-menu: var(--color-ink-3);
@@ -203,7 +203,7 @@ body,
   background: transparent;
 }
 
-.mythril-bn .bn-editor {
+.diegesis-bn .bn-editor {
   font-size: 16px;
   line-height: 1.65;
   color: var(--color-ink-1);
@@ -214,12 +214,12 @@ body,
   padding-inline: 54px 16px;
   padding-bottom: 40vh;
 }
-.mythril-bn .bn-editor ::selection {
+.diegesis-bn .bn-editor ::selection {
   background: rgba(35, 131, 226, 0.32);
 }
 
 /* Placeholder */
-.mythril-bn .bn-block-content:has(.ProseMirror-trailingBreak:only-child):after {
+.diegesis-bn .bn-block-content:has(.ProseMirror-trailingBreak:only-child):after {
   color: var(--color-ink-3);
   font-style: normal;
 }
@@ -229,24 +229,24 @@ body,
    aqui desalinham os ícones laterais */
 
 /* Links */
-.mythril-bn .bn-editor a {
+.diegesis-bn .bn-editor a {
   color: var(--color-accent-ink);
   text-decoration: underline;
   text-decoration-color: rgba(82, 156, 202, 0.4);
   text-underline-offset: 2px;
 }
-.mythril-bn .bn-editor a:hover {
+.diegesis-bn .bn-editor a:hover {
   text-decoration-color: var(--color-accent-ink);
 }
 
 /* Quote — Notion bar style */
-.mythril-bn [data-content-type="quote"] blockquote {
+.diegesis-bn [data-content-type="quote"] blockquote {
   color: var(--color-ink-1);
   border-left: 3px solid var(--color-ink-1);
 }
 
 /* Inline code — Notion red */
-.mythril-bn .bn-inline-content code {
+.diegesis-bn .bn-inline-content code {
   font-family: var(--font-mono);
   font-size: 0.85em;
   color: #eb5757;
@@ -256,13 +256,13 @@ body,
 }
 
 /* Code block */
-.mythril-bn .bn-block-content[data-content-type="codeBlock"] {
+.diegesis-bn .bn-block-content[data-content-type="codeBlock"] {
   color: var(--color-ink-1);
   background-color: var(--color-sidebar);
   border: 1px solid var(--color-line);
   border-radius: 6px;
 }
-.mythril-bn .bn-block-content[data-content-type="codeBlock"] > pre {
+.diegesis-bn .bn-block-content[data-content-type="codeBlock"] > pre {
   font-family: var(--font-mono);
   font-size: 0.85em;
   line-height: 1.6;
@@ -270,38 +270,38 @@ body,
 }
 
 /* Divider */
-.mythril-bn [data-content-type="divider"] hr {
+.diegesis-bn [data-content-type="divider"] hr {
   border-top-color: var(--color-line-strong);
 }
 
 /* Images */
-.mythril-bn .bn-visual-media {
+.diegesis-bn .bn-visual-media {
   border-radius: 4px;
 }
 
 /* Tables (native BlockNote table block) — header destacado, zebra, tema do app */
-.mythril-bn [data-content-type="table"] table {
+.diegesis-bn [data-content-type="table"] table {
   border-collapse: collapse;
   margin: 4px 0;
   font-size: 13.5px;
 }
-.mythril-bn [data-content-type="table"] td,
-.mythril-bn [data-content-type="table"] th {
+.diegesis-bn [data-content-type="table"] td,
+.diegesis-bn [data-content-type="table"] th {
   border: 1px solid var(--color-line-strong);
   padding: 5px 10px;
   min-width: 80px;
   vertical-align: top;
 }
-.mythril-bn [data-content-type="table"] tr:first-child td,
-.mythril-bn [data-content-type="table"] tr:first-child th {
+.diegesis-bn [data-content-type="table"] tr:first-child td,
+.diegesis-bn [data-content-type="table"] tr:first-child th {
   background: var(--color-overlay);
   font-weight: 600;
   color: var(--color-ink-1);
 }
-.mythril-bn [data-content-type="table"] tr:nth-child(2n + 1):not(:first-child) td {
+.diegesis-bn [data-content-type="table"] tr:nth-child(2n + 1):not(:first-child) td {
   background: var(--color-hover);
 }
-.mythril-bn [data-content-type="table"] .selectedCell:after {
+.diegesis-bn [data-content-type="table"] .selectedCell:after {
   background: var(--color-accent-soft);
 }
 
@@ -320,7 +320,7 @@ body,
 }
 
 /* Embedded mode (PDF cards) — compact chrome */
-.mythril-bn.embedded .bn-editor {
+.diegesis-bn.embedded .bn-editor {
   max-width: none;
   font-size: 13.5px;
   padding-inline: 28px 4px;
@@ -328,7 +328,7 @@ body,
 }
 
 /* Mini mode (whiteboard notes) — no side menu, tight padding */
-.mythril-bn.mini .bn-editor {
+.diegesis-bn.mini .bn-editor {
   max-width: none;
   font-size: 14px;
   line-height: 1.5;
@@ -337,13 +337,13 @@ body,
 }
 
 /* Chat mode (assistant messages) — compact, read-only, transparent bg */
-.mythril-bn.chat,
-.mythril-bn.chat .bn-editor,
-.mythril-bn.chat.bn-dark-theme,
-.mythril-bn.chat .bn-container {
+.diegesis-bn.chat,
+.diegesis-bn.chat .bn-editor,
+.diegesis-bn.chat.bn-dark-theme,
+.diegesis-bn.chat .bn-container {
   background: transparent;
 }
-.mythril-bn.chat .bn-editor {
+.diegesis-bn.chat .bn-editor {
   max-width: none;
   font-size: 13.5px;
   line-height: 1.65;
@@ -351,17 +351,17 @@ body,
   min-height: 0;
   cursor: default;
 }
-.mythril-bn.chat .bn-editor .bn-block-outer:not(:first-child) {
+.diegesis-bn.chat .bn-editor .bn-block-outer:not(:first-child) {
   margin-top: 0.2em;
 }
-.mythril-bn.chat .bn-editor h1,
-.mythril-bn.chat .bn-editor h2,
-.mythril-bn.chat .bn-editor h3 {
+.diegesis-bn.chat .bn-editor h1,
+.diegesis-bn.chat .bn-editor h2,
+.diegesis-bn.chat .bn-editor h3 {
   margin-top: 0.55em;
 }
 
-/* Inline RAG citation badges ([n] → mythril.source links) */
-.mythril-bn.chat .bn-editor a[href^="https://mythril.source/"] {
+/* Inline RAG citation badges ([n] → diegesis.source links) */
+.diegesis-bn.chat .bn-editor a[href^="https://diegesis.source/"] {
   display: inline-block;
   font-size: 10px;
   font-weight: 700;
@@ -375,7 +375,7 @@ body,
   vertical-align: super;
   cursor: pointer;
 }
-.mythril-bn.chat .bn-editor a[href^="https://mythril.source/"]:hover {
+.diegesis-bn.chat .bn-editor a[href^="https://diegesis.source/"]:hover {
   background: var(--color-accent);
   color: #fff;
 }

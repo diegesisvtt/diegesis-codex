@@ -26,7 +26,7 @@ export const openingSpecialist: Specialist<OpeningInput, Opening> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em aberturas do Mythril. A primeira frase decide se o leitor embarca na ' +
+          'Você é o especialista em aberturas do Diegesis Codex. A primeira frase decide se o leitor embarca na ' +
           'jornada — é a primeira impressão, e primeira impressão é tudo.\n\n' +
           'Regras:\n' +
           '- GANCHO COM PROMESSA REAL: capture atenção com tensão, intriga ou curiosidade — mas a abertura ' +

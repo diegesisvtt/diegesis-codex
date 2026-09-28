@@ -55,7 +55,7 @@ function buildSystemPrompt(
   useWebSearch: boolean
 ): string {
   const parts: string[] = [
-    'Você é o assistente do Mythril, um estúdio de worldbuilding. Responda no idioma do usuário.',
+    'Você é o assistente do Diegesis Codex, um estúdio de worldbuilding. Responda no idioma do usuário.',
   ];
 
   if (chunks && chunks.length > 0) {

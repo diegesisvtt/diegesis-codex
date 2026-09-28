@@ -82,7 +82,7 @@ export interface TimelineLink {
 
 export interface TimelineData {
   /** marcador de formato (busca/indexação identificam o doc) */
-  kind: 'mythril-timeline';
+  kind: 'diegesis-timeline';
   version: 1;
   calendar: TimelineCalendar;
   moons: TimelineMoon[];
@@ -247,7 +247,7 @@ export const GREGORIAN_CALENDAR: TimelineCalendar = {
 
 export function createDefaultTimeline(): TimelineData {
   return {
-    kind: 'mythril-timeline',
+    kind: 'diegesis-timeline',
     version: 1,
     calendar: GREGORIAN_CALENDAR,
     moons: [],
@@ -271,7 +271,7 @@ export function parseTimeline(content: string | null | undefined): TimelineData 
     if (!raw || typeof raw !== 'object') return base;
     const cal = raw.calendar;
     return {
-      kind: 'mythril-timeline',
+      kind: 'diegesis-timeline',
       version: 1,
       calendar:
         cal && Array.isArray(cal.months) && cal.months.length > 0

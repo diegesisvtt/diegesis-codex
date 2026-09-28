@@ -251,14 +251,14 @@ function GeneralSection() {
   const [version, setVersion] = useState('');
   const [platform, setPlatform] = useState('');
   useEffect(() => {
-    window.mythril.app.version().then(setVersion);
-    window.mythril.app.platform().then(setPlatform);
+    window.diegesis.app.version().then(setVersion);
+    window.diegesis.app.platform().then(setPlatform);
   }, []);
   return (
     <section className="bg-elevated border border-line rounded-lg p-5">
       <h3 className="text-[14px] font-semibold text-ink-1 flex items-center gap-2 mb-4">
         <Info size={15} className="text-accent-ink" />
-        Sobre o Mythril
+        Sobre o Diegesis Codex
       </h3>
       <dl className="flex flex-col gap-2.5 text-[13px]">
         <div className="flex items-center justify-between">
@@ -282,10 +282,10 @@ function AISection() {
 
   const reload = useCallback(async () => {
     const [p, sp, s, st] = await Promise.all([
-      window.mythril.ai.providers(),
-      window.mythril.ai.searchProviders(),
-      window.mythril.ai.getSettings(),
-      window.mythril.ai.indexStatus(),
+      window.diegesis.ai.providers(),
+      window.diegesis.ai.searchProviders(),
+      window.diegesis.ai.getSettings(),
+      window.diegesis.ai.indexStatus(),
     ]);
     setProviders(p);
     setSearchProviders(sp);
@@ -295,7 +295,7 @@ function AISection() {
 
   useEffect(() => {
     reload();
-    return window.mythril.ai.onIndexStatus(setStatus);
+    return window.diegesis.ai.onIndexStatus(setStatus);
   }, [reload]);
 
   if (!settings) return null;
@@ -310,10 +310,10 @@ function AISection() {
         providers={providers}
         saved={settings.chat}
         onSave={async (cfg) => {
-          await window.mythril.ai.setChatProvider(cfg);
+          await window.diegesis.ai.setChatProvider(cfg);
           await reload();
         }}
-        onTest={(id, cfg) => window.mythril.ai.testProvider(id, cfg)}
+        onTest={(id, cfg) => window.diegesis.ai.testProvider(id, cfg)}
       />
 
       <ProviderSection
@@ -324,13 +324,13 @@ function AISection() {
         providers={searchProviders.filter((p) => p.id !== 'duckduckgo')}
         saved={settings.search}
         onSave={async (cfg) => {
-          await window.mythril.ai.setSearchProvider(cfg);
+          await window.diegesis.ai.setSearchProvider(cfg);
           await reload();
         }}
-        onTest={(id, cfg) => window.mythril.ai.testSearchProvider(id, cfg)}
+        onTest={(id, cfg) => window.diegesis.ai.testSearchProvider(id, cfg)}
       />
 
-      {status && <IndexCard status={status} onRebuild={() => window.mythril.ai.rebuildIndex()} />}
+      {status && <IndexCard status={status} onRebuild={() => window.diegesis.ai.rebuildIndex()} />}
     </>
   );
 }
@@ -421,7 +421,7 @@ function PluginsSection() {
         Plugins instalados
       </h3>
       <p className="text-[12px] text-ink-3 mb-4 leading-relaxed">
-        Os recursos do Mythril são plugins sobre a mesma API pública. Desativar um plugin remove seus comandos,
+        Os recursos do Diegesis Codex são plugins sobre a mesma API pública. Desativar um plugin remove seus comandos,
         painéis e botões da interface; reativar os restaura.
       </p>
 
@@ -438,7 +438,7 @@ function PluginsSection() {
         <h4 className="text-[11px] font-semibold uppercase tracking-widest text-ink-3">Comunidade</h4>
         <div className="flex items-center gap-1.5 shrink-0">
           <button
-            onClick={() => window.mythril.plugins.openFolder()}
+            onClick={() => window.diegesis.plugins.openFolder()}
             title="Abrir pasta de plugins da comunidade"
             className="flex items-center gap-1.5 text-[11px] text-ink-3 hover:text-ink-2 px-2 py-1 rounded-md hover:bg-hover transition-colors border border-line bg-sidebar"
           >

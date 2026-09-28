@@ -1,4 +1,4 @@
-// Modelo da "Tabela Interativa" (mythril/table): linhas com peso, fórmula de
+// Modelo da "Tabela Interativa" (diegesis/table): linhas com peso, fórmula de
 // dado opcional, faixas derivadas cumulativamente dos pesos (estilo Foundry)
 // e rolagem simples (botão rolar). TS puro — usado pelo renderer e pelo main.
 
@@ -15,7 +15,7 @@ export interface TableRow {
 }
 
 export interface InteractiveTable {
-  kind: 'mythril-table';
+  kind: 'diegesis-table';
   version: 1;
   /** fórmula de dado, ex: '1d20', '2d6'; '' = sorteio ponderado puro */
   formula: string;
@@ -51,7 +51,7 @@ export function createEmptyRow(): TableRow {
 }
 
 export function createDefaultTable(): InteractiveTable {
-  return { kind: 'mythril-table', version: 1, formula: '', rows: [createEmptyRow()] };
+  return { kind: 'diegesis-table', version: 1, formula: '', rows: [createEmptyRow()] };
 }
 
 // ---------- parsing / serialização ----------
@@ -65,7 +65,7 @@ export function parseTable(content: string | null | undefined): InteractiveTable
   if (!content) return base;
   try {
     const raw = JSON.parse(content);
-    if (!raw || typeof raw !== 'object' || raw.kind !== 'mythril-table') return base;
+    if (!raw || typeof raw !== 'object' || raw.kind !== 'diegesis-table') return base;
     const rows: TableRow[] = Array.isArray(raw.rows)
       ? raw.rows
           .filter((r: TableRow) => r && isStr(r.id))
@@ -78,7 +78,7 @@ export function parseTable(content: string | null | undefined): InteractiveTable
           }))
       : [];
     return {
-      kind: 'mythril-table',
+      kind: 'diegesis-table',
       version: 1,
       formula: isStr(raw.formula) && parseFormula(raw.formula) ? raw.formula.trim().toLowerCase() : '',
       rows,

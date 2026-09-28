@@ -10,7 +10,7 @@ export const aiChatPlugin: Plugin = {
     version: '1.0.0',
     apiVersion: PLUGIN_API_VERSION,
     description: 'Chat com IA contextualizado pelos documentos do universo.',
-    author: 'Mythril',
+    author: 'Diegesis Codex',
     permissions: ['ui', 'commands', 'ai'],
   },
   activate(ctx) {

@@ -150,9 +150,9 @@ export async function executeTool(
                   ? 'pdf'
                   : d.type === 'hexcrawl/map'
                     ? 'hexmap'
-                    : d.type === 'mythril/timeline'
+                    : d.type === 'diegesis/timeline'
                       ? 'timeline'
-                      : d.type === 'mythril/table'
+                      : d.type === 'diegesis/table'
                         ? 'table'
                         : 'note',
           parentId: d.parentId,

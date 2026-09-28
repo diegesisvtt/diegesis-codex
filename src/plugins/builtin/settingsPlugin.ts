@@ -10,7 +10,7 @@ export const settingsPlugin: Plugin = {
     version: '1.0.0',
     apiVersion: PLUGIN_API_VERSION,
     description: 'Painel de configurações do aplicativo.',
-    author: 'Mythril',
+    author: 'Diegesis Codex',
     permissions: ['ui', 'commands', 'settings'],
     // sem o gerenciador de plugins o usuário não consegue reativar os demais
     required: true,

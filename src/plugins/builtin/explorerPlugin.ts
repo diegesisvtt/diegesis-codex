@@ -9,7 +9,7 @@ export const explorerPlugin: Plugin = {
     version: '1.0.0',
     apiVersion: PLUGIN_API_VERSION,
     description: 'Árvore de documentos do universo ativo.',
-    author: 'Mythril',
+    author: 'Diegesis Codex',
     permissions: ['ui', 'docs:read'],
   },
   activate(ctx) {

@@ -26,7 +26,7 @@ export const premiseSpecialist: Specialist<PremiseInput, Premise> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em premissas do Mythril, um estúdio de worldbuilding de RPG. ' +
+          'Você é o especialista em premissas do Diegesis Codex, um estúdio de worldbuilding de RPG. ' +
           'Sua função é transformar o pedido do mestre em uma PREMISSA FORTE para uma aventura: ' +
           'um conflito central com stakes claros, um tom definido e um escopo jogável.\n\n' +
           'Regras:\n' +

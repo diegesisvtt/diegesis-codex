@@ -11,13 +11,13 @@ import { SecondWindowControlPanel } from './secondWindow/ControlPanel';
  */
 export const secondWindowPlugin: Plugin = {
   manifest: {
-    id: 'mythril/second-window',
+    id: 'diegesis/second-window',
     name: 'Second Window',
     version: '1.0.0',
     apiVersion: PLUGIN_API_VERSION,
     description:
       'Janela secundária para os jogadores: notas como pergaminhos antigos, mapas hexcrawl com névoa de guerra e viewport controlado em tempo real.',
-    author: 'Mythril',
+    author: 'Diegesis Codex',
     permissions: ['ui', 'commands', 'events', 'settings'],
   },
   activate(ctx) {
@@ -53,9 +53,9 @@ export const secondWindowPlugin: Plugin = {
 
     // only meaningful while the hexcrawl plugin is active — demonstrates the
     // plugin-status introspection added to the app facade
-    const hexcrawlActive = ctx.app.plugins.isActive('mythril/hexcrawl');
+    const hexcrawlActive = ctx.app.plugins.isActive('diegesis/hexcrawl');
     if (!hexcrawlActive) {
-      console.info("[second-window] plugin 'mythril/hexcrawl' inativo — exibição de mapas indisponível");
+      console.info("[second-window] plugin 'diegesis/hexcrawl' inativo — exibição de mapas indisponível");
     }
   },
 };

@@ -37,8 +37,8 @@ export type DocumentType =
   | 'core/folder'
   | 'core/pdf'
   | 'hexcrawl/map'
-  | 'mythril/timeline'
-  | 'mythril/table';
+  | 'diegesis/timeline'
+  | 'diegesis/table';
 
 export interface Realm {
   id: string;
@@ -279,7 +279,7 @@ export interface AudioAsset {
   id: string;
   /** original file name, for display */
   name: string;
-  /** mythril-audio:// URL used by players */
+  /** diegesis-audio:// URL used by players */
   url: string;
   size: number;
 }
@@ -318,7 +318,7 @@ export type SecondWindowState =
   | { kind: 'note'; realmId: string; docId: string }
   | { kind: 'map'; realmId: string; docId: string; viewport?: MapViewport | null };
 
-export interface MythrilApi {
+export interface DiegesisCodexApi {
   realms: {
     list(): Promise<Realm[]>;
     create(name: string): Promise<Realm>;
@@ -412,7 +412,7 @@ export interface MythrilApi {
 /** Reduced API surface exposed to the player-facing second window — read-only
  *  (the window is shown to semi-trusted viewers, so no doc mutation, realm
  *  management or AI capabilities). */
-export interface PlayerMythrilApi {
-  docs: Pick<MythrilApi['docs'], 'listByRealm' | 'onChanged'>;
-  secondWindow: Pick<MythrilApi['secondWindow'], 'status' | 'onState'>;
+export interface PlayerDiegesisCodexApi {
+  docs: Pick<DiegesisCodexApi['docs'], 'listByRealm' | 'onChanged'>;
+  secondWindow: Pick<DiegesisCodexApi['secondWindow'], 'status' | 'onState'>;
 }

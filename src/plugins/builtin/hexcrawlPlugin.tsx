@@ -10,18 +10,18 @@ import { createDefaultHexMap, serializeHexMap } from '../../components/editors/h
  */
 export const hexcrawlPlugin: Plugin = {
   manifest: {
-    id: 'mythril/hexcrawl',
+    id: 'diegesis/hexcrawl',
     name: 'Hexcrawl',
     version: '1.0.0',
     apiVersion: PLUGIN_API_VERSION,
     description:
       'Mapas hexcrawl: pintura de terreno, features, rios/estradas com regras de viagem, regiões com modificadores, notas por hex e gerador de terreno.',
-    author: 'Mythril',
+    author: 'Diegesis Codex',
     permissions: ['ui', 'events'],
   },
   activate(ctx) {
     // camera moves are published on the event bus so other plugins (e.g.
-    // mythril/second-window) can mirror the GM viewport in realtime
+    // diegesis/second-window) can mirror the GM viewport in realtime
     ctx.editors.add({
       docType: 'hexcrawl/map',
       component: ({ doc }) => (

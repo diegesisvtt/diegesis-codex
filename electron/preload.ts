@@ -7,8 +7,8 @@ import type {
   ChatStreamChunk,
   DocChanges,
   DocInput,
-  MythrilApi,
-  PlayerMythrilApi,
+  DiegesisCodexApi,
+  PlayerDiegesisCodexApi,
   SecondWindowState,
   UiState,
 } from '../shared/types';
@@ -19,7 +19,7 @@ function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   return () => ipcRenderer.removeListener(channel, listener);
 }
 
-const api: MythrilApi = {
+const api: DiegesisCodexApi = {
   realms: {
     list: () => ipcRenderer.invoke('realms:list'),
     create: (name) => ipcRenderer.invoke('realms:create', name),
@@ -101,7 +101,7 @@ const locationSearch = (globalThis as { location?: { search?: string } }).locati
 const isPlayerWindow = new URLSearchParams(locationSearch).get('window') === 'player';
 
 if (isPlayerWindow) {
-  const playerApi: PlayerMythrilApi = {
+  const playerApi: PlayerDiegesisCodexApi = {
     docs: {
       listByRealm: api.docs.listByRealm,
       onChanged: api.docs.onChanged,
@@ -111,7 +111,7 @@ if (isPlayerWindow) {
       onState: api.secondWindow.onState,
     },
   };
-  contextBridge.exposeInMainWorld('mythril', playerApi);
+  contextBridge.exposeInMainWorld('diegesis', playerApi);
 } else {
-  contextBridge.exposeInMainWorld('mythril', api);
+  contextBridge.exposeInMainWorld('diegesis', api);
 }

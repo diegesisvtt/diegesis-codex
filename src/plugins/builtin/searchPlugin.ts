@@ -13,7 +13,7 @@ export const searchPlugin: Plugin = {
     version: '1.0.0',
     apiVersion: PLUGIN_API_VERSION,
     description: 'Busca full-text e semântica em todos os documentos.',
-    author: 'Mythril',
+    author: 'Diegesis Codex',
     permissions: ['commands', 'events', 'docs:read'],
   },
   activate(ctx) {

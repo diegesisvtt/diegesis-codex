@@ -11,7 +11,7 @@ import { pdfFilePath } from './pdf';
 import { audioFilePath, extractAudioRefs, isValidAudioData } from './audio';
 import type { ChatRole, DocumentType, RealmTransferResult, RetrievedChunk } from '../shared/types';
 
-const FORMAT = 'mythril-realm';
+const FORMAT = 'diegesis-realm';
 const VERSION = 2;
 const MANIFEST = 'realm.json';
 const PDF_DIR = 'pdfs';
@@ -23,7 +23,7 @@ const VALID_TYPES: DocumentType[] = [
   'core/folder',
   'core/pdf',
   'hexcrawl/map',
-  'mythril/timeline',
+  'diegesis/timeline',
 ];
 const VALID_ROLES: ChatRole[] = ['system', 'user', 'assistant'];
 
@@ -84,7 +84,7 @@ export async function exportRealm(realmId: string): Promise<RealmTransferResult>
   const picked = await dialog.showSaveDialog(win, {
     title: 'Exportar universo',
     defaultPath: path.join(defaultDir, `${safeFileName(realm.name)}.realm`),
-    filters: [{ name: 'Mythril Realm', extensions: ['realm'] }],
+    filters: [{ name: 'Diegesis Codex Realm', extensions: ['realm'] }],
   });
   if (picked.canceled || !picked.filePath) return { ok: false, canceled: true };
 
@@ -210,7 +210,7 @@ export async function importRealm(): Promise<RealmTransferResult> {
   if (!win) return { ok: false, error: 'Janela principal não disponível.' };
   const picked = await dialog.showOpenDialog(win, {
     title: 'Importar universo',
-    filters: [{ name: 'Mythril Realm', extensions: ['realm'] }],
+    filters: [{ name: 'Diegesis Codex Realm', extensions: ['realm'] }],
     properties: ['openFile'],
   });
   if (picked.canceled || picked.filePaths.length === 0) return { ok: false, canceled: true };
@@ -230,7 +230,7 @@ export async function importRealm(): Promise<RealmTransferResult> {
     }
     if (head.readUInt32LE(0) !== 0x04034b50) {
       // "PK\x03\x04" — anything else (e.g. a renamed legacy .realm.json) isn't a zip.
-      return { ok: false, error: 'O arquivo não é um universo Mythril válido.' };
+      return { ok: false, error: 'O arquivo não é um universo Diegesis Codex válido.' };
     }
     zip = new AdmZip(src);
     const entry = zip.getEntry(MANIFEST);
@@ -240,7 +240,7 @@ export async function importRealm(): Promise<RealmTransferResult> {
     return { ok: false, error: 'Não foi possível ler o arquivo selecionado.' };
   }
   if (parsed?.format !== FORMAT || typeof parsed.version !== 'number' || parsed.version !== VERSION) {
-    return { ok: false, error: 'O arquivo não é um universo Mythril válido.' };
+    return { ok: false, error: 'O arquivo não é um universo Diegesis Codex válido.' };
   }
   if (!Array.isArray(parsed.documents)) {
     return { ok: false, error: 'Arquivo de universo corrompido (sem documentos).' };

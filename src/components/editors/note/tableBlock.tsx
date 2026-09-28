@@ -1,5 +1,5 @@
 // Custom BlockNote block: embeds a reference to an Interactive Table document
-// (mythril/table) inside a note. Compact read-only preview + roll button; the
+// (diegesis/table) inside a note. Compact read-only preview + roll button; the
 // roll result can be inserted into the note as a paragraph. Editing the table
 // itself happens in the table's own document (live-reflected here via store).
 import { useMemo, useState } from 'react';
@@ -52,7 +52,7 @@ export const InteractiveTableBlock = createReactBlockSpec(
       const candidates = useMemo(() => {
         const q = query.trim().toLowerCase();
         return docs
-          .filter((d) => d.type === 'mythril/table')
+          .filter((d) => d.type === 'diegesis/table')
           .filter((d) => !q || d.title.toLowerCase().includes(q))
           .slice(0, 10);
       }, [docs, query]);
@@ -64,7 +64,7 @@ export const InteractiveTableBlock = createReactBlockSpec(
       };
 
       const createAndPick = async () => {
-        const doc = await createDocument('mythril/table', null, 'Nova Tabela', serializeTable(createDefaultTable()));
+        const doc = await createDocument('diegesis/table', null, 'Nova Tabela', serializeTable(createDefaultTable()));
         pick(doc.id);
         openDocument(doc.id);
       };
@@ -72,7 +72,7 @@ export const InteractiveTableBlock = createReactBlockSpec(
       /** resolve um docId vinculado para outra tabela (rolagem encadeada) */
       const resolveTable = (docId: string) => {
         const d = docs.find((x) => x.id === docId);
-        return d && d.type === 'mythril/table'
+        return d && d.type === 'diegesis/table'
           ? { title: d.title || 'Sem título', table: parseTable(d.content) }
           : null;
       };

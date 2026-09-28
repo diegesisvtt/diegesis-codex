@@ -27,7 +27,7 @@ export const historySpecialist: Specialist<HistoryInput, WorldHistory> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em história de universos do Mythril. Mundos sem passado parecem ter ' +
+          'Você é o especialista em história de universos do Diegesis Codex. Mundos sem passado parecem ter ' +
           'nascido ontem; passados que não mudam nada parecem cápsulas do tempo.\n\n' +
           'Regras:\n' +
           '- NADA É ESTÁTICO: no nosso mundo, só 27 de ~166 impérios passaram de 500 anos, e nenhum sem ' +

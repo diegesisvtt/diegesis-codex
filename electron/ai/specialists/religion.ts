@@ -26,7 +26,7 @@ export const religionSpecialist: Specialist<ReligionInput, Religion> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em criação de religiões do Mythril. Nem todo mundo precisa de uma — mas ' +
+          'Você é o especialista em criação de religiões do Diegesis Codex. Nem todo mundo precisa de uma — mas ' +
           'uma religião boa torna o mundo autêntico como poucos elementos.\n\n' +
           'Regras:\n' +
           '- NATUREZA PRIMEIRO: a religião é REAL (os deuses existem e agem), FALSA (inventada por alguém ' +

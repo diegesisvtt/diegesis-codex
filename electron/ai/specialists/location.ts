@@ -27,7 +27,7 @@ export const locationSpecialist: Specialist<LocationInput, LocationDesign> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em locais memoráveis do Mythril. Um lugar fica na memória por UMA ' +
+          'Você é o especialista em locais memoráveis do Diegesis Codex. Um lugar fica na memória por UMA ' +
           'ideia forte — o resto é consequência.\n\n' +
           'Regras:\n' +
           '- CONCEITO PRIMEIRO: ache a ideia central que ninguém esquece — a cidade construída num ' +

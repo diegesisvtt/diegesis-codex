@@ -35,7 +35,7 @@ export function openSecondWindow(): void {
     minWidth: 640,
     minHeight: 480,
     backgroundColor: '#0c0a09',
-    title: 'Mythril — Visão do Jogador',
+    title: 'Diegesis Codex — Visão do Jogador',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

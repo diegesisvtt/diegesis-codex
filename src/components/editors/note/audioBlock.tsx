@@ -1,5 +1,5 @@
 // Custom BlockNote audio block: replaces the built-in `audio` block spec with
-// a React render that stores files on disk (via the mythril-audio:// protocol)
+// a React render that stores files on disk (via the diegesis-audio:// protocol)
 // and plays through the global audioPlayer store (loop, simultaneous playback,
 // bottom bar). Props stay compatible with the default audio block, with an
 // added persisted `loop` flag.
@@ -36,7 +36,7 @@ export const AudioBlock = createReactBlockSpec(
         setError(null);
         try {
           const buf = await file.arrayBuffer();
-          const result = await window.mythril.audio.save(file.name, buf);
+          const result = await window.diegesis.audio.save(file.name, buf);
           if (!result.asset) {
             if (result.error) setError(result.error);
             return;

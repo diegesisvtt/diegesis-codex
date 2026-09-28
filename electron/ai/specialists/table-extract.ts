@@ -1,6 +1,6 @@
 // Table extraction — converts raw text captured from a PDF region (reading
 // order, columns possibly jumbled) into a structured interactive table
-// (mythril/table): inferred dice formula + rows with weights.
+// (diegesis/table): inferred dice formula + rows with weights.
 
 import type { ProviderMessage } from '../providers/base';
 import type { Specialist, SpecialistContext } from './base';

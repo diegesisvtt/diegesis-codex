@@ -27,7 +27,7 @@ export const worldSpecialist: Specialist<WorldInput, WorldShape> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em criação de mundos do Mythril. Você constrói geografias que PARECEM ' +
+          'Você é o especialista em criação de mundos do Diegesis Codex. Você constrói geografias que PARECEM ' +
           'naturais porque cada elemento afeta os outros.\n\n' +
           'Método (geografia-primeiro):\n' +
           '1. GEOGRAFIA: comece pela forma da terra — costas (praias? penhascos? mangues?), montanhas, ' +

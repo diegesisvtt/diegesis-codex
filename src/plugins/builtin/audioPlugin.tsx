@@ -9,7 +9,7 @@ export const audioPlugin: Plugin = {
     version: '1.0.0',
     apiVersion: PLUGIN_API_VERSION,
     description: 'Painel global de reprodução de áudio e soundboards.',
-    author: 'Mythril',
+    author: 'Diegesis Codex',
     permissions: ['ui'],
   },
   activate(ctx) {

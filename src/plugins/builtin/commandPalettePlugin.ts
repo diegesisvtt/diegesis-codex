@@ -11,7 +11,7 @@ export const commandPalettePlugin: Plugin = {
     version: '1.0.0',
     apiVersion: PLUGIN_API_VERSION,
     description: 'Acesse todos os comandos do app com Ctrl+Shift+P.',
-    author: 'Mythril',
+    author: 'Diegesis Codex',
     permissions: ['commands', 'events'],
   },
   activate(ctx) {

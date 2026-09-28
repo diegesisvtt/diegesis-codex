@@ -111,20 +111,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // ---- bootstrap ----
   useEffect(() => {
     (async () => {
-      const [realms, ui] = await Promise.all([window.mythril.realms.list(), window.mythril.ui.load()]);
+      const [realms, ui] = await Promise.all([window.diegesis.realms.list(), window.diegesis.ui.load()]);
       const activeRealmId =
         ui?.activeRealmId && realms.some((r) => r.id === ui.activeRealmId)
           ? ui.activeRealmId
           : realms[0]?.id ?? null;
-      const docs = activeRealmId ? await window.mythril.docs.listByRealm(activeRealmId) : [];
+      const docs = activeRealmId ? await window.diegesis.docs.listByRealm(activeRealmId) : [];
       setState({ ready: true, realms, activeRealmId, docs, uiState: ui ?? {}, aiDraft: null, aiChatOpen: false, pdfFocus: null });
     })();
   }, []);
 
   // Refresh the doc tree when documents change outside the renderer (AI tools)
   useEffect(() => {
-    return window.mythril.docs.onChanged((realmId) => {
-      window.mythril.docs.listByRealm(realmId).then((fresh) =>
+    return window.diegesis.docs.onChanged((realmId) => {
+      window.diegesis.docs.listByRealm(realmId).then((fresh) =>
         setState((cur) => {
           if (cur.activeRealmId !== realmId) return cur;
           // notify open editors about externally-changed docs (skip docs the
@@ -143,57 +143,57 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setActiveRealm = useCallback(async (id: string) => {
-    const docs = await window.mythril.docs.listByRealm(id);
+    const docs = await window.diegesis.docs.listByRealm(id);
     setState((s) => ({ ...s, activeRealmId: id, docs }));
-    window.mythril.ui.load().then((ui) =>
-      window.mythril.ui.save({ ...(ui ?? {}), activeRealmId: id })
+    window.diegesis.ui.load().then((ui) =>
+      window.diegesis.ui.save({ ...(ui ?? {}), activeRealmId: id })
     );
   }, []);
 
   // ---- realms ----
   const createRealm = useCallback(async (name: string) => {
-    const realm = await window.mythril.realms.create(name);
+    const realm = await window.diegesis.realms.create(name);
     setState((s) => ({ ...s, realms: [...s.realms, realm], activeRealmId: realm.id, docs: [] }));
-    window.mythril.ui.load().then((ui) =>
-      window.mythril.ui.save({ ...(ui ?? {}), activeRealmId: realm.id })
+    window.diegesis.ui.load().then((ui) =>
+      window.diegesis.ui.save({ ...(ui ?? {}), activeRealmId: realm.id })
     );
   }, []);
 
   const renameRealm = useCallback(async (id: string, name: string) => {
-    await window.mythril.realms.rename(id, name);
+    await window.diegesis.realms.rename(id, name);
     setState((s) => ({ ...s, realms: s.realms.map((r) => (r.id === id ? { ...r, name } : r)) }));
   }, []);
 
   const deleteRealm = useCallback(async (id: string) => {
-    await window.mythril.realms.delete(id);
+    await window.diegesis.realms.delete(id);
     setState((s) => {
       const realms = s.realms.filter((r) => r.id !== id);
       const nextActive = s.activeRealmId === id ? realms[0]?.id ?? null : s.activeRealmId;
       if (s.activeRealmId === id) {
         // load the next realm's docs and persist the switch
         if (nextActive) {
-          window.mythril.docs.listByRealm(nextActive).then((docs) =>
+          window.diegesis.docs.listByRealm(nextActive).then((docs) =>
             setState((cur) => (cur.activeRealmId === nextActive ? { ...cur, docs } : cur))
           );
         }
-        window.mythril.ui.load().then((ui) =>
-          window.mythril.ui.save({ ...(ui ?? {}), activeRealmId: nextActive ?? undefined })
+        window.diegesis.ui.load().then((ui) =>
+          window.diegesis.ui.save({ ...(ui ?? {}), activeRealmId: nextActive ?? undefined })
         );
       }
       return { ...s, realms, activeRealmId: nextActive, docs: s.activeRealmId === id ? [] : s.docs };
     });
   }, []);
 
-  const exportRealm = useCallback((id: string) => window.mythril.realms.export(id), []);
+  const exportRealm = useCallback((id: string) => window.diegesis.realms.export(id), []);
 
   const importRealm = useCallback(async (): Promise<RealmTransferResult> => {
-    const res = await window.mythril.realms.import();
+    const res = await window.diegesis.realms.import();
     if (res.ok && res.realm) {
       const realm = res.realm;
-      const docs = await window.mythril.docs.listByRealm(realm.id);
+      const docs = await window.diegesis.docs.listByRealm(realm.id);
       setState((s) => ({ ...s, realms: [...s.realms, realm], activeRealmId: realm.id, docs }));
-      window.mythril.ui.load().then((ui) =>
-        window.mythril.ui.save({ ...(ui ?? {}), activeRealmId: realm.id })
+      window.diegesis.ui.load().then((ui) =>
+        window.diegesis.ui.save({ ...(ui ?? {}), activeRealmId: realm.id })
       );
     }
     return res;
@@ -204,7 +204,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     async (type: DocumentType, parentId: string | null, title?: string, content?: string | null): Promise<DocNode> => {
       const realmId = state.activeRealmId;
       if (!realmId) throw new Error('No active realm');
-      const doc = await window.mythril.docs.create({
+      const doc = await window.diegesis.docs.create({
         id: generateId(),
         realmId,
         parentId,
@@ -222,7 +222,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     async (parentId: string | null): Promise<PdfImportResult> => {
       const realmId = state.activeRealmId;
       if (!realmId) throw new Error('No active realm');
-      const result = await window.mythril.pdf.import(realmId, parentId);
+      const result = await window.diegesis.pdf.import(realmId, parentId);
       if (result.doc) setState((s) => ({ ...s, docs: [...s.docs, result.doc!] }));
       return result;
     },
@@ -243,14 +243,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       key,
       setTimeout(() => {
         saveTimers.current.delete(key);
-        window.mythril.docs.update(id, changes).catch(console.error);
+        window.diegesis.docs.update(id, changes).catch(console.error);
       }, changes.title !== undefined && changes.content === undefined ? 250 : 600)
     );
   }, []);
 
   const deleteDocument = useCallback(
     async (id: string) => {
-      await window.mythril.docs.delete(id);
+      await window.diegesis.docs.delete(id);
       setState((s) => {
         // remove subtree locally
         const removed = new Set<string>([id]);
@@ -272,11 +272,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const moveDocument = useCallback(async (id: string, parentId: string | null, position: number) => {
-    await window.mythril.docs.move(id, parentId, position);
+    await window.diegesis.docs.move(id, parentId, position);
     setState((s) => {
       if (!s.activeRealmId) return s;
       // authoritative re-sync keeps ordering consistent with the DB
-      window.mythril.docs.listByRealm(s.activeRealmId).then((docs) =>
+      window.diegesis.docs.listByRealm(s.activeRealmId).then((docs) =>
         setState((cur) => (cur.activeRealmId === s.activeRealmId ? { ...cur, docs } : cur))
       );
       return { ...s, docs: s.docs.map((d) => (d.id === id ? { ...d, parentId, position } : d)) };
@@ -289,7 +289,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setState((s) => {
       const uiState = { ...s.uiState, ...patch };
       if (uiTimer.current) clearTimeout(uiTimer.current);
-      uiTimer.current = setTimeout(() => window.mythril.ui.save(uiState).catch(console.error), 500);
+      uiTimer.current = setTimeout(() => window.diegesis.ui.save(uiState).catch(console.error), 500);
       return { ...s, uiState };
     });
   }, []);

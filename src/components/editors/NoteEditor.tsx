@@ -25,7 +25,7 @@ import { AudioBlock } from './note/audioBlock';
 import { InteractiveTableBlock } from './note/tableBlock';
 
 /** note schema: defaults + custom blocks (audio: disk-backed, loop-capable;
- *  interactiveTable: embeds a mythril/table document with roll button) */
+ *  interactiveTable: embeds a diegesis/table document with roll button) */
 const schema = BlockNoteSchema.create({
   blockSpecs: {
     ...defaultBlockSpecs,
@@ -35,11 +35,11 @@ const schema = BlockNoteSchema.create({
 });
 
 /** Media upload routing: audio files go to disk storage (streamed via the
- *  mythril-audio:// protocol); everything else (images) stays inline base64. */
+ *  diegesis-audio:// protocol); everything else (images) stays inline base64. */
 async function uploadMedia(file: File): Promise<string> {
   if (file.type.startsWith('audio/')) {
     const buf = await file.arrayBuffer();
-    const result = await window.mythril.audio.save(file.name, buf);
+    const result = await window.diegesis.audio.save(file.name, buf);
     if (!result.asset) throw new Error(result.error ?? 'Falha ao importar o áudio.');
     return result.asset.url;
   }
@@ -127,7 +127,7 @@ export function NoteEditor({
           onItemClick: () =>
             insertOrUpdateBlockForSlashMenu(editor, { type: 'interactiveTable' } as never),
           aliases: ['tabela', 'table', 'rolagem', 'roll', 'dados', 'dice'],
-          group: 'Mythril',
+          group: 'Diegesis Codex',
           icon: <Table size={18} />,
           subtext: 'Embute uma tabela rolável do universo',
         },
@@ -158,7 +158,7 @@ export function NoteEditor({
     const ref = parseExplorerDragRef(e.dataTransfer.getData(REF_DRAG_MIME));
     if (!ref || ref.kind !== 'note') return;
     const target = docs.find((d) => d.id === ref.docId);
-    if (!target || target.type !== 'mythril/table') return;
+    if (!target || target.type !== 'diegesis/table') return;
     e.preventDefault();
     const last = editor.document[editor.document.length - 1];
     if (!last) return;
@@ -343,7 +343,7 @@ export function NoteEditor({
           onChange={handleChange}
           formattingToolbar={false}
           slashMenu={false}
-          className={embedded ? 'mythril-bn embedded' : 'mythril-bn'}
+          className={embedded ? 'diegesis-bn embedded' : 'diegesis-bn'}
         >
           <SuggestionMenuController triggerCharacter="/" getItems={slashItems} />
           <FormattingToolbarController

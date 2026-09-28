@@ -96,12 +96,12 @@ function RollLogPanel() {
 
 export const rollerPlugin: Plugin = {
   manifest: {
-    id: 'mythril/roller',
+    id: 'diegesis/roller',
     name: 'Rolagens',
     version: '1.0.0',
     apiVersion: PLUGIN_API_VERSION,
     description: 'Histórico de rolagens de tabelas interativas, com rolagens encadeadas.',
-    author: 'Mythril',
+    author: 'Diegesis Codex',
     permissions: ['ui'],
   },
   activate(ctx) {
@@ -121,16 +121,16 @@ export const rollerPlugin: Plugin = {
     });
 
     ctx.commands.add({
-      id: 'mythril/roller:open',
+      id: 'diegesis/roller:open',
       title: 'Abrir histórico de rolagens',
       run: () => ctx.app.openView('roller:log'),
     });
 
     ctx.views.addRibbonItem({
-      id: 'mythril/roller:ribbon',
+      id: 'diegesis/roller:ribbon',
       title: 'Rolagens',
       icon: Dices,
-      command: 'mythril/roller:open',
+      command: 'diegesis/roller:open',
       order: 20,
     });
   },

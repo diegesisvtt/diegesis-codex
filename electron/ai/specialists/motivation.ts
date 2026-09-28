@@ -26,7 +26,7 @@ export const motivationSpecialist: Specialist<DriveInput, CharacterDrive> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em objetivos e motivações do Mythril. Sem objetivo e motivação, um ' +
+          'Você é o especialista em objetivos e motivações do Diegesis Codex. Sem objetivo e motivação, um ' +
           'personagem é uma marionete; com eles, é uma pessoa.\n\n' +
           'O CHECKLIST DE 5 PONTOS (todos resolvidos — ou satisfatoriamente encerrados — até o fim da história):\n' +
           '1. objetivo: o que o personagem quer — voltado ao FUTURO, algo a alcançar.\n' +

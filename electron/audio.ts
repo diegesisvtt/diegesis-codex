@@ -8,7 +8,7 @@ import { Readable } from 'node:stream';
 import { generateId } from './db';
 import type { AudioAsset, AudioImportResult } from '../shared/types';
 
-export const AUDIO_SCHEME = 'mythril-audio';
+export const AUDIO_SCHEME = 'diegesis-audio';
 const MAX_AUDIO_SIZE = 200 * 1024 * 1024; // 200 MB
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -109,7 +109,7 @@ export function deleteAudioFile(fileName: string): void {
   }
 }
 
-const AUDIO_URL_RE = /mythril-audio:\/\/asset\/([a-z0-9]+\.[a-z0-9]+)/gi;
+const AUDIO_URL_RE = /diegesis-audio:\/\/asset\/([a-z0-9]+\.[a-z0-9]+)/gi;
 
 /** Audio file names referenced inside a document's content JSON. */
 export function extractAudioRefs(content: string | null | undefined): string[] {
@@ -145,7 +145,7 @@ export function registerAudioScheme(): void {
   ]);
 }
 
-/** Serves `mythril-audio://asset/<file>` from disk, with Range support for seeking. */
+/** Serves `diegesis-audio://asset/<file>` from disk, with Range support for seeking. */
 export function registerAudioProtocol(): void {
   protocol.handle(AUDIO_SCHEME, (request) => {
     let fileName: string;

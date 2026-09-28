@@ -7,7 +7,7 @@ import * as db from './db';
 import { generateId } from './db';
 import type { DocNode } from '../shared/types';
 
-export const PDF_SCHEME = 'mythril-pdf';
+export const PDF_SCHEME = 'diegesis-pdf';
 const MAX_PDF_SIZE = 300 * 1024 * 1024; // 300 MB
 
 function pdfDir(): string {
@@ -147,7 +147,7 @@ export function registerPdfScheme(): void {
   ]);
 }
 
-/** Serves `mythril-pdf://doc/<docId>` from disk, with Range support for pdf.js. */
+/** Serves `diegesis-pdf://doc/<docId>` from disk, with Range support for pdf.js. */
 export function registerPdfProtocol(): void {
   protocol.handle(PDF_SCHEME, (request) => {
     const url = new URL(request.url);
@@ -157,7 +157,7 @@ export function registerPdfProtocol(): void {
     if (!fs.existsSync(file)) return new Response('Not found', { status: 404 });
 
     // CORS: in dev the renderer origin is the Vite server (http://127.0.0.1:5173),
-    // so pdf.js fetches of mythril-pdf:// are cross-origin.
+    // so pdf.js fetches of diegesis-pdf:// are cross-origin.
     const cors = { 'Access-Control-Allow-Origin': '*' };
 
     const size = fs.statSync(file).size;

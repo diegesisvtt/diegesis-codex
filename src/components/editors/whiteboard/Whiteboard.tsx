@@ -854,7 +854,7 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
   /** audio tool / context menu: pick a file (main-process dialog), drop a card at `point` */
   const pickAudio = useCallback(
     (point: { x: number; y: number }) => {
-      void window.mythril.audio.import().then((result) => {
+      void window.diegesis.audio.import().then((result) => {
         if (!result.asset) return; // cancelled or failed (main shows no dialog on error)
         insertAudioShape(result.asset, point);
       });
@@ -961,7 +961,7 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
         const p = { x: point.x + i * SNAP, y: point.y + i * SNAP };
         if (file.type.startsWith('audio/')) {
           void file.arrayBuffer().then(async (buf) => {
-            const result = await window.mythril.audio.save(file.name, buf);
+            const result = await window.diegesis.audio.save(file.name, buf);
             if (result.asset) insertAudioShape(result.asset, p);
           });
         } else {
@@ -985,7 +985,7 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
       // Interactive Table docs get their own live card shape instead of a linked note card
       if (ref.kind === 'note') {
         const target = docs.find((d) => d.id === ref.docId);
-        if (target?.type === 'mythril/table') {
+        if (target?.type === 'diegesis/table') {
           const size = DEFAULT_SIZE.table;
           const shape = createShape(
             'table',

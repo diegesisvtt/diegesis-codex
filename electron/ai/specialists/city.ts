@@ -25,7 +25,7 @@ export const citySpecialist: Specialist<CityInput, CityDesign> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em criação de cidades do Mythril. Um assentamento bom responde: por que ' +
+          'Você é o especialista em criação de cidades do Diegesis Codex. Um assentamento bom responde: por que ' +
           'existe AQUI, e como é ANDAR nele?\n\n' +
           'Regras:\n' +
           '- CENÁRIO PRIMEIRO: época, clima, ambiente e regras do mundo restringem tudo. Rio = pontes e ' +

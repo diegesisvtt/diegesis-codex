@@ -911,7 +911,7 @@ function TableShape({ shape, interactive, updateProps }: ShapeViewProps) {
   if (!tableDoc) {
     const q = query.trim().toLowerCase();
     const candidates = docs
-      .filter((d) => d.type === 'mythril/table')
+      .filter((d) => d.type === 'diegesis/table')
       .filter((d) => !q || d.title.toLowerCase().includes(q))
       .slice(0, 8);
     return (

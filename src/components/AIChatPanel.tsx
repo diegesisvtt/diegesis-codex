@@ -32,7 +32,7 @@ export function AIChatPanel() {
   activeConvRef.current = activeConvId;
 
   const reloadConversations = useCallback(async (realmId: string, preferId?: string | null) => {
-    const convs = await window.mythril.ai.listConversations(realmId);
+    const convs = await window.diegesis.ai.listConversations(realmId);
     setConversations(convs);
     setActiveConvId((cur) => {
       const wanted = preferId ?? cur;
@@ -44,7 +44,7 @@ export function AIChatPanel() {
   // bootstrap: settings + conversations for the realm
   useEffect(() => {
     if (!activeRealmId) return;
-    const check = () => window.mythril.ai.getSettings().then((s) => setConfigured(!!s.chat));
+    const check = () => window.diegesis.ai.getSettings().then((s) => setConfigured(!!s.chat));
     check();
     window.addEventListener('focus', check);
     reloadConversations(activeRealmId);
@@ -57,7 +57,7 @@ export function AIChatPanel() {
       setMessages([]);
       return;
     }
-    window.mythril.ai.listMessages(activeConvId).then((stored) => {
+    window.diegesis.ai.listMessages(activeConvId).then((stored) => {
       // don't clobber an in-flight stream in this conversation
       if (chatIdRef.current && activeConvRef.current === activeConvId && streaming) return;
       setMessages(stored.map((m) => ({ role: m.role, content: m.content, sources: m.sources })));
@@ -75,7 +75,7 @@ export function AIChatPanel() {
 
   // streaming subscriptions (chunks are tagged with chatId)
   useEffect(() => {
-    const offChunk = window.mythril.ai.onChatChunk((chunk) => {
+    const offChunk = window.diegesis.ai.onChatChunk((chunk) => {
       if (chunk.chatId !== chatIdRef.current) return;
       if (chunk.error) {
         setMessages((ms) => {
@@ -101,7 +101,7 @@ export function AIChatPanel() {
         if (activeRealmId) reloadConversations(activeRealmId, activeConvRef.current);
       }
     });
-    const offSources = window.mythril.ai.onChatSources((s) => {
+    const offSources = window.diegesis.ai.onChatSources((s) => {
       if (s.chatId !== chatIdRef.current) return;
       setMessages((ms) => {
         const copy = [...ms];
@@ -110,7 +110,7 @@ export function AIChatPanel() {
         return copy;
       });
     });
-    const offTool = window.mythril.ai.onToolEvent((e) => {
+    const offTool = window.diegesis.ai.onToolEvent((e) => {
       if (e.chatId !== chatIdRef.current) return;
       setMessages((ms) => {
         const copy = [...ms];
@@ -143,13 +143,13 @@ export function AIChatPanel() {
 
   const newConversation = async () => {
     if (!activeRealmId) return;
-    const conv = await window.mythril.ai.createConversation(activeRealmId);
+    const conv = await window.diegesis.ai.createConversation(activeRealmId);
     await reloadConversations(activeRealmId, conv.id);
   };
 
   const deleteConversation = async (id: string) => {
     if (!activeRealmId) return;
-    await window.mythril.ai.deleteConversation(id);
+    await window.diegesis.ai.deleteConversation(id);
     await reloadConversations(activeRealmId);
   };
 
@@ -166,7 +166,7 @@ export function AIChatPanel() {
     // create the conversation lazily on the first message
     let convId = activeConvId;
     if (!convId) {
-      const conv = await window.mythril.ai.createConversation(activeRealmId);
+      const conv = await window.diegesis.ai.createConversation(activeRealmId);
       convId = conv.id;
       await reloadConversations(activeRealmId, convId);
     }
@@ -178,7 +178,7 @@ export function AIChatPanel() {
     setInput('');
     setStreaming(true);
     followRef.current = true; // a new message re-engages autoscroll
-    window.mythril.ai
+    window.diegesis.ai
       .chat({ chatId, conversationId: convId, realmId: activeRealmId, messages: history, useContext, useWebSearch })
       .catch((err) => {
         setMessages((ms) => {
@@ -415,7 +415,7 @@ export function AIChatPanel() {
               <button
                 onClick={() => {
                   if (streaming && chatIdRef.current) {
-                    window.mythril.ai.cancelChat(chatIdRef.current);
+                    window.diegesis.ai.cancelChat(chatIdRef.current);
                   } else {
                     send();
                   }

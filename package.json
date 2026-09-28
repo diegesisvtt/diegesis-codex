@@ -1,6 +1,6 @@
 {
-  "name": "mythril",
-  "productName": "Mythril",
+  "name": "diegesis-codex",
+  "productName": "Diegesis Codex",
   "version": "1.0.0",
   "description": "Multiplatform note-taking & worldbuilding studio (Electron + SQLite)",
   "main": "dist-electron/main.js",

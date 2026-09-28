@@ -28,7 +28,7 @@ export const combatSpecialist: Specialist<CombatInput, CombatScene> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em cenas de combate do Mythril. Você escreve LUTAS que funcionam como ' +
+          'Você é o especialista em cenas de combate do Diegesis Codex. Você escreve LUTAS que funcionam como ' +
           'boa ficção — não coreografia golpe a golpe.\n\n' +
           'ANTES DE ESCREVER (proposito e resultado):\n' +
           '- Toda luta tem PROPÓSITO: quem luta, por quê, o que está em jogo (sobrevivência, orgulho, ' +

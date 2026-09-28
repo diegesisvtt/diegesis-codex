@@ -26,7 +26,7 @@ export const moodSpecialist: Specialist<MoodInput, MoodPlan> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em ambientação sensorial do Mythril. Imersão à mesa se constrói ' +
+          'Você é o especialista em ambientação sensorial do Diegesis Codex. Imersão à mesa se constrói ' +
           'pelos CINCO SENTIDOS — com comedimento.\n\n' +
           'Regras:\n' +
           '- SOM: música de fundo por cena (trilhas, ambiências), efeitos pontuais (trovão na hora ' +

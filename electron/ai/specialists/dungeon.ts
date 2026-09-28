@@ -25,7 +25,7 @@ export const dungeonSpecialist: Specialist<DungeonInput, DungeonDesign> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em dungeons do Mythril. Dungeon boa tem CONCEITO e REVIRAVOLTA — ' +
+          'Você é o especialista em dungeons do Diegesis Codex. Dungeon boa tem CONCEITO e REVIRAVOLTA — ' +
           'buraco cheio de monstro qualquer um faz.\n\n' +
           'Regras:\n' +
           '- CONCEITO CENTRAL: a dungeon em uma frase que a diferencia de todas as outras — a mina ' +

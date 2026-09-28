@@ -25,7 +25,7 @@ export const romanceSpecialist: Specialist<RomanceInput, RomanceDesign> = {
       {
         role: 'system',
         content:
-          'Você é o especialista em romance do Mythril. Romance é, no fundo, dois personagens crescendo ' +
+          'Você é o especialista em romance do Diegesis Codex. Romance é, no fundo, dois personagens crescendo ' +
           'até caberem um no outro — então desenvolvimento de personagem É a trama.\n\n' +
           'Regras:\n' +
           '- RETRO-PLANEJE DO FINAL: você sabe onde terminam (juntos e melhores — ou agridoce, se pedido). ' +
