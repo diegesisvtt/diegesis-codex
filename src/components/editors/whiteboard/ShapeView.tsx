@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   Music,
   Zap,
+  Table,
 } from 'lucide-react';
 import type { WBShape, WBShapeMap, TextSize, TrackerKind, InitiativeEntry, InitiativeMode } from './model';
 import { childrenOf, generateId } from './model';
@@ -30,6 +31,7 @@ import { parsePdfContent } from '../pdf/model';
 import { useStore } from '../../../state/store';
 import { audioPlayer, useAudioInstance, type AudioKind } from '../../../state/audioPlayer';
 import { RichTextEditor } from '../shared/RichTextEditor';
+import { TableCard } from '../table/TableCard';
 import { Waveform } from '../../audio/Waveform';
 import { formatTime } from '../../audio/AudioPlayerCard';
 import { MathInput } from './MathInput';
@@ -897,6 +899,73 @@ function AudioShape({ shape, updateProps }: ShapeViewProps) {
 }
 
 /* ============================================================
+   Table shape — references an Interactive Table document:
+   compact card with preview + chained roll. Empty state = picker.
+   ============================================================ */
+
+function TableShape({ shape, interactive, updateProps }: ShapeViewProps) {
+  const { docs } = useStore();
+  const [query, setQuery] = useState('');
+  const tableDoc = shape.props.tableId ? docs.find((d) => d.id === shape.props.tableId) : null;
+
+  if (!tableDoc) {
+    const q = query.trim().toLowerCase();
+    const candidates = docs
+      .filter((d) => d.type === 'mythril/table')
+      .filter((d) => !q || d.title.toLowerCase().includes(q))
+      .slice(0, 8);
+    return (
+      <div
+        className="bg-elevated/95 backdrop-blur border border-dashed border-line-strong rounded-lg shadow-xl px-3 py-2.5"
+        style={{ width: shape.props.w }}
+      >
+        <div className="flex items-center gap-2">
+          <Table size={14} className="text-table shrink-0" />
+          {interactive ? (
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Vincular uma tabela interativa…"
+              className="flex-1 min-w-0 bg-transparent text-[12.5px] text-ink-1 outline-none placeholder:text-ink-3"
+            />
+          ) : (
+            <span className="text-[12.5px] text-ink-3">Tabela interativa</span>
+          )}
+        </div>
+        {shape.props.tableId && <div className="mt-1 text-[11px] text-danger">Tabela vinculada não existe mais.</div>}
+        {interactive && (
+          <div className="mt-1.5 max-h-40 overflow-y-auto custom-scrollbar">
+            {candidates.length === 0 && (
+              <div className="py-1.5 text-[11.5px] text-ink-3">
+                Nenhuma tabela no universo — crie uma "Tabela Interativa" no Explorer.
+              </div>
+            )}
+            {candidates.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => updateProps({ tableId: d.id })}
+                className="w-full flex items-center gap-2 text-left px-2 py-1.5 text-[12px] text-ink-2 hover:bg-hover hover:text-ink-1 rounded truncate"
+              >
+                <Table size={12} className="text-table shrink-0" />
+                {d.title || 'Sem título'}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ width: shape.props.w }}>
+      <TableCard tableDoc={tableDoc} onUnlink={interactive ? () => updateProps({ tableId: null }) : undefined} />
+    </div>
+  );
+}
+
+/* ============================================================
    Group shape — renders children as static previews
    ============================================================ */
 
@@ -936,6 +1005,8 @@ export function ShapeView(props: ShapeViewProps & { shapes: WBShapeMap }) {
       return <ImageShape {...props} />;
     case 'audio':
       return <AudioShape {...props} />;
+    case 'table':
+      return <TableShape {...props} />;
     case 'group':
       return <GroupShape shape={shape} shapes={props.shapes} />;
     default:

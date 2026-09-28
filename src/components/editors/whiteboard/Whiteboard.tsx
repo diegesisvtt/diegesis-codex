@@ -84,6 +84,7 @@ const MIN_WIDTH: Record<WBShape['type'], number> = {
   arrow: 0,
   image: 40,
   audio: 240,
+  table: 240,
 };
 const MIN_GROUP_SIZE = 40;
 const MIN_IMAGE_SIZE = 40;
@@ -981,6 +982,22 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
       if (!ref) return;
       e.preventDefault();
       const point = toCanvas(e.clientX, e.clientY);
+      // Interactive Table docs get their own live card shape instead of a linked note card
+      if (ref.kind === 'note') {
+        const target = docs.find((d) => d.id === ref.docId);
+        if (target?.type === 'mythril/table') {
+          const size = DEFAULT_SIZE.table;
+          const shape = createShape(
+            'table',
+            Math.max(0, applySnap(point.x - size.w / 2, e.altKey)),
+            Math.max(0, applySnap(point.y - size.h / 2, e.altKey))
+          );
+          shape.props = { ...shape.props, tableId: target.id };
+          save({ ...latestRef.current, [shape.id]: shape });
+          setSelectedIds(new Set([shape.id]));
+          return;
+        }
+      }
       const size = DEFAULT_SIZE.note;
       const shape = createShape(
         'note',
