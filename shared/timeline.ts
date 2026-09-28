@@ -70,6 +70,8 @@ export interface TimelineEvent {
   importance?: 'major' | 'minor' | null;
   /** texto exibido no lugar da data real ("Tempo imemorial", "Solstício de Sangue") */
   displayDate?: string | null;
+  /** URL da imagem de capa (diegesis-image://asset/… ou externa) */
+  cover?: string | null;
 }
 
 /** causa e efeito entre dois eventos */
@@ -310,6 +312,7 @@ export function parseTimeline(content: string | null | undefined): TimelineData 
               icon: isStr(e.icon) ? e.icon : null,
               importance: e.importance === 'major' || e.importance === 'minor' ? e.importance : null,
               displayDate: isStr(e.displayDate) && e.displayDate.trim() ? e.displayDate : null,
+              cover: isStr(e.cover) && e.cover.trim() ? e.cover : null,
             }))
         : [],
       links: Array.isArray(raw.links)

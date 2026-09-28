@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2, X } from 'lucide-react';
+import { ImagePlus, Trash2, X } from 'lucide-react';
 import type { DocNode } from '@shared/types';
 import {
   dateToSerial,
@@ -154,8 +154,39 @@ export function EventDialog({
   const [linkTarget, setLinkTarget] = useState('');
   const [linkDir, setLinkDir] = useState<'out' | 'in'>('out');
   const [linkLabel, setLinkLabel] = useState('');
+  const [coverBusy, setCoverBusy] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);
 
   const otherEvents = data.events.filter((e) => e.id !== draft.id);
+
+  const pickCover = async () => {
+    setCoverBusy(true);
+    setCoverError(null);
+    try {
+      const res = await window.diegesis.images.import();
+      if (res.error) setCoverError(res.error);
+      else if (res.asset) setEv((cur) => ({ ...cur, cover: res.asset!.url }));
+    } finally {
+      setCoverBusy(false);
+    }
+  };
+
+  /** cola imagem da área de transferência como capa */
+  const onCoverPaste = (e: React.ClipboardEvent) => {
+    const file = [...e.clipboardData.files].find((f) => f.type.startsWith('image/'));
+    if (!file) return;
+    e.preventDefault();
+    setCoverBusy(true);
+    setCoverError(null);
+    file
+      .arrayBuffer()
+      .then((buf) => window.diegesis.images.save(file.name || 'cover.png', buf))
+      .then((res) => {
+        if (res.error) setCoverError(res.error);
+        else if (res.asset) setEv((cur) => ({ ...cur, cover: res.asset!.url }));
+      })
+      .finally(() => setCoverBusy(false));
+  };
 
   const addLink = () => {
     if (!linkTarget) return;
@@ -286,6 +317,43 @@ export function EventDialog({
             className={inputCls}
             placeholder='Ex.: "Tempo imemorial" — substitui a data real'
           />
+        </div>
+        <div onPaste={onCoverPaste}>
+          <label className={labelCls}>Capa do evento (arquivo ou Ctrl+V)</label>
+          {ev.cover ? (
+            <div className="relative rounded-lg overflow-hidden border border-line group/cover">
+              <img src={ev.cover} alt="Capa do evento" className="w-full h-28 object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+              <div className="absolute right-1.5 top-1.5 flex gap-1">
+                <button
+                  type="button"
+                  onClick={pickCover}
+                  disabled={coverBusy}
+                  className="px-2 py-1 text-[11px] rounded bg-black/60 text-ink-1 hover:bg-black/80 disabled:opacity-50"
+                >
+                  Trocar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEv({ ...ev, cover: null })}
+                  className="px-2 py-1 text-[11px] rounded bg-black/60 text-danger hover:bg-black/80"
+                >
+                  Remover
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={pickCover}
+              disabled={coverBusy}
+              className="w-full flex items-center justify-center gap-2 h-20 rounded-lg border border-dashed border-line-strong text-ink-3 hover:text-ink-1 hover:border-accent/60 transition-colors disabled:opacity-50"
+            >
+              <ImagePlus size={16} />
+              <span className="text-[12px]">{coverBusy ? 'Importando…' : 'Escolher imagem ou colar (Ctrl+V)'}</span>
+            </button>
+          )}
+          {coverError && <p className="text-[11px] text-danger mt-1">{coverError}</p>}
         </div>
         <div>
           <label className={labelCls}>Tags (separadas por vírgula)</label>

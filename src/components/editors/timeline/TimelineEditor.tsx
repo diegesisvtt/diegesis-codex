@@ -1,16 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  CalendarDays,
-  FoldVertical,
-  MoveHorizontal,
-  MoveVertical,
-  Plus,
-  Rows3,
-  ScrollText,
-  Undo2,
-  Redo2,
-  UnfoldVertical,
-} from 'lucide-react';
+import { CalendarDays, Plus, Rows3, Undo2, Redo2 } from 'lucide-react';
 import type { DocNode } from '@shared/types';
 import {
   daysPerYear,
@@ -25,7 +14,6 @@ import {
   type TimelineMoon,
 } from '@shared/timeline';
 import { useStore } from '../../../state/store';
-import { TimelineCanvas } from './TimelineCanvas';
 import { StoryView } from './StoryView';
 import { FilterBar } from './FilterBar';
 import { CalendarDialog, EraDialog, EventDialog, LaneDialog } from './dialogs';
@@ -39,9 +27,9 @@ type DialogState =
   | null;
 
 /**
- * Editor de timeline — ferramenta de worldbuilding estilo LegendKeeper:
- * eventos, storylines paralelas (lanes), eras aninhadas, causa e efeito,
- * fases de lua e retcon livre (undo/redo).
+ * Editor de timeline — ferramenta de worldbuilding: crônica em cards com
+ * trilhos de storyline, eras aninhadas, causa e efeito, fases de lua e
+ * retcon livre (undo/redo).
  */
 export function TimelineEditor({ doc }: { doc: DocNode }) {
   const { docs, updateDocument, openDocument } = useStore();
@@ -49,10 +37,6 @@ export function TimelineEditor({ doc }: { doc: DocNode }) {
   const dataRef = useRef(data);
   const [filter, setFilter] = useState<TimelineFilter>(EMPTY_FILTER);
   const [dialog, setDialog] = useState<DialogState>(null);
-  /** horizontal = escala de tempo; vertical = colunas de lanes; história = cards de leitura */
-  const [view, setView] = useState<'horizontal' | 'vertical' | 'story'>('horizontal');
-  /** colapsa períodos sem eventos num separador com a duração (canvas) */
-  const [compact, setCompact] = useState(false);
 
   const undoStack = useRef<string[]>([]);
   const redoStack = useRef<string[]>([]);
@@ -249,12 +233,12 @@ export function TimelineEditor({ doc }: { doc: DocNode }) {
   };
 
   const toolBtn =
-    'flex items-center gap-1 px-2 py-1 text-[12px] rounded text-ink-2 hover:bg-hover hover:text-ink-1 transition-colors';
+    'flex items-center gap-1 px-2 py-1 text-[12px] rounded-md text-ink-2 hover:bg-hover hover:text-ink-1 transition-colors';
 
   return (
     <div className="h-full flex flex-col bg-app">
-      {/* barra de ferramentas */}
-      <div className="flex items-center gap-1 px-3 py-1.5 border-b border-line flex-wrap">
+      {/* barra de ferramentas (vidro) */}
+      <div className="tl-glass flex items-center gap-1 px-3 py-1.5 border-b border-line flex-wrap z-20">
         <button type="button" className={toolBtn} onClick={() => newEventAt(0, sortedLanes(data)[0]?.id ?? null)}>
           <Plus size={13} /> Evento
         </button>
@@ -268,42 +252,6 @@ export function TimelineEditor({ doc }: { doc: DocNode }) {
         <button type="button" className={toolBtn} onClick={() => setDialog({ kind: 'calendar' })}>
           <CalendarDays size={13} /> Calendário
         </button>
-        <span className="w-px h-4 bg-line mx-1" />
-        <button
-          type="button"
-          className={`${toolBtn} ${view === 'horizontal' ? 'bg-active text-ink-1' : ''}`}
-          onClick={() => setView('horizontal')}
-          title="Escala de tempo horizontal"
-        >
-          <MoveHorizontal size={13} /> Horizontal
-        </button>
-        <button
-          type="button"
-          className={`${toolBtn} ${view === 'vertical' ? 'bg-active text-ink-1' : ''}`}
-          onClick={() => setView('vertical')}
-          title="Lanes em colunas verticais (estilo LegendKeeper)"
-        >
-          <MoveVertical size={13} /> Vertical
-        </button>
-        <button
-          type="button"
-          className={`${toolBtn} ${view === 'story' ? 'bg-active text-ink-1' : ''}`}
-          onClick={() => setView('story')}
-          title="Vista de leitura com cards (estilo World Anvil)"
-        >
-          <ScrollText size={13} /> História
-        </button>
-        {view !== 'story' && (
-          <button
-            type="button"
-            className={`${toolBtn} ${compact ? 'bg-active text-ink-1' : ''}`}
-            onClick={() => setCompact((c) => !c)}
-            title={compact ? 'Mostrar períodos vazios' : 'Ocultar períodos sem eventos'}
-          >
-            {compact ? <UnfoldVertical size={13} /> : <FoldVertical size={13} />}
-            {compact ? 'Expandir vazios' : 'Ocultar vazios'}
-          </button>
-        )}
         <span className="w-px h-4 bg-line mx-1" />
         <button type="button" className={toolBtn} onClick={undo} title="Desfazer (Ctrl+Z)">
           <Undo2 size={13} />
@@ -320,35 +268,21 @@ export function TimelineEditor({ doc }: { doc: DocNode }) {
       <FilterBar data={data} docs={docs} filter={filter} onChange={setFilter} />
 
       <div className="flex-1 min-h-0 flex">
-        {view === 'story' ? (
-          <StoryView
-            data={data}
-            docs={docs}
-            events={visibleEvents}
-            onEventClick={(id) => {
-              const ev = data.events.find((e) => e.id === id);
-              if (ev) setDialog({ kind: 'event', draft: ev, isNew: false });
-            }}
-            onCreateAt={(serial) => newEventAt(serial, sortedLanes(data)[0]?.id ?? null)}
-            onOpenDoc={openDocument}
-          />
-        ) : (
-          <TimelineCanvas
-            data={data}
-            events={visibleEvents}
-            vertical={view === 'vertical'}
-            compact={compact}
-            onEventClick={(id) => {
-              const ev = data.events.find((e) => e.id === id);
-              if (ev) setDialog({ kind: 'event', draft: ev, isNew: false });
-            }}
-            onEraClick={(id) => {
-              const era = data.eras.find((e) => e.id === id);
-              if (era) setDialog({ kind: 'era', draft: era, isNew: false });
-            }}
-            onCreateAt={newEventAt}
-          />
-        )}
+        <StoryView
+          data={data}
+          docs={docs}
+          events={visibleEvents}
+          onEventClick={(id) => {
+            const ev = data.events.find((e) => e.id === id);
+            if (ev) setDialog({ kind: 'event', draft: ev, isNew: false });
+          }}
+          onEraClick={(id) => {
+            const era = data.eras.find((e) => e.id === id);
+            if (era) setDialog({ kind: 'era', draft: era, isNew: false });
+          }}
+          onCreateAt={(serial) => newEventAt(serial, sortedLanes(data)[0]?.id ?? null)}
+          onOpenDoc={openDocument}
+        />
       </div>
 
       {/* diálogos */}
