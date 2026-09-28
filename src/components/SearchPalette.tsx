@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { File, LayoutGrid, Search, Sparkles, BookOpen, Map, History } from 'lucide-react';
+import { File, LayoutGrid, Search, Sparkles, BookOpen, Map, History, Table } from 'lucide-react';
 import type { SearchResult, SemanticSearchResult } from '@shared/types';
 import { useStore } from '../state/store';
 
@@ -195,7 +195,9 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose(): voi
                       ? Map
                       : r.type === 'mythril/timeline'
                         ? History
-                        : File;
+                        : r.type === 'mythril/table'
+                          ? Table
+                          : File;
               const color =
                 r.type === 'core/whiteboard'
                   ? 'text-board'
@@ -205,7 +207,9 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose(): voi
                       ? 'text-map'
                       : r.type === 'mythril/timeline'
                         ? 'text-timeline'
-                        : 'text-note';
+                        : r.type === 'mythril/table'
+                          ? 'text-table'
+                          : 'text-note';
               return (
                 <button
                   key={r.docId}

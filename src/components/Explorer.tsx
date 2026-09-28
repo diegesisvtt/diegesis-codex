@@ -113,7 +113,9 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
             REF_DRAG_MIME,
             JSON.stringify({ kind: 'pin', docId: data.id, pdfDocId: pin.pdfDocId, pinId: pin.pinId, color: pin.color })
           );
-          e.dataTransfer.effectAllowed = 'copy';
+          // 'copyLink': whiteboards copy the card, the PDF links a token —
+          // a plain 'copy' would invalidate the PDF's dropEffect='link'
+          e.dataTransfer.effectAllowed = 'copyLink';
         } else if (bookmark) {
           e.dataTransfer.setData(
             REF_DRAG_MIME,
@@ -127,7 +129,9 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
             })
           );
           e.dataTransfer.effectAllowed = 'copy';
-        } else if (data.docType === 'core/note') {
+        } else if (data.docType !== 'core/folder' && data.docType !== 'core/pdf') {
+          // every real document (note, table, whiteboard, map, timeline…) is
+          // draggable as a generic 'note' ref; targets resolve the doc type
           e.dataTransfer.setData(REF_DRAG_MIME, JSON.stringify({ kind: 'note', docId: data.id }));
           e.dataTransfer.effectAllowed = 'copy';
         }

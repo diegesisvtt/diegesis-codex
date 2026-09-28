@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/ariakit';
 import { pt } from '@blocknote/core/locales';
-import { BookOpen, FileText, History, Map, Presentation } from 'lucide-react';
+import { BookOpen, FileText, History, Map, Presentation, Table } from 'lucide-react';
 import type { RetrievedChunk } from '@shared/types';
 
 const SOURCE_URL = 'https://mythril.source/';
@@ -144,6 +144,8 @@ export function AssistantMessage({
               <Map size={12} className="shrink-0 text-map" />
             ) : tipSource.type === 'mythril/timeline' ? (
               <History size={12} className="shrink-0 text-timeline" />
+            ) : tipSource.type === 'mythril/table' ? (
+              <Table size={12} className="shrink-0 text-table" />
             ) : (
               <BookOpen size={12} className="shrink-0 text-note" />
             )}
@@ -161,7 +163,9 @@ export function AssistantMessage({
                       ? 'Mapa hex'
                       : tipSource.type === 'mythril/timeline'
                         ? 'Timeline'
-                        : 'Nota'}
+                        : tipSource.type === 'mythril/table'
+                          ? 'Tabela'
+                          : 'Nota'}
               </dd>
             </div>
             {tipSource.type === 'core/pdf' && tipSource.page != null && (
