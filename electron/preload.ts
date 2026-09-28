@@ -75,6 +75,10 @@ const api: DiegesisCodexApi = {
     import: () => ipcRenderer.invoke('audio:import'),
     save: (name: string, data: ArrayBuffer) => ipcRenderer.invoke('audio:save', name, data),
   },
+  images: {
+    import: () => ipcRenderer.invoke('images:import'),
+    save: (name: string, data: ArrayBuffer) => ipcRenderer.invoke('images:save', name, data),
+  },
   app: {
     platform: () => ipcRenderer.invoke('app:platform'),
     version: () => ipcRenderer.invoke('app:version'),

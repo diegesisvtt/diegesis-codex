@@ -3,6 +3,7 @@ import path from 'node:path';
 import * as db from './db';
 import * as pdf from './pdf';
 import * as audio from './audio';
+import * as images from './images';
 import * as plugins from './plugins';
 import * as realmTransfer from './realmTransfer';
 import * as secondWindow from './secondWindow';
@@ -21,6 +22,7 @@ const isDev = !!process.env.VITE_DEV_SERVER_URL;
 // Must run before app 'ready'.
 pdf.registerPdfScheme();
 audio.registerAudioScheme();
+images.registerImageScheme();
 
 /** in-flight chat streams, keyed by renderer-provided chatId */
 const activeChats = new Map<string, AbortController>();
@@ -41,6 +43,15 @@ function deleteUnreferencedAudio(candidates: string[]): void {
   }
 }
 
+/** Deletes image files only when no surviving document references them. */
+function deleteUnreferencedImages(candidates: string[]): void {
+  if (candidates.length === 0) return;
+  const remaining = db.listAllDocContents();
+  for (const f of new Set(candidates)) {
+    if (!remaining.some((c) => c?.includes(f))) images.deleteImageFile(f);
+  }
+}
+
 function registerIpc(): void {
   ipcMain.handle('realms:list', () => db.listRealms());
   ipcMain.handle('realms:create', (_e, name: string) => db.createRealm(name));
@@ -49,9 +60,11 @@ function registerIpc(): void {
     const docs = db.listRealmDocTypes(id);
     const pdfIds = docs.filter((d) => d.type === 'core/pdf');
     const audioFiles = docs.flatMap((d) => audio.extractAudioRefs(d.content));
+    const imageFiles = docs.flatMap((d) => images.extractImageRefs(d.content));
     db.deleteRealm(id);
     for (const p of pdfIds) pdf.deletePdfFile(p.id);
     deleteUnreferencedAudio(audioFiles);
+    deleteUnreferencedImages(imageFiles);
   });
   ipcMain.handle('realms:export', (_e, id: string) => realmTransfer.exportRealm(id));
   ipcMain.handle('realms:import', () => realmTransfer.importRealm());
@@ -71,9 +84,11 @@ function registerIpc(): void {
     const docs = db.listSubtreeDocs(id);
     const pdfIds = docs.filter((d) => d.type === 'core/pdf');
     const audioFiles = docs.flatMap((d) => audio.extractAudioRefs(d.content));
+    const imageFiles = docs.flatMap((d) => images.extractImageRefs(d.content));
     db.deleteDoc(id);
     for (const p of pdfIds) pdf.deletePdfFile(p.id);
     deleteUnreferencedAudio(audioFiles);
+    deleteUnreferencedImages(imageFiles);
     broadcastDocsChanged(realmId);
   });
   ipcMain.handle('docs:move', (_e, id: string, parentId: string | null, position: number) => {
@@ -89,6 +104,9 @@ function registerIpc(): void {
 
   ipcMain.handle('audio:import', () => audio.importAudio());
   ipcMain.handle('audio:save', (_e, name: string, data: Uint8Array) => audio.saveAudio(name, data));
+
+  ipcMain.handle('images:import', () => images.importImage());
+  ipcMain.handle('images:save', (_e, name: string, data: Uint8Array) => images.saveImage(name, data));
 
   ipcMain.handle('ui:load', () => db.loadUiState());
   ipcMain.handle('ui:save', (_e, state: UiState) => db.saveUiState(state));
@@ -268,6 +286,7 @@ app.whenReady().then(() => {
   if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
   pdf.registerPdfProtocol();
   audio.registerAudioProtocol();
+  images.registerImageProtocol();
   db.initDb();
   // reclaim audio files orphaned by removed blocks/shapes/highlight attachments
   audio.gcAudioFiles(db.listAllDocContents());

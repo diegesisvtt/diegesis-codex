@@ -9,6 +9,7 @@ import AdmZip from 'adm-zip';
 import * as db from './db';
 import { pdfFilePath } from './pdf';
 import { audioFilePath, extractAudioRefs, isValidAudioData } from './audio';
+import { imageFilePath, extractImageRefs, isValidImageData } from './images';
 import type { ChatRole, DocumentType, RealmTransferResult, RetrievedChunk } from '../shared/types';
 
 const FORMAT = 'diegesis-realm';
@@ -16,6 +17,7 @@ const VERSION = 2;
 const MANIFEST = 'realm.json';
 const PDF_DIR = 'pdfs';
 const AUDIO_DIR = 'audios';
+const IMAGE_DIR = 'images';
 const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB transfer file cap
 const VALID_TYPES: DocumentType[] = [
   'core/note',
@@ -143,6 +145,19 @@ export async function exportRealm(realmId: string): Promise<RealmTransferResult>
         }
       } catch {
         return { ok: false, error: `Falha ao ler o áudio "${fileName}".` };
+      }
+    }
+  }
+  // image files referenced by any document (timeline event covers, etc.)
+  for (const doc of docs) {
+    for (const fileName of extractImageRefs(doc.content)) {
+      try {
+        const file = imageFilePath(fileName);
+        if (fs.existsSync(file) && !zip.getEntry(`${IMAGE_DIR}/${fileName}`)) {
+          zip.addFile(`${IMAGE_DIR}/${fileName}`, await fs.promises.readFile(file));
+        }
+      } catch {
+        return { ok: false, error: `Falha ao ler a imagem "${fileName}".` };
       }
     }
   }
@@ -329,6 +344,15 @@ export async function importRealm(): Promise<RealmTransferResult> {
       const data = entry.getData();
       if (!isValidAudioData(data)) continue; // skip oversized/invalid payloads
       await fs.promises.writeFile(audioFilePath(m[1]), data);
+    }
+
+    // Restore image binaries (timeline covers etc.; ids are stable).
+    for (const entry of zip.getEntries()) {
+      const m = /^images\/([a-z0-9]+\.[a-z0-9]+)$/i.exec(entry.entryName);
+      if (!m || entry.isDirectory) continue;
+      const data = entry.getData();
+      if (!isValidImageData(data)) continue; // skip oversized/invalid payloads
+      await fs.promises.writeFile(imageFilePath(m[1]), data);
     }
   } catch (err) {
     // rollback: don't leave a half-imported realm behind

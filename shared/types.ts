@@ -290,6 +290,23 @@ export interface AudioImportResult {
   error?: string;
 }
 
+/** An image file copied into app storage (<userData>/images). */
+export interface ImageAsset {
+  /** stored file name (<id>.<ext>) — also the protocol resource id */
+  id: string;
+  /** original file name, for display */
+  name: string;
+  /** diegesis-image:// URL used by <img> tags */
+  url: string;
+  size: number;
+}
+
+export interface ImageImportResult {
+  /** null when the user cancelled the file dialog */
+  asset: ImageAsset | null;
+  error?: string;
+}
+
 export interface RealmTransferResult {
   ok: boolean;
   /** true when the user dismissed the file dialog */
@@ -382,6 +399,12 @@ export interface DiegesisCodexApi {
     import(): Promise<AudioImportResult>;
     /** stores an audio file the renderer already holds (paste/drop in editors) */
     save(name: string, data: ArrayBuffer): Promise<AudioImportResult>;
+  };
+  images: {
+    /** opens a file dialog and copies the chosen image into app storage */
+    import(): Promise<ImageImportResult>;
+    /** stores an image the renderer already holds (paste/drop in editors) */
+    save(name: string, data: ArrayBuffer): Promise<ImageImportResult>;
   };
   app: {
     platform(): Promise<NodeJS.Platform>;
