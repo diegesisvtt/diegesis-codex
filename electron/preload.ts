@@ -60,6 +60,7 @@ const api: MythrilApi = {
     listMessages: (conversationId) => ipcRenderer.invoke('ai:messages:list', conversationId),
     chat: (req) => ipcRenderer.invoke('ai:chat', req),
     cancelChat: (chatId) => ipcRenderer.invoke('ai:chat:cancel', chatId),
+    extractTable: (text: string) => ipcRenderer.invoke('ai:table:extract', text),
     onChatChunk: (cb) => subscribe<ChatStreamChunk>('ai:chat:chunk', cb),
     onChatSources: (cb) => subscribe<AIChatSources>('ai:chat:sources', cb),
     onToolEvent: (cb) => subscribe<AIToolEvent>('ai:chat:tool', cb),

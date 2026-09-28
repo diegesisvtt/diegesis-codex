@@ -16,6 +16,7 @@ import {
   RotateCw,
   Check,
   Bookmark,
+  Table,
 } from 'lucide-react';
 import { Layout, Model, Actions, DockLocation, type TabNode, type IJsonModel, type IJsonTabNode } from 'flexlayout-react';
 import type { DocNode } from '@shared/types';
@@ -37,6 +38,8 @@ import { ensurePageThumb } from './Scry';
 import { usePdfAnnotations } from './useAnnotations';
 import { parseStatblock } from './rpg';
 import { OnboardingModal } from './OnboardingModal';
+import { extractRegionText } from './tableCapture';
+import { createDefaultTable, createEmptyRow, serializeTable } from '@shared/table';
 
 const ZOOM_STEPS = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2, 2.5, 3, 3.5, 4];
 const MIN_ZOOM = ZOOM_STEPS[0];
@@ -69,6 +72,9 @@ const processingDocs = new Set<string>();
 // outline/search open as left tabs and every annotation/highlight opens in the
 // right border, whose tabs stack vertically on the edge (VS Code-style).
 // ---------------------------------------------------------------------------
+
+// drag a pin note from the Explorer tree onto a page → link token
+const PIN_NOTE_MIME = 'application/x-mythril-pin-note';
 
 const PAGES_TABSET_ID = 'pdf-pages-tabset';
 const PAGES_TAB_ID = 'pdf-pages';
@@ -160,7 +166,8 @@ function forEachTab(model: Model, fn: (tab: TabNode) => void): void {
 }
 
 export function PdfReader({ doc }: { doc: DocNode }) {
-  const { updateDocument, subscribeExternalDocChange, docs, pdfFocus, clearPdfFocus } = useStore();
+  const { updateDocument, subscribeExternalDocChange, docs, pdfFocus, clearPdfFocus, createDocument, openDocument } =
+    useStore();
 
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -192,6 +199,10 @@ export function PdfReader({ doc }: { doc: DocNode }) {
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const [hlPopover, setHlPopover] = useState<HighlightPopoverState | null>(null);
   const [tokenDragOver, setTokenDragOver] = useState(false);
+  /** AI table capture: rectangle-select mode + in-flight rect (fractional) */
+  const [capturing, setCapturing] = useState(false);
+  const [capRect, setCapRect] = useState<{ page: number; x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
 
   const docsRef = useRef(docs);
   docsRef.current = docs;
@@ -496,8 +507,84 @@ export function PdfReader({ doc }: { doc: DocNode }) {
 
   const fractionalFromEvent = (e: React.MouseEvent) => fractionalFromPoint(e.clientX, e.clientY, e.target);
 
-  // ---- drag a pin note from the Explorer tree onto a page → link token ----
-  const PIN_NOTE_MIME = 'application/x-mythril-pin-note';
+  // ---- AI table capture: drag a rectangle over a table, extract via AI ----
+
+  const finishCapture = async (page: number, rect: { x: number; y: number; w: number; h: number }) => {
+    if (!pdf) return;
+    setProcessing('Extraindo tabela com IA…');
+    setCaptureError(null);
+    try {
+      const text = await extractRegionText(pdf, page, rect, contentRef.current.view.rotations[page] ?? 0);
+      if (!text.trim()) {
+        setCaptureError('Nenhum texto nessa região. Em PDFs escaneados (imagem) a extração não funciona.');
+        return;
+      }
+      const res = await window.mythril.ai.extractTable(text);
+      if (!res.ok || !res.table) {
+        setCaptureError(res.error ?? 'Falha ao extrair a tabela.');
+        return;
+      }
+      const table = createDefaultTable();
+      table.formula = res.table.formula;
+      table.rows = res.table.linhas.map((l) => ({ ...createEmptyRow(), text: l.texto, weight: l.peso }));
+      const newDoc = await createDocument('mythril/table', null, res.table.titulo, serializeTable(table));
+      openDocument(newDoc.id);
+    } catch (err) {
+      setCaptureError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProcessing(null);
+      setTimeout(() => setCaptureError(null), 8000);
+    }
+  };
+
+  const onCapturePointerDown = (e: React.PointerEvent) => {
+    if (!capturing || e.button !== 0) return;
+    const hit = fractionalFromPoint(e.clientX, e.clientY, e.target);
+    if (!hit) return;
+    e.preventDefault();
+    setCaptureError(null);
+    setCapRect({ page: hit.page, x0: hit.fx, y0: hit.fy, x1: hit.fx, y1: hit.fy });
+  };
+
+  const onCapturePointerMove = (e: React.PointerEvent) => {
+    if (!capturing || !capRect) return;
+    const hit = fractionalFromPoint(e.clientX, e.clientY, e.target);
+    if (!hit || hit.page !== capRect.page) return;
+    setCapRect({ ...capRect, x1: hit.fx, y1: hit.fy });
+  };
+
+  const onCapturePointerUp = (): boolean => {
+    if (!capturing) return false;
+    const r = capRect;
+    setCapRect(null);
+    setCapturing(false);
+    if (!r) return true;
+    const rect = {
+      x: Math.min(r.x0, r.x1),
+      y: Math.min(r.y0, r.y1),
+      w: Math.abs(r.x1 - r.x0),
+      h: Math.abs(r.y1 - r.y0),
+    };
+    // tiny rects are accidental clicks — stay in capture mode mentally, do nothing
+    if (rect.w > 0.02 && rect.h > 0.02) void finishCapture(r.page, rect);
+    return true;
+  };
+
+  // react-dnd's HTML5 backend (behind the Explorer tree) force-sets
+  // dropEffect='none' in a window-level dragover handler whenever the pointer
+  // is outside its own drop targets — which suppresses the drop event even
+  // after our preventDefault. That handler lives on window and was registered
+  // at app boot, so a window listener registered here (on mount) runs AFTER
+  // it and wins. (Same workaround as the whiteboard.)
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes(PIN_NOTE_MIME)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'link';
+    };
+    window.addEventListener('dragover', onDragOver);
+    return () => window.removeEventListener('dragover', onDragOver);
+  }, []);
 
   const onPageDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes(PIN_NOTE_MIME)) return;
@@ -536,6 +623,7 @@ export function PdfReader({ doc }: { doc: DocNode }) {
   };
 
   const onPageClick = (e: React.MouseEvent) => {
+    if (capturing) return;
     const hit = fractionalFromEvent(e);
     if (!hit) return;
     // clicks on pins/controls don't place pins or deselect
@@ -558,6 +646,7 @@ export function PdfReader({ doc }: { doc: DocNode }) {
 
   // text selection → highlight popover
   const onPagePointerUp = (e: React.MouseEvent) => {
+    if (onCapturePointerUp()) return;
     if (placing || linkingPinId) return;
     // selections inside pin embeds/tooltips are editing, not highlighting
     if ((e.target as HTMLElement).closest('.pdf-pin-embed, .pdf-pin-tooltip')) return;
@@ -600,6 +689,10 @@ export function PdfReader({ doc }: { doc: DocNode }) {
       if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
       if (ctxMenu) setCtxMenu(null);
       else if (hlPopover) setHlPopover(null);
+      else if (capturing) {
+        setCapturing(false);
+        setCapRect(null);
+      }
       else if (placing) setPlacing(null);
       else if (linkingPinId) setLinkingPinId(null);
       else if (selectedPanelTabId && panelModelRef.current?.getNodeById(selectedPanelTabId))
@@ -607,7 +700,7 @@ export function PdfReader({ doc }: { doc: DocNode }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [ctxMenu, hlPopover, placing, linkingPinId, selectedPanelTabId]);
+  }, [ctxMenu, hlPopover, capturing, placing, linkingPinId, selectedPanelTabId]);
 
   // ---- prune panel tabs whose pin/highlight was deleted ----
   useEffect(() => {
@@ -997,6 +1090,17 @@ export function PdfReader({ doc }: { doc: DocNode }) {
 
       <LayoutMenu layout={layout} separateCover={content.view.separateCover} onChange={setLayout} />
 
+      <ToolButton
+        title="Extrair tabela com IA (arraste um retângulo sobre a tabela)"
+        active={capturing}
+        onClick={() => {
+          setCapturing((v) => !v);
+          setCapRect(null);
+        }}
+      >
+        <Table size={16} className={capturing ? 'text-table' : undefined} />
+      </ToolButton>
+
       <ToolButton title={`Filtro de página: ${FILTER_LABELS[content.view.filter]} (Shift+I)`} onClick={cycleFilter}>
         <Contrast size={16} className={content.view.filter !== 'normal' ? 'text-accent-ink' : undefined} />
       </ToolButton>
@@ -1012,9 +1116,11 @@ export function PdfReader({ doc }: { doc: DocNode }) {
   const pagesContent = (
     <div
       ref={scrollRef}
-      className={`pdf-scroll h-full overflow-auto relative ${filterClass} ${placing || linkingPinId ? 'cursor-crosshair' : ''}`}
+      className={`pdf-scroll h-full overflow-auto relative ${filterClass} ${placing || linkingPinId || capturing ? 'cursor-crosshair' : ''}`}
       onContextMenu={onPageContextMenu}
       onClick={onPageClick}
+      onPointerDown={onCapturePointerDown}
+      onPointerMove={onCapturePointerMove}
       onPointerUp={onPagePointerUp}
       onDragOver={onPageDragOver}
       onDragLeave={() => setTokenDragOver(false)}
@@ -1041,6 +1147,22 @@ export function PdfReader({ doc }: { doc: DocNode }) {
             <div className="sticky top-4 z-20 flex justify-center pointer-events-none">
               <div className="bg-elevated border border-accent/40 rounded-full px-4 py-1.5 text-[12px] text-ink-1 shadow-lg">
                 {placing ? 'Clique no PDF para posicionar o pin (Esc cancela)' : 'Clique numa página para posicionar o token de link (Esc cancela)'}
+              </div>
+            </div>
+          )}
+
+          {capturing && !capRect && (
+            <div className="sticky top-4 z-20 flex justify-center pointer-events-none">
+              <div className="bg-elevated border border-table/50 rounded-full px-4 py-1.5 text-[12px] text-ink-1 shadow-lg">
+                Arraste um retângulo sobre a tabela para extrair com IA (Esc cancela)
+              </div>
+            </div>
+          )}
+
+          {captureError && (
+            <div className="sticky top-4 z-20 flex justify-center pointer-events-none">
+              <div className="bg-elevated border border-danger/50 rounded-full px-4 py-1.5 text-[12px] text-danger shadow-lg">
+                {captureError}
               </div>
             </div>
           )}
@@ -1103,6 +1225,18 @@ export function PdfReader({ doc }: { doc: DocNode }) {
                           >
                             <RotateCw size={13} />
                           </button>
+                          {/* AI table capture rectangle */}
+                          {capRect && capRect.page === p && (
+                            <div
+                              className="absolute border-2 border-table bg-table/15 pointer-events-none z-20 rounded-sm"
+                              style={{
+                                left: `${Math.min(capRect.x0, capRect.x1) * 100}%`,
+                                top: `${Math.min(capRect.y0, capRect.y1) * 100}%`,
+                                width: `${Math.abs(capRect.x1 - capRect.x0) * 100}%`,
+                                height: `${Math.abs(capRect.y1 - capRect.y0) * 100}%`,
+                              }}
+                            />
+                          )}
                           <HighlightLayer
                             highlights={content.highlights.filter((h) => h.page === p)}
                             onClick={(hl) => openPanel('highlight', hl.id)}

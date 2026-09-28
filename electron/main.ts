@@ -11,6 +11,8 @@ import * as embedder from './ai/embedder';
 import { docEvents } from './ai/events';
 import { semanticSearch, streamChat } from './ai/rag';
 import { getProvider, listProviders } from './ai/providers/registry';
+import { emptyDossier, runSpecialist } from './ai/specialists/base';
+import { tableExtractSpecialist } from './ai/specialists/table-extract';
 import { listSearchProviders, runWebSearch } from './ai/websearch';
 import type { AIChatRequest, AIProviderConfig, DocChanges, DocInput, SecondWindowState, UiState } from '../shared/types';
 
@@ -143,6 +145,26 @@ function registerIpc(): void {
   });
   ipcMain.handle('ai:chat:cancel', (_e, chatId: string) => {
     activeChats.get(chatId)?.abort();
+  });
+
+  // PDF region capture → table-extract specialist → structured table
+  ipcMain.handle('ai:table:extract', async (_e, text: string) => {
+    try {
+      if (!text?.trim()) return { ok: false, error: 'Nenhum texto encontrado na região selecionada.' };
+      const cfg = aiConfig.getResolvedChatConfig();
+      if (!cfg) return { ok: false, error: 'Configure um provider de chat nas configurações de IA.' };
+      const provider = getProvider(cfg.providerId);
+      if (!provider) return { ok: false, error: `Provider desconhecido: ${cfg.providerId}` };
+      const table = await runSpecialist(
+        tableExtractSpecialist,
+        { texto: text },
+        { realmId: '', canon: [], dossier: emptyDossier() },
+        { provider, config: cfg.config }
+      );
+      return { ok: true, table };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
   });
 
   ipcMain.handle('app:platform', () => process.platform);
