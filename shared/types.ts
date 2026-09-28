@@ -37,7 +37,8 @@ export type DocumentType =
   | 'core/folder'
   | 'core/pdf'
   | 'hexcrawl/map'
-  | 'mythril/timeline';
+  | 'mythril/timeline'
+  | 'mythril/table';
 
 export interface Realm {
   id: string;
@@ -53,6 +54,8 @@ export interface DocNode {
   title: string;
   /** Notion-style page icon (RPG icon set name); also used by PDF pins of this note */
   icon?: string | null;
+  /** Notion-style cover banner (downscaled image data URL); shown above the note title */
+  cover?: string | null;
   /** JSON string: tiptap doc for notes, { nodes: [...] } for whiteboards, null for folders */
   content: string | null;
   position: number;
@@ -66,6 +69,7 @@ export interface DocInput {
   type: DocumentType;
   title: string;
   icon?: string | null;
+  cover?: string | null;
   content?: string | null;
   position?: number;
 }
@@ -73,6 +77,7 @@ export interface DocInput {
 export interface DocChanges {
   title?: string;
   icon?: string | null;
+  cover?: string | null;
   content?: string | null;
   parentId?: string | null;
   position?: number;
@@ -170,6 +175,13 @@ export interface AISettings {
 export const SECRET_MASK = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
 
 export type EmbedModelState = 'idle' | 'downloading' | 'ready' | 'error';
+
+/** Roll table extracted from a PDF region by the table-extract specialist. */
+export interface ExtractedTableData {
+  titulo: string;
+  formula: string;
+  linhas: { texto: string; peso: number }[];
+}
 
 export interface AIIndexStatus {
   /** local embedding model lifecycle (one-time download, then offline) */
@@ -350,6 +362,8 @@ export interface MythrilApi {
     listMessages(conversationId: string): Promise<StoredChatMessage[]>;
     chat(req: AIChatRequest): Promise<void>;
     cancelChat(chatId: string): Promise<void>;
+    /** extracts a roll table from raw text captured from a PDF region (AI) */
+    extractTable(text: string): Promise<{ ok: boolean; table?: ExtractedTableData; error?: string }>;
     onChatChunk(cb: (chunk: ChatStreamChunk) => void): () => void;
     onChatSources(cb: (s: AIChatSources) => void): () => void;
     onToolEvent(cb: (e: AIToolEvent) => void): () => void;
