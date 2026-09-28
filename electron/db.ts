@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import type { ChatRole, Conversation, DocChanges, DocInput, DocNode, Realm, RetrievedChunk, SearchResult, SemanticSearchResult, StoredChatMessage, UiState } from '../shared/types';
 import { blocksToPlainText, isTiptapDoc, tiptapToBlocks } from '../shared/blockContent';
 import { extractTimelineText } from '../shared/timeline';
+import { extractTableText } from '../shared/table';
 
 export const generateId = () => crypto.randomBytes(6).toString('hex');
 
@@ -108,6 +109,13 @@ function migrate(): void {
   // migration: Notion-style page icons (pins inherit the note's icon)
   try {
     db.exec('ALTER TABLE documents ADD COLUMN icon TEXT');
+  } catch {
+    /* column already exists */
+  }
+
+  // migration: Notion-style cover banners (data URL, notes only)
+  try {
+    db.exec('ALTER TABLE documents ADD COLUMN cover TEXT');
   } catch {
     /* column already exists */
   }
@@ -214,6 +222,10 @@ export function extractPlainText(content: string | null): string {
     // timelines: títulos/descrições de eventos, eras, lanes, tags e luas
     if (parsed && typeof parsed === 'object' && parsed.kind === 'mythril-timeline') {
       return extractTimelineText(content);
+    }
+    // tabelas interativas: resultados, detalhes e fórmula
+    if (parsed && typeof parsed === 'object' && parsed.kind === 'mythril-table') {
+      return extractTableText(content);
     }
     // notes (BlockNote JSON), whiteboards and legacy content
     return blocksToPlainText(content);
@@ -681,6 +693,7 @@ function rowToDoc(r: any): DocNode {
     type: r.type,
     title: r.title,
     icon: r.icon ?? null,
+    cover: r.cover ?? null,
     content: r.content,
     position: r.position,
     updatedAt: r.updated_at,
@@ -707,8 +720,8 @@ export function createDoc(input: DocInput): DocNode {
       .prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM documents WHERE realm_id = ? AND parent_id IS ?')
       .get(input.realmId, input.parentId) as { p: number }).p);
   db.prepare(
-    'INSERT INTO documents (id, realm_id, parent_id, type, title, icon, content, position, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(input.id, input.realmId, input.parentId, input.type, input.title, input.icon ?? null, input.content ?? null, position, now);
+    'INSERT INTO documents (id, realm_id, parent_id, type, title, icon, cover, content, position, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(input.id, input.realmId, input.parentId, input.type, input.title, input.icon ?? null, input.cover ?? null, input.content ?? null, position, now);
   const doc: DocNode = { ...input, content: input.content ?? null, position, updatedAt: now };
   ftsUpsert({ id: doc.id, realmId: doc.realmId, type: doc.type, title: doc.title, content: doc.content });
   if (input.type !== 'core/folder') enqueueEmbedJob(doc.id);
@@ -720,6 +733,7 @@ export function updateDoc(id: string, changes: DocChanges): void {
   const values: unknown[] = [];
   if (changes.title !== undefined) { fields.push('title = ?'); values.push(changes.title); }
   if (changes.icon !== undefined) { fields.push('icon = ?'); values.push(changes.icon); }
+  if (changes.cover !== undefined) { fields.push('cover = ?'); values.push(changes.cover); }
   if (changes.content !== undefined) { fields.push('content = ?'); values.push(changes.content); }
   if (changes.parentId !== undefined) { fields.push('parent_id = ?'); values.push(changes.parentId); }
   if (changes.position !== undefined) { fields.push('position = ?'); values.push(changes.position); }
