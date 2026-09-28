@@ -23,6 +23,11 @@ export interface AppEvents {
   'secondwindow:status': { open: boolean };
   /** a hexcrawl map editor camera moved (hex-space world center + zoom) */
   'hexcrawl:camera': { docId: string; x: number; y: number; zoom: number };
+  /** a table roll happened (table editor or note block); feeds the roll log */
+  'roller:rolled': {
+    tableTitle: string;
+    steps: { title: string; formula: string; total: number | null; dice: number[]; text: string }[];
+  };
 }
 
 type Handler<T> = (payload: T) => void;

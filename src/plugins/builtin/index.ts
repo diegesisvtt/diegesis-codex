@@ -8,6 +8,8 @@ import { audioPlugin } from './audioPlugin';
 import { commandPalettePlugin } from './commandPalettePlugin';
 import { hexcrawlPlugin } from './hexcrawlPlugin';
 import { timelinePlugin } from './timelinePlugin';
+import { tablePlugin } from './tablePlugin';
+import { rollerPlugin } from './rollerPlugin';
 import { secondWindowPlugin } from './secondWindowPlugin';
 
 /**
@@ -24,5 +26,7 @@ export const builtinPlugins: Plugin[] = [
   commandPalettePlugin,
   hexcrawlPlugin,
   timelinePlugin,
+  tablePlugin,
+  rollerPlugin,
   secondWindowPlugin,
 ];
