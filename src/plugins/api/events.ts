@@ -1,6 +1,11 @@
 import { createBus, defineContract, type Contract, type EventBus as SdkEventBus, type Schema } from '@diegesis/events';
+import type { RollResult as DiceRollResult } from '@diegesis/dice-core';
 import * as v from 'valibot';
 import type { Disposable } from './types';
+
+/** rolagem do dice-core carregada no evento roller:rolled (objeto opaco — a
+ *  estrutura completa é garantida pelo dice-core, não duplicada aqui) */
+const diceRollSchema = v.custom<DiceRollResult>((x) => x !== null && typeof x === 'object');
 
 /** Application-wide event schemas. This is the single source of truth for the
  *  app event map — payloads are validated against these schemas (in 'warn'
@@ -34,8 +39,7 @@ const appEvents = {
       v.object({
         title: v.string(),
         formula: v.string(),
-        total: v.nullable(v.number()),
-        dice: v.array(v.number()),
+        roll: v.nullable(diceRollSchema),
         text: v.string(),
       }),
     ),

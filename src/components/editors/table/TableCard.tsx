@@ -5,7 +5,7 @@
 import { useMemo, useState } from 'react';
 import { ArrowUpRight, Dices, Table, X } from 'lucide-react';
 import type { DocNode } from '@shared/types';
-import { computeRanges, parseFormula, parseTable, rollChain, type ChainStep } from '@shared/table';
+import { computeRanges, parseFormula, parseTable, rollChain, rollTotal, type ChainStep } from '@shared/table';
 import { useStore } from '../../../state/store';
 import { usePluginManager } from '../../../plugins/manager';
 
@@ -41,8 +41,7 @@ export function TableCard({ tableDoc, onUnlink }: { tableDoc: DocNode; onUnlink?
       steps: rolled.map((s) => ({
         title: s.title,
         formula: s.formula,
-        total: s.result.total,
-        dice: s.result.dice,
+        roll: s.result.roll,
         text: s.result.row.text,
       })),
     });
@@ -115,19 +114,22 @@ export function TableCard({ tableDoc, onUnlink }: { tableDoc: DocNode; onUnlink?
       {/* resultado da rolagem (encadeada) */}
       {steps && steps.length > 0 && (
         <div className="px-3 py-2 border-t border-line bg-table/10">
-          {steps.map((step, i) => (
+          {steps.map((step, i) => {
+            const total = rollTotal(step.result);
+            return (
             <div key={i} className="flex items-baseline gap-1.5 py-0.5 text-[12.5px]">
               {i > 0 && <span className="text-ink-3 select-none">→</span>}
               <Dices size={12} className="text-table shrink-0 self-center" />
-              {step.result.total != null && (
-                <span className="text-[13px] font-bold font-mono text-ink-1">{step.result.total}</span>
+              {total != null && (
+                <span className="text-[13px] font-bold font-mono text-ink-1">{total}</span>
               )}
               {steps.length > 1 && <span className="text-[10.5px] text-ink-3">[{step.title}]</span>}
               <span className="text-ink-1 truncate">
                 {step.result.row.text || <em className="text-ink-3">(sem texto)</em>}
               </span>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

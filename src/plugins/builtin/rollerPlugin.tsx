@@ -3,13 +3,14 @@
 // e o expõe numa workspace tab ("Rolagens") aberta pelo botão da ribbon.
 import { useSyncExternalStore } from 'react';
 import { Dices, Trash2 } from 'lucide-react';
+import type { RollResult as DiceRollResult } from '@diegesis/dice-core';
 import { PLUGIN_API_VERSION, type Plugin } from '../api/types';
 
 interface RolledStep {
   title: string;
   formula: string;
-  total: number | null;
-  dice: number[];
+  /** rolagem completa do dice-core (null quando sorteio ponderado puro) */
+  roll: DiceRollResult | null;
   text: string;
 }
 
@@ -70,22 +71,33 @@ function RollLogPanel() {
                 <span className="text-[12.5px] font-medium text-ink-1 truncate">{entry.tableTitle}</span>
                 <span className="text-[10.5px] text-ink-3 select-none">{timeFmt.format(entry.at)}</span>
               </div>
-              {entry.steps.map((step, i) => (
+              {entry.steps.map((step, i) => {
+                const total = step.roll && typeof step.roll.value === 'number' ? step.roll.value : null;
+                const rolls = step.roll?.rolls ?? [];
+                return (
                 <div key={i} className="flex items-baseline gap-2 py-0.5 text-[12.5px]">
                   {i > 0 && <span className="text-ink-3 select-none">→</span>}
-                  {step.total != null && (
+                  {total != null && (
                     <span className="font-mono font-bold text-ink-1">
-                      {step.total}
+                      {total}
                       <span className="ml-1 font-normal text-[10.5px] text-ink-3">{step.formula}</span>
                     </span>
                   )}
                   {entry.steps.length > 1 && <span className="text-ink-3 text-[11px]">[{step.title}]</span>}
                   <span className="text-ink-1">{step.text || <em className="text-ink-3">(sem texto)</em>}</span>
-                  {step.dice.length > 1 && (
-                    <span className="text-[10.5px] font-mono text-ink-3 select-none">({step.dice.join(' + ')})</span>
+                  {rolls.length > 1 && (
+                    <span className="text-[10.5px] font-mono text-ink-3 select-none">
+                      ({rolls.map((d, j) => (
+                        <span key={j} className={d.kept ? '' : 'line-through opacity-50'}>
+                          {j > 0 && ' + '}
+                          {d.value}
+                        </span>
+                      ))})
+                    </span>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           ))}
         </div>

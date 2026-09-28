@@ -12,13 +12,13 @@ import {
 } from 'lucide-react';
 import type { DocNode } from '@shared/types';
 import {
+  boundsOf,
   computeRanges,
   createEmptyRow,
-  formulaMax,
-  formulaMin,
   parseFormula,
   parseTable,
   rollChain,
+  rollTotal,
   rowsFromText,
   serializeTable,
   type ChainStep,
@@ -117,6 +117,7 @@ export function TableEditor({ doc }: { doc: DocNode }) {
   // ---------- rolagem (encadeada) ----------
 
   const formula = useMemo(() => parseFormula(data.formula), [data.formula]);
+  const bounds = useMemo(() => (formula ? boundsOf(formula) : null), [formula]);
   const ranges = useMemo(
     () => (formula ? computeRanges(data.rows, formula) : null),
     [data.rows, formula]
@@ -141,8 +142,7 @@ export function TableEditor({ doc }: { doc: DocNode }) {
       steps: rolled.map((s) => ({
         title: s.title,
         formula: s.formula,
-        total: s.result.total,
-        dice: s.result.dice,
+        roll: s.result.roll,
         text: s.result.row.text,
       })),
     });
@@ -151,7 +151,10 @@ export function TableEditor({ doc }: { doc: DocNode }) {
   const copyResult = () => {
     if (!steps || steps.length === 0) return;
     const text = steps
-      .map((s) => `${s.title}${s.result.total != null ? ` (${s.result.total})` : ''}: ${s.result.row.text}`)
+      .map((s) => {
+        const total = rollTotal(s.result);
+        return `${s.title}${total != null ? ` (${total})` : ''}: ${s.result.row.text}`;
+      })
       .join('\n');
     void navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
@@ -229,12 +232,15 @@ export function TableEditor({ doc }: { doc: DocNode }) {
         <div className="mx-4 mt-3 rounded-lg border border-table/40 bg-table/10 px-4 py-3 flex items-start gap-3">
           <Dices size={18} className="text-table shrink-0 mt-0.5" />
           <div className="min-w-0 flex-1">
-            {steps.map((step, i) => (
+            {steps.map((step, i) => {
+              const total = rollTotal(step.result);
+              const rolls = step.result.roll?.rolls ?? [];
+              return (
               <div key={i} className="flex items-baseline gap-2 flex-wrap py-0.5">
                 {i > 0 && <span className="text-ink-3 select-none">→</span>}
-                {step.result.total != null && (
+                {total != null && (
                   <span className="text-[15px] font-bold text-ink-1 font-mono">
-                    {step.result.total}
+                    {total}
                     {step.result.range && (
                       <span className="ml-1.5 text-[11px] font-normal text-ink-3">
                         [{step.result.range.min}–{step.result.range.max}]
@@ -246,13 +252,14 @@ export function TableEditor({ doc }: { doc: DocNode }) {
                 <span className="text-[14px] text-ink-1">
                   {step.result.row.text || <em className="text-ink-3">(sem texto)</em>}
                 </span>
-                {step.result.dice.length > 1 && (
+                {rolls.length > 1 && (
                   <span className="text-[11px] text-ink-3 font-mono">
-                    {step.formula}: {step.result.dice.join(' + ')}
+                    {step.formula}: {rolls.map((d) => d.value).join(' + ')}
                   </span>
                 )}
               </div>
-            ))}
+              );
+            })}
             {finalStep.result.row.details && (
               <div className="text-[12px] text-ink-2 mt-1 whitespace-pre-wrap">{finalStep.result.row.details}</div>
             )}
@@ -453,9 +460,9 @@ export function TableEditor({ doc }: { doc: DocNode }) {
             </button>
           </div>
 
-          {formula && rollable && (
+          {formula && rollable && bounds && (
             <div className="mt-3 text-[11px] text-ink-3 select-none">
-              {data.formula} cobre {formulaMin(formula)}–{formulaMax(formula)} ·{' '}
+              {data.formula} cobre {bounds.min}–{bounds.max} ·{' '}
               {data.rows.filter((r) => r.weight > 0).length} linha(s) rolável(is)
             </div>
           )}

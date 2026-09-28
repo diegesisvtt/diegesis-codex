@@ -10,6 +10,7 @@ import {
   parseFormula,
   parseTable,
   rollChain,
+  rollTotal,
   serializeTable,
   createDefaultTable,
   type ChainStep,
@@ -87,8 +88,7 @@ export const InteractiveTableBlock = createReactBlockSpec(
           steps: rolled.map((s) => ({
             title: s.title,
             formula: s.formula,
-            total: s.result.total,
-            dice: s.result.dice,
+            roll: s.result.roll,
             text: s.result.row.text,
           })),
         });
@@ -96,9 +96,10 @@ export const InteractiveTableBlock = createReactBlockSpec(
 
       const insertResult = () => {
         if (!steps || steps.length === 0) return;
-        const lines = steps.map(
-          (s) => `${s.title}${s.result.total != null ? ` (${s.result.total})` : ''}: ${s.result.row.text}`
-        );
+        const lines = steps.map((s) => {
+          const total = rollTotal(s.result);
+          return `${s.title}${total != null ? ` (${total})` : ''}: ${s.result.row.text}`;
+        });
         editor.insertBlocks(
           lines.map((content) => ({ type: 'paragraph', content })) as never,
           block,
@@ -236,18 +237,21 @@ export const InteractiveTableBlock = createReactBlockSpec(
               <div className="flex items-start gap-2 px-3 py-2 border-t border-line bg-table/10">
                 <Dices size={13} className="text-table shrink-0 mt-1" />
                 <div className="min-w-0 flex-1">
-                  {steps.map((step, i) => (
+                  {steps.map((step, i) => {
+                    const total = rollTotal(step.result);
+                    return (
                     <div key={i} className="flex items-baseline gap-1.5 py-0.5 text-[12.5px]">
                       {i > 0 && <span className="text-ink-3 select-none">→</span>}
-                      {step.result.total != null && (
-                        <span className="text-[13px] font-bold font-mono text-ink-1">{step.result.total}</span>
+                      {total != null && (
+                        <span className="text-[13px] font-bold font-mono text-ink-1">{total}</span>
                       )}
                       {steps.length > 1 && <span className="text-[10.5px] text-ink-3">[{step.title}]</span>}
                       <span className="text-ink-1 truncate">
                         {step.result.row.text || <em className="text-ink-3">(sem texto)</em>}
                       </span>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <button
                   type="button"

@@ -2,6 +2,7 @@
 // order, columns possibly jumbled) into a structured interactive table
 // (diegesis/table): inferred dice formula + rows with weights.
 
+import { parseFormula } from '../../../shared/table';
 import type { ProviderMessage } from '../providers/base';
 import type { Specialist, SpecialistContext } from './base';
 
@@ -55,7 +56,8 @@ export function parseExtractedTable(value: unknown): ExtractedTable {
     const peso = typeof row.peso === 'number' && Number.isFinite(row.peso) && row.peso > 0 ? row.peso : 1;
     return { texto: row.texto.trim(), peso };
   });
-  const formula = /^\s*\d{0,3}\s*d\s*\d{1,4}\s*$/i.test(v.formula) ? v.formula.trim().toLowerCase().replace(/\s+/g, '') : '';
+  const normalized = v.formula.trim().replace(/\s+/g, '');
+  const formula = parseFormula(normalized) ? normalized : '';
   return { titulo: v.titulo.trim(), formula, linhas };
 }
 
