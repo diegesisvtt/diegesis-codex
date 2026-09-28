@@ -21,7 +21,32 @@ export type SpecialistId =
   | 'demon'
   | 'dialogue'
   | 'plot'
-  | 'combat';
+  | 'combat'
+  | 'villain'
+  | 'motivation'
+  | 'body-language'
+  | 'world'
+  | 'society'
+  | 'creature'
+  | 'inner-story'
+  | 'history'
+  | 'character'
+  | 'city'
+  | 'titles'
+  | 'romance'
+  | 'scenery'
+  | 'scene'
+  | 'speech'
+  | 'opening'
+  | 'religion'
+  | 'magic'
+  | 'army'
+  | 'campaign-start'
+  | 'mood'
+  | 'quest'
+  | 'location'
+  | 'dungeon'
+  | 'table-extract';
 
 /** A ready-to-call model: provider + resolved config. */
 export interface LLMHandle {

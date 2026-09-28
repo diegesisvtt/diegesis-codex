@@ -152,7 +152,9 @@ export async function executeTool(
                     ? 'hexmap'
                     : d.type === 'mythril/timeline'
                       ? 'timeline'
-                      : 'note',
+                      : d.type === 'mythril/table'
+                        ? 'table'
+                        : 'note',
           parentId: d.parentId,
         }));
         return { result: JSON.stringify({ documents: docs }), summary: 'Listou os documentos', ok: true };

@@ -296,6 +296,333 @@ export interface Creature {
   subespecies: string;
 }
 
+/** A story within a story — purpose-driven nested narrative. */
+export interface InnerStory {
+  titulo: string;
+  /** why nested instead of summarized: exposition, character reveal, pace change */
+  proposito: string;
+  /** how it's delivered: campfire tale, play, dusty tome, confession; frame story or mid-story */
+  moldura: string;
+  /** who tells it and what the telling reveals about THEM */
+  narrador: string;
+  /** the nested story itself, with the frame around it */
+  historia: string;
+  /** perception of truth — is the teller reliable? what's exaggerated or hidden? */
+  verdade: string;
+  /** parallels/foreshadowing to the main story — the lesson the characters can use */
+  eco: string;
+}
+
+export interface HistoryEra {
+  nome: string;
+  eventos: string;
+}
+
+/** Universe history: change over time, truth vs perspective, relics in the present. */
+export interface WorldHistory {
+  nome: string;
+  /** the broad sweep of the timeline */
+  panorama: string;
+  eras: HistoryEra[];
+  /** what really happened vs what people believe happened */
+  verdadeVsPerspectiva: string;
+  /** ruins, monuments and relics still visible — and their use today */
+  reliquias: string;
+  /** how the past surfaces in the present story */
+  passadoNoPresente: string;
+}
+
+/** Full character profile following the character-creation guide. */
+export interface CharacterProfile {
+  nome: string;
+  /** role in the story */
+  papel: string;
+  conceito: string;
+  /** how the character fits — or deliberately contrasts — the world */
+  encaixeNoMundo: string;
+  /** what makes them interesting: the small or extreme difference from the ordinary */
+  diferencial: string;
+  /** the flaw — nobody is perfect */
+  falha: string;
+  /** contradictory traits and the reason behind them */
+  contradicao: string;
+  /** what they want, why they want it, how they'll get it */
+  desejo: string;
+  /** short origin story — the foundation of consistent reactions */
+  historiaDeOrigem: string;
+  /** habits and quirks that reveal emotion without naming it */
+  tiques: string;
+  /** how the character changes with experience — never "finished" */
+  mudanca: string;
+}
+
+/** Settlement design: setting, organic vs planned growth, population, history, details. */
+export interface CityDesign {
+  nome: string;
+  /** village, town, city, metropolis + rough population */
+  tipo: string;
+  /** era, climate, environment, world rules (magic, physics) */
+  cenario: string;
+  /** organic growth or planned — and WHY the settlement exists here */
+  origem: string;
+  /** structure and the important buildings/services */
+  layout: string;
+  /** size, diversity, districts, separation or mixing of cultures */
+  populacao: string;
+  /** visible marks of history: monuments, old vs new architecture */
+  historia: string;
+  /** street-level details that bring it alive and set it apart from other towns */
+  detalhes: string;
+  /** celebrations, festivals, events */
+  eventos: string;
+}
+
+export interface TitleOption {
+  titulo: string;
+  /** the style used (character name, imagery, question, wordplay...) */
+  estilo: string;
+  /** why it works: attention, memorability, essence */
+  justificativa: string;
+}
+
+/** Book title candidates with the story's identified essence. */
+export interface TitleList {
+  essencia: string;
+  titulos: TitleOption[];
+}
+
+export interface RomanceLead {
+  nome: string;
+  conceito: string;
+  /** who they are at the start — the imperfection that must grow */
+  pontoDePartida: string;
+  /** how they grow to be better together than alone */
+  crescimento: string;
+}
+
+/** Romance design: two imperfect leads, obstacles, choices, supporting cast, location. */
+export interface RomanceDesign {
+  titulo: string;
+  premissa: string;
+  casal: RomanceLead[];
+  obstaculos: string[];
+  /** the love triangle or choice structure — stakes require a real choice */
+  escolha: string;
+  coadjuvantes: string;
+  /** location shapes dates, moods and problems */
+  locacao: string;
+  /** what the story is about — its focus */
+  foco: string;
+}
+
+/** Scenery description with the craft layers explained. */
+export interface SceneryDescription {
+  titulo: string;
+  /** the prose itself */
+  descricao: string;
+  /** the 1-2 focused elements and why */
+  foco: string;
+  /** whose point of view filters the scene — and what they DON'T notice */
+  pontoDeVista: string;
+  /** word-choice decisions (evocative words, sensory palette) */
+  palavrasChave: string;
+  /** what was deliberately left out */
+  economia: string;
+}
+
+/** A scene written with craft: purpose, arc, pacing, verb variety. */
+export interface SceneCraft {
+  titulo: string;
+  /** the scene itself, in prose */
+  cena: string;
+  /** how it advances the heart of the story */
+  proposito: string;
+  /** the scene's own beginning/middle/end — rising and falling action */
+  arcoDaCena: string;
+  /** pacing decisions: fast/slow, sentence rhythm */
+  ritmo: string;
+  /** verb variety, location grounding, POV choices */
+  notas: string;
+}
+
+/** A persuasive speech with its structure and persuasion methods exposed. */
+export interface Speech {
+  titulo: string;
+  orador: string;
+  /** the single message the speech must convey */
+  tese: string;
+  /** intro (attention) / body (strongest point first, weakest in the middle) / conclusion */
+  estrutura: string;
+  /** the speech itself, broken by audience/speaker reaction beats */
+  discurso: string;
+  /** persuasion methods used: credibility, emotion, logic */
+  persuasao: string;
+  /** inclusive terms, pauses, word-choice notes */
+  notas: string;
+}
+
+/** A story opening: first sentence + opening paragraphs, with the promise made explicit. */
+export interface Opening {
+  titulo: string;
+  primeiraFrase: string;
+  /** the opening paragraphs */
+  abertura: string;
+  /** the technique used: hook, voice, mystery, humor, contrast */
+  tecnica: string;
+  /** the promise the opening makes to the reader — the story must deliver on it */
+  promessa: string;
+  /** the grounding crumbs: where/when/who, woven in without exposition dumps */
+  ancoragem: string;
+  /** craft notes: why not a prologue, info pacing, what was held back */
+  notas: string;
+}
+
+/** Religion design: nature, gods, powers, doctrine, rituals, strictness. */
+export interface Religion {
+  nome: string;
+  /** real, fake or unknown — and what that means in-world */
+  natureza: string;
+  /** gods and other divine beings, their character and relations */
+  deuses: string;
+  /** divine powers and who wields them */
+  poderes: string;
+  /** origin myths and history */
+  origem: string;
+  /** leaders, chosen ones, prophets — and how they're chosen */
+  figuras: string;
+  /** sacred places, dress code, symbols */
+  lugaresESimbolos: string;
+  rituais: string[];
+  /** good vs evil, goal in life, afterlife, spirits */
+  doutrina: string;
+  /** strictness and the different versions/sects */
+  rigorEVersoes: string;
+}
+
+/** Magic system: source, wielders, powers, growth, combination, limitations. */
+export interface MagicSystem {
+  nome: string;
+  /** the source — and whether it's limited (limits create conflict) */
+  fonte: string;
+  /** materials that house or channel power */
+  materiais: string;
+  /** who/what can wield it — everyone, a lucky few, specific species; elite or outcast */
+  quemUsa: string;
+  /** how it's wielded — gestures, items, body parts; what happens when disarmed */
+  comoUsa: string;
+  /** the powers themselves, with relative costs */
+  poderes: string;
+  /** how power is gained — and the ceiling (why hasn't anyone reached it before?) */
+  ganhoDePoder: string;
+  /** can powers be combined? what does that change? */
+  combinacao: string;
+  /** the limitations that create tension */
+  limitacoes: string;
+}
+
+/** Army design: leadership, ranks, divisions, tactics, equipment, logistics, recruitment. */
+export interface ArmyDesign {
+  nome: string;
+  /** who leads the army, their personality and advisers — and what that changes */
+  lideranca: string;
+  /** military ranks, customized to the culture (not just private/sergeant/captain) */
+  patentes: string[];
+  /** divisions — including non-obvious ones (veterinary, administration, anti-mage, morale) */
+  divisoes: string[];
+  /** experience level and preferred combat style */
+  taticas: string;
+  /** special forces and the means to train/equip them */
+  forcasEspeciais: string;
+  /** armor and weapons — quality vs. what the economy can afford */
+  equipamento: string;
+  /** how the population and economy sustain this army */
+  logistica: string;
+  /** voluntary, temporary conscription, permanent draft — or no standing army at all */
+  recrutamento: string;
+}
+
+/** Campaign opening (session one): purpose, first scene, motivation, paths, foreshadowing. */
+export interface CampaignStart {
+  titulo: string;
+  /** what session one must establish: the world, motivation, clear paths */
+  proposito: string;
+  /** the opening scene itself — tavern, ship, prison, in medias res, campfire — with a twist */
+  abertura: string;
+  /** why the characters care and stay together */
+  motivacao: string;
+  /** clear paths offered at the end of session one */
+  caminhos: string[];
+  /** hints of the main plot / the greater danger */
+  pressagio: string;
+  /** GM notes: how to run it, what to improvise */
+  notas: string;
+}
+
+/** One scene of a sensory immersion plan. */
+export interface MoodScene {
+  cena: string;
+  som: string;
+  aroma: string;
+  luz: string;
+  tato: string;
+  sabor: string;
+}
+
+/** Sensory immersion plan for a tabletop session: sound, smell, light, touch, taste. */
+export interface MoodPlan {
+  titulo: string;
+  /** overall mood/concept being aimed at */
+  conceito: string;
+  cenas: MoodScene[];
+  /** practical GM notes: allergies, sparing use, real vs. fake candles, moderation */
+  notas: string;
+}
+
+/** One quest idea: the hook as the party hears it + the twist behind it. */
+export interface Quest {
+  titulo: string;
+  /** the hook/setup as presented to the party */
+  gancho: string;
+  /** the complication or twist that makes it more than it seems */
+  complicacao: string;
+}
+
+/** A list of quest/prompt ideas. */
+export interface QuestList {
+  tema: string;
+  quests: Quest[];
+}
+
+/** A unique themed location: memorable concept first, details second. */
+export interface LocationDesign {
+  nome: string;
+  /** nickname in the style "The City of Masks", "The Golden City" */
+  apelido: string;
+  /** the central concept that makes this place unique */
+  conceito: string;
+  /** what visiting or living there is like */
+  vida: string;
+  /** peculiar rules, dangers, challenges */
+  desafios: string;
+  ganchos: string[];
+}
+
+/** Dungeon concept: origin, structure, inhabitants, twist, reward. */
+export interface DungeonDesign {
+  nome: string;
+  conceito: string;
+  /** why it exists — built by whom, for what purpose, or natural */
+  origem: string;
+  /** layout and notable rooms/levels */
+  estrutura: string;
+  /** inhabitants and encounters */
+  habitantes: string;
+  /** the twist that makes this dungeon different from a hole full of monsters */
+  reviravolta: string;
+  /** what's worth taking — or what it costs to take it */
+  recompensas: string;
+}
+
 export interface CritiqueProblem {
   /** what is affected: scene name, NPC name, 'estrutura', 'consistencia', ... */
   alvo: string;
@@ -673,6 +1000,335 @@ export const CREATURE_SCHEMA: Record<string, unknown> = {
   additionalProperties: false,
 };
 
+export const INNER_STORY_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    titulo: str(''),
+    proposito: str('por que contar como história aninhada em vez de resumir: exposição de personagem, background, mudança de ritmo'),
+    moldura: str('como é entregue: conto ao redor da fogueira, peça de teatro, tomo empoeirado, confissão; história-moldura ou no meio da trama'),
+    narrador: str('quem conta e o que a forma de contar revela sobre ELE'),
+    historia: str('a história aninhada em si, com a moldura ao redor (reações dos ouvintes, pausas)'),
+    verdade: str('percepção da verdade — o narrador é confiável? o que foi exagerado, omitido ou distorcido?'),
+    eco: str('paralelos com a trama principal — a lição que os personagens podem usar, o presságio'),
+  },
+  required: ['titulo', 'proposito', 'historia'],
+  additionalProperties: false,
+};
+
+export const HISTORY_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    nome: str('nome da era, império ou período coberto'),
+    panorama: str('o panorama geral da linha do tempo'),
+    eras: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { nome: str(''), eventos: str('o que aconteceu e o que MUDOU') },
+        required: ['nome', 'eventos'],
+        additionalProperties: false,
+      },
+    },
+    verdadeVsPerspectiva: str('o que realmente aconteceu vs. o que os povos acreditam — e a tensão que isso gera'),
+    reliquias: str('ruínas, monumentos e relíquias ainda visíveis — e seu uso hoje'),
+    passadoNoPresente: str('como o passado aflora na história presente'),
+  },
+  required: ['nome', 'panorama', 'eras'],
+  additionalProperties: false,
+};
+
+export const CHARACTER_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    nome: str(''),
+    papel: str('papel na história (protagonista, aliado, mentor...)'),
+    conceito: str('quem é em uma frase'),
+    encaixeNoMundo: str('como se encaixa — ou contrasta de propósito — com o mundo em que vive'),
+    diferencial: str('o que o torna interessante: a pequena (ou extrema) diferença em relação ao comum'),
+    falha: str('a falha — ninguém é perfeito; falhas tornam genuíno'),
+    contradicao: str('traços contraditórios e a razão por trás deles'),
+    desejo: str('o que quer, por que quer, como vai conseguir'),
+    historiaDeOrigem: str('história de origem curta — a fundação das reações consistentes'),
+    tiques: str('hábitos e tiques que revelam emoção sem nomeá-la'),
+    mudanca: str('como o personagem muda com as experiências — nunca "pronto"'),
+  },
+  required: ['nome', 'papel', 'conceito', 'falha', 'desejo'],
+  additionalProperties: false,
+};
+
+export const CITY_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    nome: str(''),
+    tipo: str('vila, cidade, metrópole + população aproximada'),
+    cenario: str('época, clima, ambiente ao redor, regras do mundo (magia, física)'),
+    origem: str('crescimento orgânico ou construção planejada — e POR QUE o assentamento existe aqui'),
+    layout: str('estrutura e os edifícios/serviços importantes'),
+    populacao: str('tamanho, diversidade, distritos, mistura ou separação de culturas'),
+    historia: str('marcas visíveis da história: monumentos, arquitetura velha vs. nova'),
+    detalhes: str('detalhes de rua que dão vida e diferenciam de outras cidades'),
+    eventos: str('celebrações, festivais, eventos'),
+  },
+  required: ['nome', 'tipo', 'cenario', 'origem', 'layout'],
+  additionalProperties: false,
+};
+
+export const TITLES_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    essencia: str('a essência da história — o elemento central ao redor do qual os títulos giram'),
+    titulos: {
+      type: 'array',
+      description: '6 a 10 candidatos variados',
+      items: {
+        type: 'object',
+        properties: {
+          titulo: str(''),
+          estilo: str('o estilo usado (nome de personagem, imagem, pergunta, jogo de palavras, emoção...)'),
+          justificativa: str('por que funciona: chama atenção, memorável, captura a essência'),
+        },
+        required: ['titulo', 'estilo', 'justificativa'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['essencia', 'titulos'],
+  additionalProperties: false,
+};
+
+export const ROMANCE_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    titulo: str(''),
+    premissa: str('a premissa do romance em uma ou duas frases'),
+    casal: {
+      type: 'array',
+      description: 'os dois (ou mais) pombinhos',
+      items: {
+        type: 'object',
+        properties: {
+          nome: str(''),
+          conceito: str(''),
+          pontoDePartida: str('quem é no início — a imperfeição que precisa crescer'),
+          crescimento: str('como cresce para ser melhor junto do que sozinho'),
+        },
+        required: ['nome', 'conceito', 'pontoDePartida', 'crescimento'],
+        additionalProperties: false,
+      },
+    },
+    obstaculos: strArray('obstáculos realistas e proporcionais ao amor — superá-los dá peso à relação'),
+    escolha: str('o triângulo amoroso ou estrutura de escolha — stakes exigem escolha real'),
+    coadjuvantes: str('personagens de apoio que sustentam a história, não só ombros para chorar'),
+    locacao: str('a locação molda encontros, clima e problemas'),
+    foco: str('sobre o que é a história — o foco a manter'),
+  },
+  required: ['titulo', 'premissa', 'casal', 'obstaculos'],
+  additionalProperties: false,
+};
+
+export const SCENERY_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    titulo: str(''),
+    descricao: str('a descrição do cenário em prosa — 1-2 elementos em foco, múltiplos sentidos, movimento suave do olhar'),
+    foco: str('os elementos focados e por quê'),
+    pontoDeVista: str('de quem é o olhar que filtra a cena — e o que essa pessoa NÃO nota'),
+    palavrasChave: str('decisões de escolha de palavras (evocação, paleta sensorial)'),
+    economia: str('o que foi deixado de fora de propósito'),
+  },
+  required: ['titulo', 'descricao', 'foco'],
+  additionalProperties: false,
+};
+
+export const SCENE_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    titulo: str(''),
+    cena: str('a cena completa em prosa: personagem engajado, verbos variados, local ancorado, começo-meio-fim'),
+    proposito: str('como a cena avança o coração da história'),
+    arcoDaCena: str('o arco da própria cena — ação ascendente e descendente'),
+    ritmo: str('decisões de ritmo: rápido/lento, cadência das frases'),
+    notas: str('variedade de verbos, ancoragem no local, escolhas de ponto de vista'),
+  },
+  required: ['titulo', 'cena', 'proposito'],
+  additionalProperties: false,
+};
+
+export const SPEECH_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    titulo: str(''),
+    orador: str(''),
+    tese: str('a mensagem única que o discurso precisa convencer'),
+    estrutura: str('introdução (atenção) / corpo (ponto mais forte primeiro, o mais fraco no meio) / conclusão'),
+    discurso: str('o discurso em si, quebrado por batidas de reação da plateia e do orador'),
+    persuasao: str('métodos de persuasão usados: credibilidade, emoção, lógica'),
+    notas: str('termos inclusivos ("nós"), pausas, escolhas de palavras'),
+  },
+  required: ['titulo', 'orador', 'tese', 'discurso'],
+  additionalProperties: false,
+};
+
+export const OPENING_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    titulo: str('título da história'),
+    primeiraFrase: str('a primeira frase — a que decide se o leitor embarca'),
+    abertura: str('os primeiros parágrafos'),
+    tecnica: str('a técnica usada: gancho, voz, mistério, humor, contraste'),
+    promessa: str('a promessa que a abertura faz ao leitor — a história terá que cumprir'),
+    ancoragem: str('as migalhas de ambientação: onde/quando/quem, sem dumps de exposição'),
+    notas: str('notas de craft: por que não prólogo, ritmo da informação, o que foi segurado para depois'),
+  },
+  required: ['titulo', 'primeiraFrase', 'abertura', 'promessa'],
+  additionalProperties: false,
+};
+
+export const RELIGION_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    nome: str(''),
+    natureza: str('real, falsa ou incerta — e o que isso significa dentro do mundo'),
+    deuses: str('deuses e outros seres divinos, seu caráter e relações; ou a ausência deles (religião sem deus)'),
+    poderes: str('poderes divinos e quem os empunha — ou "milagres" ambíguos se a natureza for incerta'),
+    origem: str('mitos de origem e história'),
+    figuras: str('líderes religiosos, escolhidos, profetas — e como são escolhidos'),
+    lugaresESimbolos: str('lugares sagrados, código de vestimenta, símbolos'),
+    rituais: strArray('tradições e rituais — incluindo os sombrios quando couber'),
+    doutrina: str('bem vs. mal, meta de vida, vida após a morte, espíritos'),
+    rigorEVersoes: str('o rigor da fé e as diferentes versões/seitas'),
+  },
+  required: ['nome', 'natureza', 'deuses', 'doutrina'],
+  additionalProperties: false,
+};
+
+export const MAGIC_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    nome: str(''),
+    fonte: str('a fonte da magia — e se é limitada (limites criam conflito)'),
+    materiais: str('materiais que abrigam ou canalizam poder (runas, cristais, artefatos, tatuagens)'),
+    quemUsa: str('quem/o que pode empunhar — todos, poucos escolhidos, espécies específicas; elite ou pária'),
+    comoUsa: str('como se empunha — gestos, itens, corpo; o que acontece quando desarmado'),
+    poderes: str('os poderes em si, com custos relativos entre si'),
+    ganhoDePoder: str('como se ganha poder — e o teto (por que ninguém chegou lá antes?)'),
+    combinacao: str('poderes podem ser combinados? o que isso muda nas batalhas e rituais'),
+    limitacoes: str('as limitações que criam tensão'),
+  },
+  required: ['nome', 'fonte', 'quemUsa', 'poderes', 'limitacoes'],
+  additionalProperties: false,
+};
+
+export const ARMY_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    nome: str('nome do exército ou da força militar'),
+    lideranca: str('quem lidera o exército, sua personalidade e conselheiros — e o que isso muda na prática'),
+    patentes: strArray('patentes militares adaptadas à cultura — nomes próprios, não só soldado/sargento/capitão'),
+    divisoes: strArray('divisões do exército — incluindo as não óbvias: veterinária, administração, anti-magos, moral, engenharia'),
+    taticas: str('nível de experiência das tropas e estilo de combate preferido'),
+    forcasEspeciais: str('forças especiais existem? quais os meios de treiná-las e equipá-las?'),
+    equipamento: str('armaduras e armas — qualidade ideal vs. o que a economia pode pagar'),
+    logistica: str('como a população e a economia sustentam esse exército — ou as consequências de não sustentar'),
+    recrutamento: str('voluntários, recrutamento temporário em guerra, alistamento permanente — ou nenhum exército de pé'),
+  },
+  required: ['nome', 'lideranca', 'divisoes', 'recrutamento'],
+  additionalProperties: false,
+};
+
+export const CAMPAIGN_START_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    titulo: str('título da campanha ou da sessão de abertura'),
+    proposito: str('o que a primeira sessão deve estabelecer: o mundo, a motivação, caminhos claros'),
+    abertura: str('a cena de abertura em si — taberna, navio, prisão, in medias res, fogueira — com um toque próprio'),
+    motivacao: str('por que os personagens se importam e permanecem juntos'),
+    caminhos: strArray('caminhos claros oferecidos ao final da primeira sessão'),
+    pressagio: str('sinais da trama principal / do perigo maior a caminho'),
+    notas: str('notas para o GM: como conduzir, o que improvisar'),
+  },
+  required: ['titulo', 'abertura', 'motivacao', 'caminhos'],
+  additionalProperties: false,
+};
+
+export const MOOD_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    titulo: str(''),
+    conceito: str('o clima/atmosfera geral que se busca criar à mesa'),
+    cenas: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          cena: str('nome ou descrição curta da cena'),
+          som: str('música e sons — trilha, efeitos, silêncio estratégico'),
+          aroma: str('cheiros — velas, incenso, comidas temáticas'),
+          luz: str('iluminação — velas, luz baixa, cores'),
+          tato: str('elementos táteis — props, temperatura, texturas'),
+          sabor: str('comidas e bebidas temáticas'),
+        },
+        required: ['cena', 'som', 'aroma', 'luz', 'tato', 'sabor'],
+        additionalProperties: false,
+      },
+    },
+    notas: str('notas práticas: alergias, uso comedido, velas reais vs. falsas, menos é mais'),
+  },
+  required: ['titulo', 'conceito', 'cenas'],
+  additionalProperties: false,
+};
+
+export const QUEST_LIST_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    tema: str('tema ou contexto que amarra as missões'),
+    quests: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          titulo: str(''),
+          gancho: str('a premissa como chega aos ouvidos dos personagens'),
+          complicacao: str('a reviravolta ou complicação que torna a missão mais do que parece'),
+        },
+        required: ['titulo', 'gancho', 'complicacao'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['quests'],
+  additionalProperties: false,
+};
+
+export const LOCATION_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    nome: str(''),
+    apelido: str('apelido no estilo "A Cidade das Máscaras", "A Cidade Dourada"'),
+    conceito: str('o conceito/tema central que torna o lugar único e memorável'),
+    vida: str('como é visitar ou viver ali — rotina, costumes, atmosfera'),
+    desafios: str('regras peculiares, perigos, desafios do lugar'),
+    ganchos: strArray('ganchos de história que esse lugar oferece'),
+  },
+  required: ['nome', 'conceito'],
+  additionalProperties: false,
+};
+
+export const DUNGEON_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    nome: str(''),
+    conceito: str('o conceito central da dungeon em uma frase'),
+    origem: str('por que existe — construída por quem, para quê, ou formação natural'),
+    estrutura: str('layout, salas e níveis notáveis'),
+    habitantes: str('habitantes e encontros'),
+    reviravolta: str('a reviravolta que diferencia esta dungeon de um buraco cheio de monstros'),
+    recompensas: str('o que vale a pena levar — ou o que custa levá-lo'),
+  },
+  required: ['nome', 'conceito', 'estrutura', 'reviravolta'],
+  additionalProperties: false,
+};
+
 export const CRITIQUE_SCHEMA: Record<string, unknown> = {
   type: 'object',
   properties: {
@@ -982,6 +1638,279 @@ export function parseCreature(v: unknown): Creature {
     reproducao: optStr(o, 'reproducao') ?? '',
     domesticacao: optStr(o, 'domesticacao') ?? '',
     subespecies: optStr(o, 'subespecies') ?? '',
+  };
+}
+
+export function parseInnerStory(v: unknown): InnerStory {
+  const o = asObj(v, 'inner-story');
+  return {
+    titulo: reqStr(o, 'titulo'),
+    proposito: optStr(o, 'proposito') ?? '',
+    moldura: optStr(o, 'moldura') ?? '',
+    narrador: optStr(o, 'narrador') ?? '',
+    historia: reqStr(o, 'historia'),
+    verdade: optStr(o, 'verdade') ?? '',
+    eco: optStr(o, 'eco') ?? '',
+  };
+}
+
+export function parseWorldHistory(v: unknown): WorldHistory {
+  const o = asObj(v, 'history');
+  const eras = Array.isArray(o.eras) ? o.eras : [];
+  return {
+    nome: reqStr(o, 'nome'),
+    panorama: reqStr(o, 'panorama'),
+    eras: eras
+      .map((e) => asObj(e, 'era'))
+      .map((e) => ({ nome: optStr(e, 'nome') ?? '', eventos: optStr(e, 'eventos') ?? '' }))
+      .filter((e) => e.nome && e.eventos),
+    verdadeVsPerspectiva: optStr(o, 'verdadeVsPerspectiva') ?? '',
+    reliquias: optStr(o, 'reliquias') ?? '',
+    passadoNoPresente: optStr(o, 'passadoNoPresente') ?? '',
+  };
+}
+
+export function parseCharacterProfile(v: unknown): CharacterProfile {
+  const o = asObj(v, 'character');
+  return {
+    nome: reqStr(o, 'nome'),
+    papel: reqStr(o, 'papel'),
+    conceito: reqStr(o, 'conceito'),
+    encaixeNoMundo: optStr(o, 'encaixeNoMundo') ?? '',
+    diferencial: optStr(o, 'diferencial') ?? '',
+    falha: reqStr(o, 'falha'),
+    contradicao: optStr(o, 'contradicao') ?? '',
+    desejo: reqStr(o, 'desejo'),
+    historiaDeOrigem: optStr(o, 'historiaDeOrigem') ?? '',
+    tiques: optStr(o, 'tiques') ?? '',
+    mudanca: optStr(o, 'mudanca') ?? '',
+  };
+}
+
+export function parseCityDesign(v: unknown): CityDesign {
+  const o = asObj(v, 'city');
+  return {
+    nome: reqStr(o, 'nome'),
+    tipo: reqStr(o, 'tipo'),
+    cenario: reqStr(o, 'cenario'),
+    origem: reqStr(o, 'origem'),
+    layout: reqStr(o, 'layout'),
+    populacao: optStr(o, 'populacao') ?? '',
+    historia: optStr(o, 'historia') ?? '',
+    detalhes: optStr(o, 'detalhes') ?? '',
+    eventos: optStr(o, 'eventos') ?? '',
+  };
+}
+
+export function parseTitleList(v: unknown): TitleList {
+  const o = asObj(v, 'titles');
+  const titulos = o.titulos;
+  if (!Array.isArray(titulos) || titulos.length === 0) throw new Error('"titulos": esperado array não vazio');
+  return {
+    essencia: reqStr(o, 'essencia'),
+    titulos: titulos
+      .map((t) => asObj(t, 'titulo'))
+      .map((t) => ({
+        titulo: optStr(t, 'titulo') ?? '',
+        estilo: optStr(t, 'estilo') ?? '',
+        justificativa: optStr(t, 'justificativa') ?? '',
+      }))
+      .filter((t) => t.titulo),
+  };
+}
+
+export function parseRomanceDesign(v: unknown): RomanceDesign {
+  const o = asObj(v, 'romance');
+  const casal = o.casal;
+  if (!Array.isArray(casal) || casal.length < 2) throw new Error('"casal": esperado array com 2+ personagens');
+  return {
+    titulo: reqStr(o, 'titulo'),
+    premissa: reqStr(o, 'premissa'),
+    casal: casal.map((c) => {
+      const cO = asObj(c, 'pessoa do casal');
+      return {
+        nome: reqStr(cO, 'nome'),
+        conceito: optStr(cO, 'conceito') ?? '',
+        pontoDePartida: optStr(cO, 'pontoDePartida') ?? '',
+        crescimento: optStr(cO, 'crescimento') ?? '',
+      };
+    }),
+    obstaculos: reqStrArray(o, 'obstaculos'),
+    escolha: optStr(o, 'escolha') ?? '',
+    coadjuvantes: optStr(o, 'coadjuvantes') ?? '',
+    locacao: optStr(o, 'locacao') ?? '',
+    foco: optStr(o, 'foco') ?? '',
+  };
+}
+
+export function parseSceneryDescription(v: unknown): SceneryDescription {
+  const o = asObj(v, 'scenery');
+  return {
+    titulo: reqStr(o, 'titulo'),
+    descricao: reqStr(o, 'descricao'),
+    foco: reqStr(o, 'foco'),
+    pontoDeVista: optStr(o, 'pontoDeVista') ?? '',
+    palavrasChave: optStr(o, 'palavrasChave') ?? '',
+    economia: optStr(o, 'economia') ?? '',
+  };
+}
+
+export function parseSceneCraft(v: unknown): SceneCraft {
+  const o = asObj(v, 'scene');
+  return {
+    titulo: reqStr(o, 'titulo'),
+    cena: reqStr(o, 'cena'),
+    proposito: reqStr(o, 'proposito'),
+    arcoDaCena: optStr(o, 'arcoDaCena') ?? '',
+    ritmo: optStr(o, 'ritmo') ?? '',
+    notas: optStr(o, 'notas') ?? '',
+  };
+}
+
+export function parseSpeech(v: unknown): Speech {
+  const o = asObj(v, 'speech');
+  return {
+    titulo: reqStr(o, 'titulo'),
+    orador: reqStr(o, 'orador'),
+    tese: reqStr(o, 'tese'),
+    estrutura: optStr(o, 'estrutura') ?? '',
+    discurso: reqStr(o, 'discurso'),
+    persuasao: optStr(o, 'persuasao') ?? '',
+    notas: optStr(o, 'notas') ?? '',
+  };
+}
+
+export function parseOpening(v: unknown): Opening {
+  const o = asObj(v, 'opening');
+  return {
+    titulo: reqStr(o, 'titulo'),
+    primeiraFrase: reqStr(o, 'primeiraFrase'),
+    abertura: reqStr(o, 'abertura'),
+    tecnica: optStr(o, 'tecnica') ?? '',
+    promessa: reqStr(o, 'promessa'),
+    ancoragem: optStr(o, 'ancoragem') ?? '',
+    notas: optStr(o, 'notas') ?? '',
+  };
+}
+
+export function parseReligion(v: unknown): Religion {
+  const o = asObj(v, 'religion');
+  return {
+    nome: reqStr(o, 'nome'),
+    natureza: reqStr(o, 'natureza'),
+    deuses: reqStr(o, 'deuses'),
+    poderes: optStr(o, 'poderes') ?? '',
+    origem: optStr(o, 'origem') ?? '',
+    figuras: optStr(o, 'figuras') ?? '',
+    lugaresESimbolos: optStr(o, 'lugaresESimbolos') ?? '',
+    rituais: Array.isArray(o.rituais) ? reqStrArray(o, 'rituais') : [],
+    doutrina: reqStr(o, 'doutrina'),
+    rigorEVersoes: optStr(o, 'rigorEVersoes') ?? '',
+  };
+}
+
+export function parseMagicSystem(v: unknown): MagicSystem {
+  const o = asObj(v, 'magic');
+  return {
+    nome: reqStr(o, 'nome'),
+    fonte: reqStr(o, 'fonte'),
+    materiais: optStr(o, 'materiais') ?? '',
+    quemUsa: reqStr(o, 'quemUsa'),
+    comoUsa: optStr(o, 'comoUsa') ?? '',
+    poderes: reqStr(o, 'poderes'),
+    ganhoDePoder: optStr(o, 'ganhoDePoder') ?? '',
+    combinacao: optStr(o, 'combinacao') ?? '',
+    limitacoes: reqStr(o, 'limitacoes'),
+  };
+}
+
+export function parseArmyDesign(v: unknown): ArmyDesign {
+  const o = asObj(v, 'army');
+  return {
+    nome: reqStr(o, 'nome'),
+    lideranca: reqStr(o, 'lideranca'),
+    patentes: Array.isArray(o.patentes) ? reqStrArray(o, 'patentes') : [],
+    divisoes: reqStrArray(o, 'divisoes'),
+    taticas: optStr(o, 'taticas') ?? '',
+    forcasEspeciais: optStr(o, 'forcasEspeciais') ?? '',
+    equipamento: optStr(o, 'equipamento') ?? '',
+    logistica: optStr(o, 'logistica') ?? '',
+    recrutamento: reqStr(o, 'recrutamento'),
+  };
+}
+
+export function parseCampaignStart(v: unknown): CampaignStart {
+  const o = asObj(v, 'campaign-start');
+  return {
+    titulo: reqStr(o, 'titulo'),
+    proposito: optStr(o, 'proposito') ?? '',
+    abertura: reqStr(o, 'abertura'),
+    motivacao: reqStr(o, 'motivacao'),
+    caminhos: reqStrArray(o, 'caminhos'),
+    pressagio: optStr(o, 'pressagio') ?? '',
+    notas: optStr(o, 'notas') ?? '',
+  };
+}
+
+export function parseMoodPlan(v: unknown): MoodPlan {
+  const o = asObj(v, 'mood');
+  const cenas = Array.isArray(o.cenas) ? o.cenas : [];
+  return {
+    titulo: reqStr(o, 'titulo'),
+    conceito: reqStr(o, 'conceito'),
+    cenas: cenas
+      .map((c) => asObj(c, 'cena de mood'))
+      .filter((c) => optStr(c, 'cena'))
+      .map((c) => ({
+        cena: reqStr(c, 'cena'),
+        som: optStr(c, 'som') ?? '',
+        aroma: optStr(c, 'aroma') ?? '',
+        luz: optStr(c, 'luz') ?? '',
+        tato: optStr(c, 'tato') ?? '',
+        sabor: optStr(c, 'sabor') ?? '',
+      })),
+    notas: optStr(o, 'notas') ?? '',
+  };
+}
+
+export function parseQuestList(v: unknown): QuestList {
+  const o = asObj(v, 'quests');
+  const quests = Array.isArray(o.quests) ? o.quests : [];
+  return {
+    tema: optStr(o, 'tema') ?? '',
+    quests: quests
+      .map((q) => asObj(q, 'quest'))
+      .filter((q) => optStr(q, 'titulo') && optStr(q, 'gancho'))
+      .map((q) => ({
+        titulo: reqStr(q, 'titulo'),
+        gancho: reqStr(q, 'gancho'),
+        complicacao: optStr(q, 'complicacao') ?? '',
+      })),
+  };
+}
+
+export function parseLocationDesign(v: unknown): LocationDesign {
+  const o = asObj(v, 'location');
+  return {
+    nome: reqStr(o, 'nome'),
+    apelido: optStr(o, 'apelido') ?? '',
+    conceito: reqStr(o, 'conceito'),
+    vida: optStr(o, 'vida') ?? '',
+    desafios: optStr(o, 'desafios') ?? '',
+    ganchos: Array.isArray(o.ganchos) ? reqStrArray(o, 'ganchos') : [],
+  };
+}
+
+export function parseDungeonDesign(v: unknown): DungeonDesign {
+  const o = asObj(v, 'dungeon');
+  return {
+    nome: reqStr(o, 'nome'),
+    conceito: reqStr(o, 'conceito'),
+    origem: optStr(o, 'origem') ?? '',
+    estrutura: reqStr(o, 'estrutura'),
+    habitantes: optStr(o, 'habitantes') ?? '',
+    reviravolta: reqStr(o, 'reviravolta'),
+    recompensas: optStr(o, 'recompensas') ?? '',
   };
 }
 

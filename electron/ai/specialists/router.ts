@@ -15,6 +15,31 @@ export type GenerationTask =
   | 'dialogue'
   | 'plot'
   | 'combat'
+  | 'pain'
+  | 'villain'
+  | 'motivation'
+  | 'body-language'
+  | 'world'
+  | 'society'
+  | 'creature'
+  | 'inner-story'
+  | 'history'
+  | 'character'
+  | 'city'
+  | 'titles'
+  | 'romance'
+  | 'scenery'
+  | 'scene'
+  | 'speech'
+  | 'opening'
+  | 'religion'
+  | 'magic'
+  | 'army'
+  | 'campaign-start'
+  | 'mood'
+  | 'quest'
+  | 'location'
+  | 'dungeon'
   | 'adventure';
 
 export interface RouteDecision {
@@ -38,13 +63,63 @@ const ROUTE_TOOL: ToolSpec = {
       },
       task: {
         type: 'string',
-        enum: ['names', 'npc', 'encounter', 'narrative', 'demon', 'dialogue', 'plot', 'combat', 'adventure'],
+        enum: [
+          'names',
+          'npc',
+          'encounter',
+          'narrative',
+          'demon',
+          'dialogue',
+          'plot',
+          'combat',
+          'pain',
+          'villain',
+          'motivation',
+          'body-language',
+          'world',
+          'society',
+          'creature',
+          'inner-story',
+          'history',
+          'character',
+          'city',
+          'titles',
+          'romance',
+          'scenery',
+          'scene',
+          'speech',
+          'opening',
+          'religion',
+          'magic',
+          'army',
+          'campaign-start',
+          'mood',
+          'quest',
+          'location',
+          'dungeon',
+          'adventure',
+        ],
         description:
-          'obrigatório quando mode=generate. "adventure" para aventuras de RPG completas, jogáveis, ' +
-          'com cenas/NPCs/encontros, ou pedidos multi-parte; "plot" para o esqueleto estrutural de uma ' +
-          'trama (desejo, obstáculo, arco) sem detalhar cenas; "demon" para descrever demônios/criaturas ' +
-          'infernais; "dialogue" para cenas de diálogo entre personagens; "combat" para cenas de combate; ' +
-          'os demais para peças isoladas',
+          'obrigatório quando mode=generate. Um destes: "adventure" (aventura de RPG completa e jogável, ' +
+          'com cenas/NPCs/encontros, ou pedido multi-parte); "plot" (esqueleto estrutural de uma trama: ' +
+          'desejo, obstáculo, arco — sem detalhar cenas); "names" (nomes); "npc" (NPC para RPG, com ' +
+          'maneirismo/segredo/vínculo); "character" (personagem de ficção completo: falha, contradição, ' +
+          'origem); "villain" (vilão/antagonista); "motivation" (objetivos e motivações de personagem); ' +
+          '"encounter" (encontro/monstros); "narrative" (descrição read-aloud de cena/local para RPG); ' +
+          '"scenery" (descrição de paisagem/cenário em prosa de ficção); "scene" (cena de ficção completa); ' +
+          '"demon" (demônio ou criatura infernal); "dialogue" (cena de diálogo); "combat" (cena de ' +
+          'combate); "speech" (discurso persuasivo); "pain" (descrição de dor/sofrimento físico); ' +
+          '"body-language" (emoção via linguagem corporal); "inner-story" (história dentro da história: ' +
+          'lenda, conto de fogueira, peça); "history" (história do universo, eras); "world" ' +
+          '(mundo/região/geografia); "city" (cidade/vila/assentamento); "society" (sociedade/cultura); ' +
+          '"religion" (religião/culto); "magic" (sistema de magia); "creature" (animal/criatura original); ' +
+          '"titles" (títulos para livro/campanha); "romance" (história de romance); "opening" (primeira ' +
+          'frase/abertura de história); "army" (exército/força militar: patentes, divisões, logística, ' +
+          'recrutamento); "campaign-start" (primeira sessão/abertura de campanha de RPG); "mood" (plano de ' +
+          'imersão sensorial para sessão de mesa: música, aromas, luz, props, comidas); "quest" (lista de ' +
+          'ideias/ganchos de missões avulsas com reviravoltas); "location" (local único e memorável com ' +
+          'conceito forte, estilo "A Cidade de X" — não a cidade realista completa, que é city); ' +
+          '"dungeon" (dungeon/lugar de exploração com origem, habitantes e reviravolta)',
       },
       resumo: {
         type: 'string',
@@ -66,6 +141,31 @@ const VALID_TASKS: GenerationTask[] = [
   'dialogue',
   'plot',
   'combat',
+  'pain',
+  'villain',
+  'motivation',
+  'body-language',
+  'world',
+  'society',
+  'creature',
+  'inner-story',
+  'history',
+  'character',
+  'city',
+  'titles',
+  'romance',
+  'scenery',
+  'scene',
+  'speech',
+  'opening',
+  'religion',
+  'magic',
+  'army',
+  'campaign-start',
+  'mood',
+  'quest',
+  'location',
+  'dungeon',
   'adventure',
 ];
 
@@ -92,9 +192,12 @@ export async function routeGeneration(
           content:
             'Você é o roteador do Mythril, um estúdio de worldbuilding de RPG. Classifique a ÚLTIMA mensagem ' +
             'do usuário (no contexto da conversa) chamando a ferramenta route.\n\n' +
-            '- mode="generate": o usuário pede para criar/inventar/gerar conteúdo novo — nomes, NPCs, monstros, ' +
-            'demônios, diálogos entre personagens, tramas/plots, cenas de combate, encontros, descrições de ' +
-            'cenas/locais, ou uma aventura inteira. ' +
+            '- mode="generate": o usuário pede para criar/inventar/gerar conteúdo novo — nomes, NPCs, vilões, ' +
+            'personagens, motivações, monstros, criaturas, demônios, diálogos, discursos, tramas/plots, cenas, ' +
+            'cenas de combate, descrições de dor, linguagem corporal, histórias aninhadas, história do mundo, ' +
+            'mundos, cidades, sociedades, religiões, sistemas de magia, títulos, romances, aberturas de ' +
+            'história, exércitos, primeiras sessões de campanha, planos de ambientação sensorial, ' +
+            'ideias de missões, locais memoráveis, dungeons, encontros, descrições de cenas/locais, ou uma aventura inteira. ' +
             'Perguntas sobre as notas, pedidos ' +
             'de busca, edição de documentos e conversa casual são mode="chat".\n' +
             '- Se a mensagem anterior do assistente foi uma pergunta de refinamento sobre uma criação e o usuário ' +

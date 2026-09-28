@@ -12,6 +12,32 @@ import { demonSpecialist } from './demon';
 import { dialogueSpecialist } from './dialogue';
 import { plotSpecialist } from './plot';
 import { combatSpecialist } from './combat';
+import { painSpecialist } from './pain';
+import { villainSpecialist } from './villain';
+import { motivationSpecialist } from './motivation';
+import { bodyLanguageSpecialist } from './body-language';
+import { worldSpecialist } from './world';
+import { societySpecialist } from './society';
+import { creatureSpecialist } from './creature';
+import { innerStorySpecialist } from './inner-story';
+import { historySpecialist } from './history';
+import { characterSpecialist } from './character';
+import { citySpecialist } from './city';
+import { titlesSpecialist } from './titles';
+import { romanceSpecialist } from './romance';
+import { scenerySpecialist } from './scenery';
+import { sceneSpecialist } from './scene';
+import { speechSpecialist } from './speech';
+import { openingSpecialist } from './opening';
+import { religionSpecialist } from './religion';
+import { magicSpecialist } from './magic';
+import { armySpecialist } from './army';
+import { campaignStartSpecialist } from './campaign-start';
+import { moodSpecialist } from './mood';
+import { questSpecialist } from './quest';
+import { locationSpecialist } from './location';
+import { dungeonSpecialist } from './dungeon';
+import { tableExtractSpecialist } from './table-extract';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const BUILTIN_SPECIALISTS: Specialist<any, any>[] = [
@@ -26,6 +52,32 @@ const BUILTIN_SPECIALISTS: Specialist<any, any>[] = [
   dialogueSpecialist,
   plotSpecialist,
   combatSpecialist,
+  painSpecialist,
+  villainSpecialist,
+  motivationSpecialist,
+  bodyLanguageSpecialist,
+  worldSpecialist,
+  societySpecialist,
+  creatureSpecialist,
+  innerStorySpecialist,
+  historySpecialist,
+  characterSpecialist,
+  citySpecialist,
+  titlesSpecialist,
+  romanceSpecialist,
+  scenerySpecialist,
+  sceneSpecialist,
+  speechSpecialist,
+  openingSpecialist,
+  religionSpecialist,
+  magicSpecialist,
+  armySpecialist,
+  campaignStartSpecialist,
+  moodSpecialist,
+  questSpecialist,
+  locationSpecialist,
+  dungeonSpecialist,
+  tableExtractSpecialist,
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
