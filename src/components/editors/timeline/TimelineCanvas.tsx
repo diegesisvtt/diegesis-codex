@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import {
   daysPerYear,
   eraDepth,
-  formatDate,
+  formatEraRange,
+  formatEventDate,
   moonGlyph,
   moonPhaseIndex,
   type TimelineData,
   type TimelineEra,
   type TimelineEvent,
 } from '@shared/timeline';
-import { NO_LANE, buildGaps, formatGapDuration, fromVirtual, toVirtual } from './model';
+import { NO_LANE, buildGaps, eventIcon, formatGapDuration, fromVirtual, toVirtual } from './model';
 
 /* ---------- layout horizontal ---------- */
 const RULER_H = 30;
@@ -285,6 +287,112 @@ export function TimelineCanvas({
     return s.length > maxChars ? s.slice(0, Math.max(0, maxChars - 1)) + '…' : s;
   };
 
+  // ---------- mini-mapa (visão geral + quick-jump, estilo World Anvil) ----------
+  const mapRange = useMemo(() => {
+    const pts: number[] = [];
+    for (const e of data.events) pts.push(e.date, e.endDate ?? e.date);
+    for (const era of data.eras) {
+      if (!era.openStart) pts.push(era.start);
+      if (!era.openEnd) pts.push(era.end);
+    }
+    if (pts.length === 0) return null;
+    let lo = Math.min(...pts);
+    let hi = Math.max(...pts);
+    if (hi - lo < dpy) {
+      const mid = (lo + hi) / 2;
+      lo = mid - dpy / 2;
+      hi = mid + dpy / 2;
+    }
+    return { lo, hi };
+  }, [data, dpy]);
+
+  /** serial visível nas bordas da viewport (reais, descomprimindo gaps) */
+  const visibleRange = {
+    lo: compact ? fromVirtual(vMin, gaps) : vMin,
+    hi: compact ? fromVirtual(vMax, gaps) : vMax,
+  };
+
+  const centerCameraOn = (serial: number) => {
+    setCam((prev) => ({ ...prev, offset: viewportT / 2 - timeStart - virt(serial) * prev.pxPerDay }));
+  };
+
+  /** salta para o evento anterior/próximo em relação ao centro da viewport */
+  const stepEvent = (dir: 1 | -1) => {
+    const dates = [...new Set(data.events.map((e) => e.date))].sort((a, b) => a - b);
+    if (dates.length === 0) return;
+    const mid = (visibleRange.lo + visibleRange.hi) / 2;
+    const target =
+      dir === 1 ? dates.find((d) => d > mid + 1) : [...dates].reverse().find((d) => d < mid - 1);
+    if (target != null) centerCameraOn(target);
+    else centerCameraOn(dir === 1 ? dates[dates.length - 1] : dates[0]);
+  };
+
+  const renderMinimap = () => {
+    if (!mapRange || size.h < 120) return null;
+    const { lo, hi } = mapRange;
+    const span = hi - lo;
+    const pct = (s: number) => `${(Math.max(0, Math.min(1, (s - lo) / span)) * 100).toFixed(2)}%`;
+    const vpLo = Math.max(lo, visibleRange.lo);
+    const vpHi = Math.min(hi, visibleRange.hi);
+    return (
+      <div
+        className="absolute right-2 top-3 bottom-3 flex flex-col items-center gap-1 z-10"
+        onMouseDown={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          title="Evento anterior"
+          onClick={() => stepEvent(-1)}
+          className="p-1 rounded bg-elevated/90 border border-line text-ink-3 hover:text-ink-1 hover:border-accent/50"
+        >
+          <ChevronUp size={12} />
+        </button>
+        <div
+          className="relative flex-1 w-4 rounded-full bg-elevated/90 border border-line overflow-hidden cursor-pointer"
+          title="Mapa da timeline — clique para navegar"
+          onMouseDown={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            const f = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+            centerCameraOn(lo + f * span);
+          }}
+        >
+          {data.eras.map((era) => {
+            const a = era.openStart ? lo : era.start;
+            const b = era.openEnd ? hi : era.end;
+            return (
+              <div
+                key={era.id}
+                className="absolute left-0 right-0"
+                style={{ top: pct(a), height: pct(b > a ? b - a + lo : 1), backgroundColor: era.color, opacity: 0.5 }}
+              />
+            );
+          })}
+          {data.events.map((ev) => (
+            <div
+              key={ev.id}
+              className="absolute left-1 right-1 rounded-full"
+              style={{ top: pct(ev.date), height: 2, backgroundColor: 'var(--color-ink-2)', opacity: 0.8 }}
+            />
+          ))}
+          {/* posição atual da viewport */}
+          <div
+            className="absolute left-0 right-0 border-y border-accent bg-accent/15 pointer-events-none"
+            style={{ top: pct(vpLo), height: `max(6px, ${(((vpHi - vpLo) / span) * 100).toFixed(2)}%)` }}
+          />
+        </div>
+        <button
+          type="button"
+          title="Próximo evento"
+          onClick={() => stepEvent(1)}
+          className="p-1 rounded bg-elevated/90 border border-line text-ink-3 hover:text-ink-1 hover:border-accent/50"
+        >
+          <ChevronDown size={12} />
+        </button>
+      </div>
+    );
+  };
+
   // ---------- seções de render ----------
 
   const renderRuler = () => {
@@ -393,9 +501,11 @@ export function TimelineCanvas({
   const renderEras = () =>
     data.eras.map((era: TimelineEra) => {
       const depth = eraDepth(era, data.eras);
-      const t1 = T(era.start);
-      const len = Math.max(3, (virt(era.end + 1) - virt(era.start)) * pxPerDay);
-      const tip = `${era.name} — ${formatDate(era.start, cal)} → ${formatDate(era.end, cal)}`;
+      // eras abertas (inicial/atual) estendem-se até a borda da viewport
+      const t1 = era.openStart ? 0 : T(era.start);
+      const t2 = era.openEnd ? viewportT : T(era.end + 1);
+      const len = Math.max(3, t2 - t1);
+      const tip = `${era.name} — ${formatEraRange(era, cal)}`;
       if (vertical) {
         const ex = RULER_W + moonCount * MOON_COL_W + depth * ERA_COL_W;
         return (
@@ -462,6 +572,8 @@ export function TimelineCanvas({
             >
               {truncate(lane.name, LANE_W - 18)}
             </text>
+            {/* spine colorida da lane (estilo LegendKeeper) */}
+            <line x1={laneCenter(i)} y1={LANE_HEADER_H} x2={laneCenter(i)} y2={svgH} stroke={lane.color} strokeWidth={2.5} strokeOpacity={0.35} />
             <line x1={crossStart + (i + 1) * LANE_W} y1={0} x2={crossStart + (i + 1) * LANE_W} y2={svgH} stroke={LINE} strokeWidth={1} />
             {i === 0 && <line x1={crossStart} y1={0} x2={crossStart} y2={svgH} stroke={LINE_STRONG} strokeWidth={1} />}
           </g>
@@ -472,6 +584,8 @@ export function TimelineCanvas({
             <text x={12} y={laneCenter(i) + 4} fontSize={11} fill={INK_2} className="pointer-events-none">
               {truncate(lane.name, GUTTER_W - 22)}
             </text>
+            {/* spine colorida da lane */}
+            <line x1={GUTTER_W} y1={laneCenter(i)} x2={size.w} y2={laneCenter(i)} stroke={lane.color} strokeWidth={2.5} strokeOpacity={0.3} />
             <line x1={0} y1={crossStart + (i + 1) * LANE_H} x2={size.w} y2={crossStart + (i + 1) * LANE_H} stroke={LINE} strokeWidth={1} />
             {i === 0 && <line x1={0} y1={crossStart} x2={size.w} y2={crossStart} stroke={LINE_STRONG} strokeWidth={1} />}
           </g>
@@ -562,10 +676,39 @@ export function TimelineCanvas({
       const color = ev.color ?? laneColorOf(ev.laneId);
       const t1 = T(ev.date);
       const t2 = ev.endDate != null ? Math.max(T(ev.endDate + 1), t1 + 5) : null;
-      const tip = `${ev.title} — ${formatDate(ev.date, cal)}${ev.endDate != null ? ` → ${formatDate(ev.endDate, cal)}` : ''}`;
-      const dateLabel = compact ? formatDate(ev.date, cal) : null;
+      const tip = `${ev.title} — ${formatEventDate(ev, cal)}`;
+      const dateLabel = compact ? formatEventDate(ev, cal) : null;
+      const major = ev.importance === 'major';
+      const badge = major ? 30 : 22;
+      const iconSize = major ? 16 : 13;
+      const Icon = eventIcon(ev.icon);
+
+      /** badge com ícone (estilo LegendKeeper) centrado em (bx, by) */
+      const badgeAt = (bx: number, by: number) => (
+        <>
+          <rect
+            x={bx - badge / 2}
+            y={by - badge / 2}
+            width={badge}
+            height={badge}
+            rx={badge * 0.32}
+            fill="var(--color-elevated)"
+            stroke={color}
+            strokeWidth={major ? 2.2 : 1.5}
+          />
+          <Icon
+            x={bx - iconSize / 2}
+            y={by - iconSize / 2}
+            size={iconSize}
+            color={color}
+            strokeWidth={2}
+            className="pointer-events-none"
+          />
+        </>
+      );
+
       if (vertical) {
-        const labelY = (t2 ?? t1) + 4;
+        const labelX = c + badge / 2 + 7;
         return (
           <g
             key={ev.id}
@@ -577,16 +720,20 @@ export function TimelineCanvas({
             }}
             onDoubleClick={(e) => e.stopPropagation()}
           >
-            {t2 != null ? (
-              <rect x={c - 5} y={t1} width={10} height={Math.max(5, t2 - t1)} rx={5} fill={color} opacity={0.9} />
-            ) : (
-              <circle cx={c} cy={t1} r={5.5} fill={color} stroke="var(--color-app)" strokeWidth={1.5} />
-            )}
-            <text x={c + 10} y={t1 + 4} fontSize={11} fill={INK_2} className="pointer-events-none">
-              {truncate(ev.title, LANE_W - 30)}
+            {t2 != null && <rect x={c - 4} y={t1} width={8} height={Math.max(5, t2 - t1)} rx={4} fill={color} opacity={0.5} />}
+            {badgeAt(c, t1)}
+            <text
+              x={labelX}
+              y={t1 + 4}
+              fontSize={major ? 12.5 : 11}
+              fontWeight={major ? 600 : 400}
+              fill={INK_2}
+              className="pointer-events-none"
+            >
+              {truncate(ev.title, LANE_W - badge - 26)}
             </text>
             {dateLabel && (
-              <text x={c + 10} y={labelY + 12} fontSize={9} fill={INK_3} className="pointer-events-none">
+              <text x={labelX} y={t1 + 17} fontSize={9} fill={INK_3} className="pointer-events-none">
                 {dateLabel}
               </text>
             )}
@@ -594,7 +741,8 @@ export function TimelineCanvas({
           </g>
         );
       }
-      const labelX = (t2 ?? t1) + 8;
+      // em spans, o rótulo vai depois do fim da barra (ou do badge, o que for maior)
+      const labelX = (t2 != null ? Math.max(t2, t1 + badge / 2) : t1 + badge / 2) + 7;
       return (
         <g
           key={ev.id}
@@ -606,16 +754,20 @@ export function TimelineCanvas({
           }}
           onDoubleClick={(e) => e.stopPropagation()}
         >
-          {t2 != null ? (
-            <rect x={t1} y={c - 5} width={Math.max(5, t2 - t1)} height={10} rx={5} fill={color} opacity={0.9} />
-          ) : (
-            <circle cx={t1} cy={c} r={5.5} fill={color} stroke="var(--color-app)" strokeWidth={1.5} />
-          )}
-          <text x={labelX} y={c + 4} fontSize={11} fill={INK_2} className="pointer-events-none">
+          {t2 != null && <rect x={t1} y={c - 4} width={Math.max(5, t2 - t1)} height={8} rx={4} fill={color} opacity={0.5} />}
+          {badgeAt(t1, c)}
+          <text
+            x={labelX}
+            y={c + 4}
+            fontSize={major ? 12.5 : 11}
+            fontWeight={major ? 600 : 400}
+            fill={INK_2}
+            className="pointer-events-none"
+          >
             {truncate(ev.title, 220)}
           </text>
           {dateLabel && (
-            <text x={labelX} y={c + 16} fontSize={9} fill={INK_3} className="pointer-events-none">
+            <text x={labelX} y={c + 17} fontSize={9} fill={INK_3} className="pointer-events-none">
               {dateLabel}
             </text>
           )}
@@ -625,48 +777,51 @@ export function TimelineCanvas({
     });
 
   return (
-    <div
-      ref={wrapRef}
-      className={`flex-1 min-h-0 select-none bg-app ${vertical ? 'overflow-x-auto overflow-y-hidden' : 'overflow-y-auto overflow-x-hidden'}`}
-    >
-      <svg
-        width={svgW}
-        height={svgH}
-        className="block cursor-grab active:cursor-grabbing"
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={endDrag}
-        onMouseLeave={endDrag}
-        onDoubleClick={onDoubleClick}
+    <div className="relative flex-1 min-h-0">
+      <div
+        ref={wrapRef}
+        className={`h-full select-none bg-app ${vertical ? 'overflow-x-auto overflow-y-hidden' : 'overflow-y-auto overflow-x-hidden'}`}
       >
-        <defs>
-          <marker id="tl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M 0 1 L 9 5 L 0 9 z" fill={INK_3} />
-          </marker>
-        </defs>
+        <svg
+          width={svgW}
+          height={svgH}
+          className="block cursor-grab active:cursor-grabbing"
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={endDrag}
+          onMouseLeave={endDrag}
+          onDoubleClick={onDoubleClick}
+        >
+          <defs>
+            <marker id="tl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" fill={INK_3} />
+            </marker>
+          </defs>
 
-        {renderRuler()}
-        {renderMoons()}
-        {renderEras()}
-        {renderLanes()}
-        {renderGaps()}
-        {renderLinks()}
-        {renderEvents()}
+          {renderRuler()}
+          {renderMoons()}
+          {renderEras()}
+          {renderLanes()}
+          {renderGaps()}
+          {renderLinks()}
+          {renderEvents()}
 
-        {/* estado vazio */}
-        {events.length === 0 && (
-          <text
-            x={crossStart + Math.max(120, (svgW - crossStart) / 2)}
-            y={vertical ? size.h / 2 : crossStart + 60}
-            fontSize={13}
-            fill={INK_3}
-            textAnchor="middle"
-            className="pointer-events-none"
-          >
-            Duplo clique para plotar o primeiro evento da história
-          </text>
-        )}
-      </svg>
+          {/* estado vazio */}
+          {events.length === 0 && (
+            <text
+              x={crossStart + Math.max(120, (svgW - crossStart) / 2)}
+              y={vertical ? size.h / 2 : crossStart + 60}
+              fontSize={13}
+              fill={INK_3}
+              textAnchor="middle"
+              className="pointer-events-none"
+            >
+              Duplo clique para plotar o primeiro evento da história
+            </text>
+          )}
+        </svg>
+      </div>
+      {renderMinimap()}
     </div>
   );
 }

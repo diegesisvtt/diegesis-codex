@@ -6,8 +6,8 @@ import { createDefaultTimeline, serializeTimeline } from '@shared/timeline';
 /**
  * Timeline — ferramenta de worldbuilding estilo LegendKeeper como tipo de
  * documento próprio ('mythril/timeline'): eventos, storylines paralelas,
- * eras aninhadas, causa e efeito, fases de lua, linhagens entre documentos
- * e retcon livre com calendários customizáveis (templates inclusos).
+ * eras aninhadas, causa e efeito, fases de lua e retcon livre com
+ * calendários customizáveis (templates inclusos).
  */
 export const timelinePlugin: Plugin = {
   manifest: {
@@ -16,7 +16,7 @@ export const timelinePlugin: Plugin = {
     version: '1.0.0',
     apiVersion: PLUGIN_API_VERSION,
     description:
-      'Linhas do tempo para worldbuilding: eventos, eras aninhadas, storylines paralelas, causa e efeito, fases de lua, linhagens e calendários de fantasia.',
+      'Linhas do tempo para worldbuilding: eventos, eras aninhadas, storylines paralelas, causa e efeito, fases de lua e calendários de fantasia.',
     author: 'Mythril',
     permissions: ['ui', 'docs:read'],
   },

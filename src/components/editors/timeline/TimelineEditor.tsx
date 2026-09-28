@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarDays,
   FoldVertical,
-  GitBranch,
   MoveHorizontal,
   MoveVertical,
   Plus,
   Rows3,
+  ScrollText,
   Undo2,
   Redo2,
   UnfoldVertical,
@@ -21,15 +21,14 @@ import {
   type TimelineEra,
   type TimelineEvent,
   type TimelineLane,
-  type TimelineLineage,
   type TimelineLink,
   type TimelineMoon,
 } from '@shared/timeline';
 import { useStore } from '../../../state/store';
 import { TimelineCanvas } from './TimelineCanvas';
+import { StoryView } from './StoryView';
 import { FilterBar } from './FilterBar';
 import { CalendarDialog, EraDialog, EventDialog, LaneDialog } from './dialogs';
-import { LineageView } from './LineageView';
 import { EMPTY_FILTER, filterEvents, generateId, nextColor, sortedLanes, type TimelineFilter } from './model';
 
 type DialogState =
@@ -42,7 +41,7 @@ type DialogState =
 /**
  * Editor de timeline — ferramenta de worldbuilding estilo LegendKeeper:
  * eventos, storylines paralelas (lanes), eras aninhadas, causa e efeito,
- * fases de lua, linhagens entre documentos e retcon livre (undo/redo).
+ * fases de lua e retcon livre (undo/redo).
  */
 export function TimelineEditor({ doc }: { doc: DocNode }) {
   const { docs, updateDocument, openDocument } = useStore();
@@ -50,10 +49,9 @@ export function TimelineEditor({ doc }: { doc: DocNode }) {
   const dataRef = useRef(data);
   const [filter, setFilter] = useState<TimelineFilter>(EMPTY_FILTER);
   const [dialog, setDialog] = useState<DialogState>(null);
-  const [showLineage, setShowLineage] = useState(false);
-  /** tempo de cima para baixo (estilo World Anvil) */
-  const [vertical, setVertical] = useState(false);
-  /** colapsa períodos sem eventos num separador com a duração */
+  /** horizontal = escala de tempo; vertical = colunas de lanes; história = cards de leitura */
+  const [view, setView] = useState<'horizontal' | 'vertical' | 'story'>('horizontal');
+  /** colapsa períodos sem eventos num separador com a duração (canvas) */
   const [compact, setCompact] = useState(false);
 
   const undoStack = useRef<string[]>([]);
@@ -203,9 +201,6 @@ export function TimelineEditor({ doc }: { doc: DocNode }) {
     setDialog(null);
   };
 
-  const addLineage = (l: TimelineLineage) => commit({ ...data, lineages: [...data.lineages, l] });
-  const removeLineage = (id: string) => commit({ ...data, lineages: data.lineages.filter((l) => l.id !== id) });
-
   // ---------- criação ----------
 
   const newEventAt = (serial: number, laneId: string | null) => {
@@ -273,32 +268,42 @@ export function TimelineEditor({ doc }: { doc: DocNode }) {
         <button type="button" className={toolBtn} onClick={() => setDialog({ kind: 'calendar' })}>
           <CalendarDays size={13} /> Calendário
         </button>
-        <button
-          type="button"
-          className={`${toolBtn} ${showLineage ? 'bg-active text-ink-1' : ''}`}
-          onClick={() => setShowLineage((v) => !v)}
-        >
-          <GitBranch size={13} /> Linhagens
-        </button>
         <span className="w-px h-4 bg-line mx-1" />
         <button
           type="button"
-          className={`${toolBtn} ${vertical ? 'bg-active text-ink-1' : ''}`}
-          onClick={() => setVertical((v) => !v)}
-          title={vertical ? 'Mudar para timeline horizontal' : 'Mudar para timeline vertical'}
+          className={`${toolBtn} ${view === 'horizontal' ? 'bg-active text-ink-1' : ''}`}
+          onClick={() => setView('horizontal')}
+          title="Escala de tempo horizontal"
         >
-          {vertical ? <MoveVertical size={13} /> : <MoveHorizontal size={13} />}
-          {vertical ? 'Vertical' : 'Horizontal'}
+          <MoveHorizontal size={13} /> Horizontal
         </button>
         <button
           type="button"
-          className={`${toolBtn} ${compact ? 'bg-active text-ink-1' : ''}`}
-          onClick={() => setCompact((c) => !c)}
-          title={compact ? 'Mostrar períodos vazios' : 'Ocultar períodos sem eventos'}
+          className={`${toolBtn} ${view === 'vertical' ? 'bg-active text-ink-1' : ''}`}
+          onClick={() => setView('vertical')}
+          title="Lanes em colunas verticais (estilo LegendKeeper)"
         >
-          {compact ? <UnfoldVertical size={13} /> : <FoldVertical size={13} />}
-          {compact ? 'Expandir vazios' : 'Ocultar vazios'}
+          <MoveVertical size={13} /> Vertical
         </button>
+        <button
+          type="button"
+          className={`${toolBtn} ${view === 'story' ? 'bg-active text-ink-1' : ''}`}
+          onClick={() => setView('story')}
+          title="Vista de leitura com cards (estilo World Anvil)"
+        >
+          <ScrollText size={13} /> História
+        </button>
+        {view !== 'story' && (
+          <button
+            type="button"
+            className={`${toolBtn} ${compact ? 'bg-active text-ink-1' : ''}`}
+            onClick={() => setCompact((c) => !c)}
+            title={compact ? 'Mostrar períodos vazios' : 'Ocultar períodos sem eventos'}
+          >
+            {compact ? <UnfoldVertical size={13} /> : <FoldVertical size={13} />}
+            {compact ? 'Expandir vazios' : 'Ocultar vazios'}
+          </button>
+        )}
         <span className="w-px h-4 bg-line mx-1" />
         <button type="button" className={toolBtn} onClick={undo} title="Desfazer (Ctrl+Z)">
           <Undo2 size={13} />
@@ -315,30 +320,33 @@ export function TimelineEditor({ doc }: { doc: DocNode }) {
       <FilterBar data={data} docs={docs} filter={filter} onChange={setFilter} />
 
       <div className="flex-1 min-h-0 flex">
-        <TimelineCanvas
-          data={data}
-          events={visibleEvents}
-          vertical={vertical}
-          compact={compact}
-          onEventClick={(id) => {
-            const ev = data.events.find((e) => e.id === id);
-            if (ev) setDialog({ kind: 'event', draft: ev, isNew: false });
-          }}
-          onEraClick={(id) => {
-            const era = data.eras.find((e) => e.id === id);
-            if (era) setDialog({ kind: 'era', draft: era, isNew: false });
-          }}
-          onCreateAt={newEventAt}
-        />
-        {showLineage && (
-          <LineageView
-            lineages={data.lineages}
+        {view === 'story' ? (
+          <StoryView
+            data={data}
             docs={docs}
-            excludeDocId={doc.id}
-            onAdd={addLineage}
-            onRemove={removeLineage}
+            events={visibleEvents}
+            onEventClick={(id) => {
+              const ev = data.events.find((e) => e.id === id);
+              if (ev) setDialog({ kind: 'event', draft: ev, isNew: false });
+            }}
+            onCreateAt={(serial) => newEventAt(serial, sortedLanes(data)[0]?.id ?? null)}
             onOpenDoc={openDocument}
-            onClose={() => setShowLineage(false)}
+          />
+        ) : (
+          <TimelineCanvas
+            data={data}
+            events={visibleEvents}
+            vertical={view === 'vertical'}
+            compact={compact}
+            onEventClick={(id) => {
+              const ev = data.events.find((e) => e.id === id);
+              if (ev) setDialog({ kind: 'event', draft: ev, isNew: false });
+            }}
+            onEraClick={(id) => {
+              const era = data.eras.find((e) => e.id === id);
+              if (era) setDialog({ kind: 'era', draft: era, isNew: false });
+            }}
+            onCreateAt={newEventAt}
           />
         )}
       </div>

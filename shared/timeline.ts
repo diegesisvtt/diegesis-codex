@@ -45,6 +45,10 @@ export interface TimelineEra {
   color: string;
   /** hierarquia: Era > Período > Ano nomeado */
   parentEraId: string | null;
+  /** era inicial do mundo: estende-se indefinidamente para trás ("tempo imemorial") */
+  openStart?: boolean;
+  /** era atual: estende-se indefinidamente para frente */
+  openEnd?: boolean;
 }
 
 export interface TimelineEvent {
@@ -60,6 +64,12 @@ export interface TimelineEvent {
   /** ids de documentos do realm (personagens, locais, facções) */
   entityIds: string[];
   tags: string[];
+  /** id do ícone (ver EVENT_ICONS no editor) */
+  icon?: string | null;
+  /** eventos maiores ganham marcador e título em destaque */
+  importance?: 'major' | 'minor' | null;
+  /** texto exibido no lugar da data real ("Tempo imemorial", "Solstício de Sangue") */
+  displayDate?: string | null;
 }
 
 /** causa e efeito entre dois eventos */
@@ -68,15 +78,6 @@ export interface TimelineLink {
   fromEventId: string;
   toEventId: string;
   label: string;
-}
-
-/** linhagem entre documentos (ex.: pai/mãe → filho) */
-export interface TimelineLineage {
-  id: string;
-  parentDocId: string;
-  childDocId: string;
-  /** ex.: 'filho de', 'herdeiro de', 'aprendiz de' */
-  relation: string;
 }
 
 export interface TimelineData {
@@ -89,7 +90,6 @@ export interface TimelineData {
   eras: TimelineEra[];
   events: TimelineEvent[];
   links: TimelineLink[];
-  lineages: TimelineLineage[];
 }
 
 // ---------- calendário ----------
@@ -145,6 +145,23 @@ export function formatDate(serial: number, cal: TimelineCalendar): string {
 export function formatYear(serial: number, cal: TimelineCalendar): string {
   const d = serialToDate(serial, cal);
   return `${d.year}${cal.yearLabel ? ` ${cal.yearLabel}` : ''}`;
+}
+
+/** data de exibição de um evento: displayDate (se houver) ou intervalo formatado */
+export function formatEventDate(
+  ev: { date: number; endDate?: number; displayDate?: string | null },
+  cal: TimelineCalendar
+): string {
+  if (ev.displayDate) return ev.displayDate;
+  const a = formatDate(ev.date, cal);
+  return ev.endDate != null ? `${a} → ${formatDate(ev.endDate, cal)}` : a;
+}
+
+/** intervalo de exibição de uma era, respeitando limites abertos */
+export function formatEraRange(era: TimelineEra, cal: TimelineCalendar): string {
+  const a = era.openStart ? 'Tempo imemorial' : formatDate(era.start, cal);
+  const b = era.openEnd ? 'hoje' : formatDate(era.end, cal);
+  return `${a} → ${b}`;
 }
 
 // ---------- luas ----------
@@ -238,7 +255,6 @@ export function createDefaultTimeline(): TimelineData {
     eras: [],
     events: [],
     links: [],
-    lineages: [],
   };
 }
 
@@ -291,13 +307,13 @@ export function parseTimeline(content: string | null | undefined): TimelineData 
               color: isStr(e.color) ? e.color : null,
               entityIds: strArr(e.entityIds),
               tags: strArr(e.tags),
+              icon: isStr(e.icon) ? e.icon : null,
+              importance: e.importance === 'major' || e.importance === 'minor' ? e.importance : null,
+              displayDate: isStr(e.displayDate) && e.displayDate.trim() ? e.displayDate : null,
             }))
         : [],
       links: Array.isArray(raw.links)
         ? raw.links.filter((l: TimelineLink) => l && isStr(l.id) && isStr(l.fromEventId) && isStr(l.toEventId))
-        : [],
-      lineages: Array.isArray(raw.lineages)
-        ? raw.lineages.filter((l: TimelineLineage) => l && isStr(l.id) && isStr(l.parentDocId) && isStr(l.childDocId))
         : [],
     };
   } catch {

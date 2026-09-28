@@ -16,7 +16,7 @@ import {
 } from '@shared/timeline';
 import { CALENDAR_TEMPLATES } from '@shared/calendarTemplates';
 import { EntityPicker } from './EntityPicker';
-import { PALETTE, generateId } from './model';
+import { EVENT_ICONS, PALETTE, generateId } from './model';
 
 // ---------- primitivos de UI ----------
 
@@ -240,9 +240,52 @@ export function EventDialog({
             ))}
           </select>
         </div>
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className={labelCls}>Cor</label>
+            <ColorSwatches value={ev.color ?? '#529cca'} onChange={(c) => setEv({ ...ev, color: c })} />
+          </div>
+          <div>
+            <label className={labelCls}>Importância</label>
+            <select
+              value={ev.importance ?? 'minor'}
+              onChange={(e) => setEv({ ...ev, importance: e.target.value === 'major' ? 'major' : 'minor' })}
+              className={inputCls}
+            >
+              <option value="minor">Menor</option>
+              <option value="major">Maior</option>
+            </select>
+          </div>
+        </div>
         <div>
-          <label className={labelCls}>Cor</label>
-          <ColorSwatches value={ev.color ?? '#529cca'} onChange={(c) => setEv({ ...ev, color: c })} />
+          <label className={labelCls}>Ícone</label>
+          <div className="flex flex-wrap gap-1">
+            {EVENT_ICONS.map(({ id, Icon, label }) => (
+              <button
+                key={id}
+                type="button"
+                title={label}
+                onClick={() => setEv({ ...ev, icon: id })}
+                className={`p-1.5 rounded border ${
+                  (ev.icon ?? 'flag') === id
+                    ? 'border-accent bg-accent-soft text-accent'
+                    : 'border-line text-ink-3 hover:text-ink-1 hover:bg-hover'
+                }`}
+              >
+                <Icon size={14} />
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>Data de exibição alternativa (opcional)</label>
+          <input
+            type="text"
+            value={ev.displayDate ?? ''}
+            onChange={(e) => setEv({ ...ev, displayDate: e.target.value || null })}
+            className={inputCls}
+            placeholder='Ex.: "Tempo imemorial" — substitui a data real'
+          />
         </div>
         <div>
           <label className={labelCls}>Tags (separadas por vírgula)</label>
@@ -355,14 +398,36 @@ export function EraDialog({
           <label className={labelCls}>Nome</label>
           <input autoFocus type="text" value={era.name} onChange={(e) => setEra({ ...era, name: e.target.value })} className={inputCls} />
         </div>
-        <div>
-          <label className={labelCls}>Início</label>
-          <DateInput serial={era.start} calendar={data.calendar} onChange={(s) => setEra({ ...era, start: s, end: Math.max(era.end, s) })} />
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-1.5 text-[12px] text-ink-2">
+            <input
+              type="checkbox"
+              checked={!!era.openStart}
+              onChange={(e) => setEra({ ...era, openStart: e.target.checked || undefined })}
+            />
+            Era inicial (sem começo)
+          </label>
+          <label className="flex items-center gap-1.5 text-[12px] text-ink-2">
+            <input
+              type="checkbox"
+              checked={!!era.openEnd}
+              onChange={(e) => setEra({ ...era, openEnd: e.target.checked || undefined })}
+            />
+            Era atual (sem fim)
+          </label>
         </div>
-        <div>
-          <label className={labelCls}>Fim</label>
-          <DateInput serial={era.end} calendar={data.calendar} onChange={(s) => setEra({ ...era, end: Math.max(s, era.start) })} />
-        </div>
+        {!era.openStart && (
+          <div>
+            <label className={labelCls}>Início</label>
+            <DateInput serial={era.start} calendar={data.calendar} onChange={(s) => setEra({ ...era, start: s, end: Math.max(era.end, s) })} />
+          </div>
+        )}
+        {!era.openEnd && (
+          <div>
+            <label className={labelCls}>Fim</label>
+            <DateInput serial={era.end} calendar={data.calendar} onChange={(s) => setEra({ ...era, end: Math.max(s, era.start) })} />
+          </div>
+        )}
         <div>
           <label className={labelCls}>Era-mãe (aninhamento)</label>
           <select

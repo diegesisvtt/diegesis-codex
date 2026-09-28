@@ -1,7 +1,60 @@
 /* Helpers do editor de timeline (UI-side). O modelo de dados e a
    matemática de calendário vivem em @shared/timeline. */
 
+import {
+  BookOpen,
+  Church,
+  Coins,
+  Crown,
+  Eye,
+  Flag,
+  Flame,
+  Ghost,
+  Hammer,
+  Heart,
+  Key,
+  MapPin,
+  Scroll,
+  Shield,
+  Ship,
+  Skull,
+  Sparkles,
+  Star,
+  Swords,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
 import { daysPerYear, type TimelineCalendar, type TimelineData, type TimelineEvent, type TimelineLane } from '@shared/timeline';
+
+/** ícones selecionáveis de evento (badge no canvas / card no modo história) */
+export const EVENT_ICONS: { id: string; Icon: LucideIcon; label: string }[] = [
+  { id: 'flag', Icon: Flag, label: 'Marco' },
+  { id: 'swords', Icon: Swords, label: 'Batalha' },
+  { id: 'skull', Icon: Skull, label: 'Morte' },
+  { id: 'crown', Icon: Crown, label: 'Realeza' },
+  { id: 'sparkles', Icon: Sparkles, label: 'Magia' },
+  { id: 'scroll', Icon: Scroll, label: 'Profecia' },
+  { id: 'shield', Icon: Shield, label: 'Defesa' },
+  { id: 'heart', Icon: Heart, label: 'Romance' },
+  { id: 'star', Icon: Star, label: 'Destaque' },
+  { id: 'map-pin', Icon: MapPin, label: 'Local' },
+  { id: 'book-open', Icon: BookOpen, label: 'Conhecimento' },
+  { id: 'hammer', Icon: Hammer, label: 'Construção' },
+  { id: 'church', Icon: Church, label: 'Religião' },
+  { id: 'coins', Icon: Coins, label: 'Economia' },
+  { id: 'ship', Icon: Ship, label: 'Viagem' },
+  { id: 'eye', Icon: Eye, label: 'Segredo' },
+  { id: 'flame', Icon: Flame, label: 'Desastre' },
+  { id: 'ghost', Icon: Ghost, label: 'Sobrenatural' },
+  { id: 'key', Icon: Key, label: 'Descoberta' },
+  { id: 'users', Icon: Users, label: 'Aliança' },
+];
+
+const EVENT_ICON_MAP = new Map(EVENT_ICONS.map((i) => [i.id, i.Icon]));
+
+export function eventIcon(id: string | null | undefined): LucideIcon {
+  return EVENT_ICON_MAP.get(id ?? '') ?? Flag;
+}
 
 export const generateId = () => Math.random().toString(36).slice(2, 10);
 
@@ -155,4 +208,20 @@ export function formatGapDuration(days: number, cal: TimelineCalendar): string {
   const perMonth = dpy / Math.max(1, cal.months.length);
   if (days >= perMonth * 2) return `≈ ${Math.round(days / perMonth)} meses`;
   return `${days} dias`;
+}
+
+/** duração exata entre eventos (vista de história): '23 dias depois' */
+export function formatGapLater(days: number, cal: TimelineCalendar): string {
+  const dpy = daysPerYear(cal);
+  const perMonth = dpy / Math.max(1, cal.months.length);
+  if (days < perMonth) return `${days} ${days === 1 ? 'dia' : 'dias'} depois`;
+  if (days < dpy) {
+    const m = Math.round(days / perMonth);
+    return `${m} ${m === 1 ? 'mês' : 'meses'} depois`;
+  }
+  const y = Math.floor(days / dpy);
+  const rest = days - y * dpy;
+  const m = Math.round(rest / perMonth);
+  const ys = `${y} ${y === 1 ? 'ano' : 'anos'}`;
+  return m > 0 ? `${ys} e ${m} ${m === 1 ? 'mês' : 'meses'} depois` : `${ys} depois`;
 }
