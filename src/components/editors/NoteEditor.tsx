@@ -8,22 +8,29 @@ import {
   BlockTypeSelect,
   BasicTextStyleButton,
   CreateLinkButton,
+  SuggestionMenuController,
+  getDefaultReactSlashMenuItems,
 } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/ariakit';
 import { pt } from '@blocknote/core/locales';
 import { BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core';
-import { Sparkles } from 'lucide-react';
+import { filterSuggestionItems, insertOrUpdateBlockForSlashMenu } from '@blocknote/core/extensions';
+import { ImagePlus, Sparkles, Table } from 'lucide-react';
+import { REF_DRAG_MIME, parseExplorerDragRef } from '@shared/dragDrop';
 import type { DocNode } from '@shared/types';
 import { parseNoteContent } from '@shared/blockContent';
 import { useStore } from '../../state/store';
 import { DocIconPicker } from './shared/DocIconPicker';
 import { AudioBlock } from './note/audioBlock';
+import { InteractiveTableBlock } from './note/tableBlock';
 
-/** note schema: defaults + the custom audio block (disk-backed, loop-capable) */
+/** note schema: defaults + custom blocks (audio: disk-backed, loop-capable;
+ *  interactiveTable: embeds a mythril/table document with roll button) */
 const schema = BlockNoteSchema.create({
   blockSpecs: {
     ...defaultBlockSpecs,
     audio: AudioBlock(),
+    interactiveTable: InteractiveTableBlock(),
   },
 });
 
@@ -44,6 +51,37 @@ async function uploadMedia(file: File): Promise<string> {
   });
 }
 
+/** Downscales a cover image to a compact JPEG data URL (max 1600px wide) so
+ *  the documents.cover column doesn't bloat the DB. Small images pass through. */
+async function downscaleCover(file: File): Promise<string> {
+  if (file.size > 25_000_000) throw new Error('Imagem grande demais para capa.');
+  const src = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = reject;
+    el.src = src;
+  });
+  const MAX_W = 1600;
+  const MAX_PASSTHROUGH_BYTES = 400_000; // small images keep their original encoding
+  if (img.naturalWidth <= MAX_W && src.length < MAX_PASSTHROUGH_BYTES) return src;
+  const scale = Math.min(1, MAX_W / img.naturalWidth);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.naturalWidth * scale);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  const ctx = canvas.getContext('2d')!;
+  // JPEG has no alpha — flatten transparency onto the app background
+  ctx.fillStyle = '#191919';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.82);
+}
+
 export function NoteEditor({
   doc,
   embedded = false,
@@ -55,7 +93,7 @@ export function NoteEditor({
   /** hide the icon picker when the host surface already provides one */
   showIcon?: boolean;
 }) {
-  const { updateDocument, subscribeExternalDocChange, openPanel, setAiDraft } = useStore();
+  const { docs, updateDocument, subscribeExternalDocChange, openPanel, setAiDraft } = useStore();
   const [title, setTitle] = useState(doc.title);
   /** suppresses the persist round-trip while applying an external change */
   const applyingExternalRef = useRef(false);
@@ -75,6 +113,60 @@ export function NoteEditor({
   const handleChange = () => {
     if (applyingExternalRef.current) return; // external change, nothing to persist
     updateDocument(doc.id, { content: JSON.stringify(editor.document) });
+  };
+
+  /* ---------- slash menu: defaults + custom blocks ---------- */
+  // BlockNote's default slash items are hardcoded to built-in blocks, so custom
+  // blocks (interactiveTable) need an explicit item here.
+  const slashItems = async (query: string) =>
+    filterSuggestionItems(
+      [
+        ...getDefaultReactSlashMenuItems(editor),
+        {
+          title: 'Tabela interativa',
+          onItemClick: () =>
+            insertOrUpdateBlockForSlashMenu(editor, { type: 'interactiveTable' } as never),
+          aliases: ['tabela', 'table', 'rolagem', 'roll', 'dados', 'dice'],
+          group: 'Mythril',
+          icon: <Table size={18} />,
+          subtext: 'Embute uma tabela rolável do universo',
+        },
+      ],
+      query
+    );
+
+  /* ---------- drop de documentos do Explorer (tabelas viram bloco) ---------- */
+  // react-dnd's HTML5 backend force-sets dropEffect='none' outside its own drop
+  // targets; this window listener (registered after the backend's) wins.
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes(REF_DRAG_MIME)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    };
+    window.addEventListener('dragover', onDragOver);
+    return () => window.removeEventListener('dragover', onDragOver);
+  }, []);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes(REF_DRAG_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDropRef = (e: React.DragEvent) => {
+    const ref = parseExplorerDragRef(e.dataTransfer.getData(REF_DRAG_MIME));
+    if (!ref || ref.kind !== 'note') return;
+    const target = docs.find((d) => d.id === ref.docId);
+    if (!target || target.type !== 'mythril/table') return;
+    e.preventDefault();
+    const last = editor.document[editor.document.length - 1];
+    if (!last) return;
+    editor.insertBlocks(
+      [{ type: 'interactiveTable', props: { tableId: target.id } }] as never,
+      last,
+      'after'
+    );
   };
 
   useEffect(() => {
@@ -138,6 +230,21 @@ export function NoteEditor({
     updateDocument(doc.id, { title: e.target.value });
   };
 
+  /* ---------- cover banner ---------- */
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const pickCover = () => coverInputRef.current?.click();
+  const handleCoverFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file
+    if (!file || !file.type.startsWith('image/')) return;
+    try {
+      updateDocument(doc.id, { cover: await downscaleCover(file) });
+    } catch {
+      /* undecodable or oversized image — keep the current cover */
+    }
+  };
+  const removeCover = () => updateDocument(doc.id, { cover: null });
+
   const updatedAt = new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
     month: 'short',
@@ -146,9 +253,40 @@ export function NoteEditor({
   }).format(doc.updatedAt);
 
   return (
-    <div className="h-full w-full bg-app flex flex-col overflow-hidden">
+    <div
+      className="h-full w-full bg-app flex flex-col overflow-hidden"
+      onDragOver={handleDragOver}
+      onDrop={handleDropRef}
+    >
       <div className="flex-1 overflow-y-auto custom-scrollbar" onClick={handlePageClick}>
-        <div className={embedded ? 'w-full px-1 pt-1' : 'w-full max-w-[724px] mx-auto pl-[54px] pr-4 pt-14'}>
+        {!embedded && doc.cover && (
+          <div className="group/cover relative h-52 w-full select-none">
+            <img src={doc.cover} alt="Capa da nota" draggable={false} className="h-full w-full object-cover" />
+            <div className="absolute bottom-3 right-4 flex gap-1.5 opacity-0 transition-opacity group-hover/cover:opacity-100 group-focus-within/cover:opacity-100">
+              <button
+                type="button"
+                onClick={pickCover}
+                className="rounded-md border border-line bg-app/80 px-2 py-1 text-[12px] text-ink-1 backdrop-blur hover:bg-hover"
+              >
+                Trocar capa
+              </button>
+              <button
+                type="button"
+                onClick={removeCover}
+                className="rounded-md border border-line bg-app/80 px-2 py-1 text-[12px] text-ink-1 backdrop-blur hover:bg-hover"
+              >
+                Remover
+              </button>
+            </div>
+          </div>
+        )}
+        <div
+          className={
+            embedded
+              ? 'w-full px-1 pt-1'
+              : `w-full max-w-[724px] mx-auto pl-[54px] pr-4 ${doc.cover ? 'pt-6' : 'pt-14'}`
+          }
+        >
           {embedded && showIcon && (
             <div className="-ml-2 mb-1">
               <DocIconPicker
@@ -159,7 +297,17 @@ export function NoteEditor({
             </div>
           )}
           {!embedded && (
-            <>
+            <div className="group/header relative">
+              {!doc.cover && (
+                <button
+                  type="button"
+                  onClick={pickCover}
+                  className="absolute -top-8 left-[44px] flex items-center gap-1.5 rounded px-2 py-1 text-[13px] text-ink-3 opacity-0 transition-opacity hover:bg-hover hover:text-ink-2 group-hover/header:opacity-100 group-focus-within/header:opacity-100"
+                >
+                  <ImagePlus size={15} strokeWidth={1.75} />
+                  Adicionar capa
+                </button>
+              )}
               <div className="flex items-center gap-3">
                 {showIcon && (
                   <div className="-ml-2.5 shrink-0">
@@ -185,7 +333,7 @@ export function NoteEditor({
                 />
               </div>
               <div className="text-[12px] text-ink-3 mt-1 mb-6 select-none">Editado {updatedAt}</div>
-            </>
+            </div>
           )}
         </div>
 
@@ -194,8 +342,10 @@ export function NoteEditor({
           theme="dark"
           onChange={handleChange}
           formattingToolbar={false}
+          slashMenu={false}
           className={embedded ? 'mythril-bn embedded' : 'mythril-bn'}
         >
+          <SuggestionMenuController triggerCharacter="/" getItems={slashItems} />
           <FormattingToolbarController
             formattingToolbar={() => (
               <FormattingToolbar>
@@ -220,6 +370,13 @@ export function NoteEditor({
           />
         </BlockNoteView>
       </div>
+      <input
+        ref={coverInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleCoverFile}
+      />
     </div>
   );
 }
