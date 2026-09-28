@@ -534,3 +534,111 @@ textarea {
   outline: 2px solid var(--color-accent-soft);
   outline-offset: 1px;
 }
+
+/* ============================================================
+   Timeline — "atlas celestial": atmosfera, glow e micro-interações
+   ============================================================ */
+
+/* fundo do canvas: brilho de nebulosa fixo + grade de pontos quase invisível */
+.tl-bg {
+  background:
+    radial-gradient(1100px 480px at 72% -8%, rgba(180, 138, 217, 0.075), transparent 62%),
+    radial-gradient(850px 420px at 8% 108%, rgba(82, 156, 202, 0.065), transparent 60%),
+    radial-gradient(600px 300px at 45% 55%, rgba(217, 164, 95, 0.03), transparent 65%),
+    var(--color-app);
+}
+.tl-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(ellipse at 50% 40%, black 30%, transparent 85%);
+}
+
+/* chrome em vidro (toolbar da timeline) */
+.tl-glass {
+  background: color-mix(in srgb, var(--color-overlay) 72%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+/* marcadores de evento: hover com leve ampliação */
+.tl-event {
+  transition: transform 0.16s ease, opacity 0.16s ease;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.tl-event:hover {
+  transform: scale(1.14);
+}
+
+/* setas de causa/efeito: fluxo animado ("marching ants") */
+.tl-flow {
+  animation: tl-dash 1.4s linear infinite;
+}
+@keyframes tl-dash {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+/* cards da vista história: elevação no hover */
+.tl-card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.tl-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* spine da vista história: desvanecer nas extremidades */
+.tl-spine {
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--color-line-strong) 8%,
+    var(--color-line-strong) 92%,
+    transparent
+  );
+}
+
+/* entrada escalonada dos cards da crônica */
+@keyframes tl-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* trilho de storyline: fade nas extremidades + transição de hover */
+.tl-thread {
+  mask-image: linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent);
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+/* botão "adicionar evento": ícone gira no hover */
+.tl-add svg {
+  transition: transform 0.2s ease;
+}
+.tl-add:hover svg {
+  transform: rotate(90deg);
+}
+
+/* capa de evento: fade-in suave ao carregar */
+.tl-cover {
+  animation: tl-cover-in 0.5s ease both;
+}
+@keyframes tl-cover-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
