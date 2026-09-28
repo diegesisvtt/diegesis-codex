@@ -180,6 +180,9 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
   const realmFonts = useRealmFonts();
   const { docs, createDocument, openDocument, uiState, saveUiState } = useStore();
 
+  // linked notes show their Notion-style page icon on the pin (same as the Explorer)
+  const pinDocIcon = useCallback((docId: string) => docs.find((d) => d.id === docId)?.icon, [docs]);
+
   /* ---------- resizable side panel (mirrors the AI panel in App.tsx) ---------- */
   const rootRef = useRef<HTMLDivElement>(null);
   const [panelWidth, setPanelWidth] = useState(uiState.hexmapPanelWidth ?? PANEL_DEFAULT);
@@ -398,6 +401,8 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
     | { kind: 'label-drag'; id: string; dx: number; dy: number; moved: boolean }
     | { kind: 'maybe-select'; startX: number; startY: number; camX: number; camY: number; moved: boolean };
   const gestureRef = useRef<Gesture | null>(null);
+  /** set when the right button was consumed by a tool gesture — suppresses the context menu that follows */
+  const suppressCtxMenu = useRef(false);
 
   /* ---------- mutations ---------- */
   const paintTerrain = useCallback(
@@ -635,8 +640,17 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
     const p = screenToWorld(e.clientX, e.clientY);
     const hex = hexAt(p);
 
+    // these tools consume the right button as a gesture (erase/reveal/undo-point)
+    if (e.button === 2 && (tool === 'terrain' || tool === 'region' || tool === 'fog' || tool === 'line')) {
+      suppressCtxMenu.current = true;
+    }
+    // safety: a stale suppression (e.g. canceled pointer) never eats a left click's menu
+    if (e.button === 0) suppressCtxMenu.current = false;
+
     // middle button / hand tool / space-held always pans
     if (e.button === 1 || tool === 'pan' || (spaceDown && e.button === 0)) {
+      // the hand tool consumes the right button as a pan gesture — no menu on release
+      if (e.button === 2) suppressCtxMenu.current = true;
       gestureRef.current = { kind: 'pan', startX: e.clientX, startY: e.clientY, camX: camera.x, camY: camera.y };
       return;
     }
@@ -1079,8 +1093,11 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
           onDoubleClick={onDoubleClick}
           onContextMenu={(e) => {
             e.preventDefault();
-            // right button is the erase gesture for paint tools, not a menu
-            if (tool === 'terrain' || tool === 'region') return;
+            // right-button gestures (erase/reveal/undo-point) don't open the menu
+            if (suppressCtxMenu.current) {
+              suppressCtxMenu.current = false;
+              return;
+            }
             setCtxMenu({ x: e.clientX, y: e.clientY });
           }}
           onPointerLeave={() => {
@@ -1097,6 +1114,7 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
             selectedLineId={selectedLineId}
             selectedLabelId={selectedLabelId}
             selectedPinId={selectedPinId}
+            pinDocIcon={pinDocIcon}
           >
               {/* hover + selection (transient) */}
               {hoverHex && inGrid(hoverHex) && tool !== 'pan' && (

@@ -19,6 +19,7 @@ import {
 } from './model';
 import { cornersPath, gridPixelSize, hexCenter, hexCorners, pixelToHex, regionBoundaryPath } from './hexMath';
 import { getGlyph } from './icons';
+import { pinIcon } from '../pdf/rpg';
 
 /** outer world-space padding around the parchment (px) */
 export const PAD = 120;
@@ -66,6 +67,8 @@ export interface MapRendererProps {
   selectedPinId?: string | null;
   /** smooth camera transitions (player window), in ms */
   transitionMs?: number;
+  /** Notion-style page icon of a pin's linked note (wins over the marker glyph) */
+  pinDocIcon?: (docId: string) => string | null | undefined;
   /** transient overlays rendered above the fog (GM editor only) */
   children?: React.ReactNode;
 }
@@ -81,6 +84,7 @@ export function MapRenderer({
   selectedLabelId = null,
   selectedPinId = null,
   transitionMs,
+  pinDocIcon,
   children,
 }: MapRendererProps) {
   const geom = useMemo(
@@ -400,7 +404,8 @@ export function MapRenderer({
         {layers.features &&
           map.pins.map((pin) => {
             const r = resolvePin(map, pin);
-            const Glyph = getGlyph(r.icon);
+            const docIcon = pin.docId ? pinDocIcon?.(pin.docId) : undefined;
+            const Glyph = docIcon ? pinIcon(docIcon) : getGlyph(r.icon);
             const size = geom.size * 0.52;
             const selected = selectedPinId === pin.id;
             return (
@@ -417,7 +422,7 @@ export function MapRenderer({
                   />
                 )}
                 <g style={{ filter: 'drop-shadow(0 0 1.5px rgba(15,15,15,.85))' }}>
-                  {r.iconSrc ? (
+                  {r.iconSrc && !docIcon ? (
                     <image href={r.iconSrc} x={pin.x - size / 2} y={pin.y - size / 2} width={size} height={size} />
                   ) : Glyph ? (
                     <g transform={`translate(${pin.x - size / 2},${pin.y - size / 2})`}>

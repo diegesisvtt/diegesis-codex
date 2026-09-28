@@ -30,6 +30,7 @@ import {
 } from './model';
 import { DEFAULT_GENERATOR, generateTerrain, terrainWizard } from './generator';
 import { FEATURE_ICONS, TERRAIN_ICONS, getGlyph, type Glyph } from './icons';
+import { pinIcon } from '../pdf/rpg';
 import { ConfirmDeleteButton } from './ConfirmDelete';
 import type { LayerVisibility } from './HexcrawlMap';
 import type { HexTool, PanelTab } from './Toolbar';
@@ -253,11 +254,16 @@ function HexTab({ map, setMap, mapDocId, selectedHex }: PanelProps) {
         ) : (
           pinsHere.map((pin) => {
             const r = resolvePin(map, pin);
-            const Glyph = getGlyph(r.icon);
+            const docIcon = pin.docId ? docs.find((d) => d.id === pin.docId)?.icon : undefined;
+            const Glyph = docIcon ? pinIcon(docIcon) : getGlyph(r.icon);
             return (
               <div key={pin.id} className="flex items-center gap-2 py-0.5 text-[12px]">
                 <span className="w-4 h-4 flex items-center justify-center shrink-0">
-                  {r.iconSrc ? <img src={r.iconSrc} alt="" className="w-4 h-4 object-contain" /> : Glyph ? <Glyph size={13} color={r.color} /> : null}
+                  {r.iconSrc && !docIcon ? (
+                    <img src={r.iconSrc} alt="" className="w-4 h-4 object-contain" />
+                  ) : Glyph ? (
+                    <Glyph size={13} color={r.color} />
+                  ) : null}
                 </span>
                 <span className="flex-1 truncate text-ink-1">{r.name}</span>
                 {pin.docId && (
