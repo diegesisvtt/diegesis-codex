@@ -15,7 +15,7 @@ import { EditorRegistry, type EditorContribution } from './api/editors';
 import { DocTypeRegistry, type DocTypeContribution } from './api/docTypes';
 import { MenuRegistry, type MenuItemContribution, type MenuLocation } from './api/menus';
 import { File, Folder, LayoutGrid } from 'lucide-react';
-import { TypedEventBus, type AppEvents } from './api/events';
+import { createAppEventBus, type AppEvents } from './api/events';
 import {
   PLUGIN_API_VERSION,
   type AppFacade,
@@ -62,7 +62,7 @@ export class PluginManager {
   readonly editors = new EditorRegistry();
   readonly docTypes = new DocTypeRegistry();
   readonly menus = new MenuRegistry();
-  readonly events = new TypedEventBus<AppEvents>();
+  readonly events = createAppEventBus();
 
   constructor() {
     // core creatable types live in the same registry as plugin types so
