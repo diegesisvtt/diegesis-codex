@@ -22,6 +22,12 @@
   },
   "dependencies": {
     "@blocknote/ariakit": "^0.54.2",
+    "@diegesis/dice-core": "file:vendor/diegesis/diegesis-dice-core-0.1.1.tgz",
+    "@diegesis/dice-foundry-notation": "file:vendor/diegesis/diegesis-dice-foundry-notation-0.1.1.tgz",
+    "@diegesis/dice-notation": "file:vendor/diegesis/diegesis-dice-notation-0.1.1.tgz",
+    "@diegesis/events": "file:vendor/diegesis/diegesis-events-0.2.1.tgz",
+    "@diegesis/formula": "file:vendor/diegesis/diegesis-formula-0.1.1.tgz",
+    "@diegesis/sheet": "file:vendor/diegesis/diegesis-sheet-0.1.2.tgz",
     "@blocknote/core": "^0.54.2",
     "@blocknote/react": "^0.54.2",
     "@huggingface/transformers": "^4.2.0",
@@ -36,6 +42,13 @@
     "react-arborist": "^3.4.0",
     "react-dom": "^18.3.1",
     "sqlite-vec": "^0.1.9"
+  },
+  "overrides": {
+    "@diegesis/formula": "file:vendor/diegesis/diegesis-formula-0.1.1.tgz",
+    "@diegesis/events": "file:vendor/diegesis/diegesis-events-0.2.1.tgz",
+    "@diegesis/dice-core": "file:vendor/diegesis/diegesis-dice-core-0.1.1.tgz",
+    "@diegesis/dice-notation": "file:vendor/diegesis/diegesis-dice-notation-0.1.1.tgz",
+    "@diegesis/dice-notation-core": "file:vendor/diegesis/diegesis-dice-notation-core-0.1.1.tgz"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
