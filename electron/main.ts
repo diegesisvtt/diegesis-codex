@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import path from 'node:path';
 import * as db from './db';
 import * as pdf from './pdf';
@@ -278,32 +278,54 @@ function createWindow(): void {
   }
 }
 
+/** A failure on the startup path (native module, DB, protocol registration)
+ *  used to reject the whenReady() promise and leave the process running with no
+ *  window — indistinguishable from "the app didn't open". Surface it instead. */
+function reportFatalStartup(err: unknown): void {
+  const message = err instanceof Error ? `${err.message}\n\n${err.stack ?? ''}` : String(err);
+  console.error('[main] falha fatal na inicialização:', message);
+  try {
+    dialog.showErrorBox('Diegesis Codex falhou ao iniciar', message);
+  } catch {
+    /* dialog may be unavailable if startup failed very early */
+  }
+  app.exit(1);
+}
+
+process.on('uncaughtException', (err) => console.error('[main] uncaughtException:', err));
+process.on('unhandledRejection', (reason) => console.error('[main] unhandledRejection:', reason));
+
 app.whenReady().then(() => {
-  // No native menu: Diegesis Codex has its own title bar, and with autoHideMenuBar
-  // pressing Alt would reveal/focus the hidden menu bar — stealing focus and
-  // breaking Alt as the snap-bypass modifier in the canvas editors.
-  // (On macOS the menu is kept: the edit roles power Cmd+C/V in text fields.)
-  if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
-  pdf.registerPdfProtocol();
-  audio.registerAudioProtocol();
-  images.registerImageProtocol();
-  db.initDb();
-  // reclaim audio files orphaned by removed blocks/shapes/highlight attachments
-  audio.gcAudioFiles(db.listAllDocContents());
-  registerIpc();
-  embedder.startEmbedder();
-  embedder.indexEvents.on('status', (status) => {
-    for (const win of BrowserWindow.getAllWindows()) win.webContents.send('ai:index:status', status);
-  });
-  docEvents.on('changed', (realmId) => {
-    for (const win of BrowserWindow.getAllWindows()) win.webContents.send('docs:changed', realmId);
-  });
-  createWindow();
+  try {
+    // No native menu: Diegesis Codex has its own title bar, and with autoHideMenuBar
+    // pressing Alt would reveal/focus the hidden menu bar — stealing focus and
+    // breaking Alt as the snap-bypass modifier in the canvas editors.
+    // (On macOS the menu is kept: the edit roles power Cmd+C/V in text fields.)
+    if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
+    pdf.registerPdfProtocol();
+    audio.registerAudioProtocol();
+    images.registerImageProtocol();
+    db.initDb();
+    // reclaim audio files orphaned by removed blocks/shapes/highlight attachments
+    audio.gcAudioFiles(db.listAllDocContents());
+    registerIpc();
+    embedder.startEmbedder();
+    embedder.indexEvents.on('status', (status) => {
+      for (const win of BrowserWindow.getAllWindows()) win.webContents.send('ai:index:status', status);
+    });
+    docEvents.on('changed', (realmId) => {
+      for (const win of BrowserWindow.getAllWindows()) win.webContents.send('docs:changed', realmId);
+    });
+    createWindow();
+  } catch (err) {
+    reportFatalStartup(err);
+    return;
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
-});
+}).catch(reportFatalStartup);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
