@@ -13,11 +13,19 @@ export const generateId = () => crypto.randomBytes(6).toString('hex');
 
 let db: Database.Database;
 
+/** electron-builder unpacks sqlite-vec's per-platform native package to
+ *  app.asar.unpacked, but getLoadablePath() still returns the in-asar path,
+ *  which the OS dynamic loader cannot read. Point it at the real file. */
+function loadableVecPath(): string {
+  const p = sqliteVec.getLoadablePath();
+  return p.includes(`app.asar${path.sep}`) ? p.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`) : p;
+}
+
 export function initDb(dbPath?: string): void {
   const dir = dbPath ? path.dirname(dbPath) : app.getPath('userData');
   fs.mkdirSync(dir, { recursive: true });
   db = new Database(dbPath ?? path.join(dir, 'diegesis.db'));
-  sqliteVec.load(db);
+  db.loadExtension(loadableVecPath());
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   migrate();
