@@ -536,10 +536,10 @@ textarea {
 }
 
 /* ============================================================
-   Timeline — "atlas celestial": atmosfera, glow e micro-interações
+   Timeline â€” "atlas celestial": atmosfera, glow e micro-interaÃ§Ãµes
    ============================================================ */
 
-/* fundo do canvas: brilho de nebulosa fixo + grade de pontos quase invisível */
+/* fundo do canvas: brilho de nebulosa fixo + grade de pontos quase invisÃ­vel */
 .tl-bg {
   background:
     radial-gradient(1100px 480px at 72% -8%, rgba(180, 138, 217, 0.075), transparent 62%),
@@ -563,7 +563,7 @@ textarea {
   backdrop-filter: blur(10px);
 }
 
-/* marcadores de evento: hover com leve ampliação */
+/* marcadores de evento: hover com leve ampliaÃ§Ã£o */
 .tl-event {
   transition: transform 0.16s ease, opacity 0.16s ease;
   transform-box: fill-box;
@@ -583,7 +583,7 @@ textarea {
   }
 }
 
-/* cards da vista história: elevação no hover */
+/* cards da vista histÃ³ria: elevaÃ§Ã£o no hover */
 .tl-card {
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
@@ -592,7 +592,7 @@ textarea {
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-/* spine da vista história: desvanecer nas extremidades */
+/* spine da vista histÃ³ria: desvanecer nas extremidades */
 .tl-spine {
   background: linear-gradient(
     to bottom,
@@ -603,7 +603,7 @@ textarea {
   );
 }
 
-/* entrada escalonada dos cards da crônica */
+/* entrada escalonada dos cards da crÃ´nica */
 @keyframes tl-in {
   from {
     opacity: 0;
@@ -615,14 +615,14 @@ textarea {
   }
 }
 
-/* trilho de storyline: fade nas extremidades + transição de hover */
+/* trilho de storyline: fade nas extremidades + transiÃ§Ã£o de hover */
 .tl-thread {
   mask-image: linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent);
   -webkit-mask-image: linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent);
   transition: opacity 0.2s ease, filter 0.2s ease;
 }
 
-/* botão "adicionar evento": ícone gira no hover */
+/* botÃ£o "adicionar evento": Ã­cone gira no hover */
 .tl-add svg {
   transition: transform 0.2s ease;
 }
