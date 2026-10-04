@@ -1,9 +1,11 @@
 // Editor de Ficha de Personagem (diegesis/sheet) — SheetEngine do
 // @diegesis/sheet: base editável, pipeline de efeitos (apply/enable/remove),
 // valores computados com audit trail ("por que CA é 14?") e roll templates
-// que alimentam o histórico global ('roller:rolled').
-import { useEffect, useRef, useState } from 'react';
-import { Dices, HelpCircle, Plus, Sparkles, Trash2 } from 'lucide-react';
+// que alimentam o histórico global ('roller:rolled'). O layout é um grid
+// customizável por drag and drop (modo edição), persistido no JSON da ficha
+// com herança do padrão por sistema (RealmSettings.sheetLayouts).
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, Pencil, RotateCcw, Save } from 'lucide-react';
 import {
   SheetEngine,
   createSheetBus,
@@ -15,42 +17,58 @@ import {
 import { evaluateRoll } from '@diegesis/dice-core';
 import { toFormula } from '@diegesis/dice-notation';
 import type { DocNode } from '@shared/types';
-import { osrPack, parseSheet, serializeSheet } from '@shared/sheet';
+import { osrPack, parseSheet, serializeSheet, type SheetDocumentWithLayout } from '@shared/sheet';
+import {
+  clampBlock,
+  defaultSheetLayout,
+  parseSheetLayout,
+  type SheetBlock,
+  type SheetLayout,
+} from '@shared/sheetLayout';
 import { useStore } from '../../../state/store';
 import { usePluginManager } from '../../../plugins/manager';
-
-/** campos base exibidos no grid principal (paths aninhados, alinhados ao statblock OSR) */
-const BASE_FIELDS: { path: string; label: string; kind: 'number' | 'die' }[] = [
-  { path: 'dv', label: 'DV', kind: 'number' },
-  { path: 'dadoVida', label: 'Dado de Vida', kind: 'die' },
-  { path: 'pv.atual', label: 'PV', kind: 'number' },
-  { path: 'pv.max', label: 'PV Máx', kind: 'number' },
-  { path: 'ca', label: 'CA', kind: 'number' },
-  { path: 'atq', label: 'Atq', kind: 'number' },
-  { path: 'moral', label: 'Moral', kind: 'number' },
-  { path: 'desl.quad', label: 'Desl.', kind: 'number' },
-  { path: 'save', label: 'Save', kind: 'number' },
-];
-const DIE_OPTIONS = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20'];
-/** paths derivados exibidos como calculados (read-only) */
-const DERIVED_FIELDS = ['pv.metade', 'desl.pes', 'desl.m'];
-
-const ROLL_LABELS: Record<string, string> = {
-  ataque: 'Ataque',
-  dano: 'Dano',
-  moral: 'Moral',
-  save: 'Save',
-};
+import { SheetCanvas } from './SheetCanvas';
+import { SheetBlockContent, ROLL_LABELS, type SheetBlockCtx } from './blocks';
+import { SheetPalette, paletteItem } from './SheetPalette';
+import { BlockConfig } from './BlockConfig';
 
 export function SheetEditor({ doc }: { doc: DocNode }) {
-  const { updateDocument, flushDocument, subscribeExternalDocChange } = useStore();
+  const { updateDocument, flushDocument, subscribeExternalDocChange, uiState, saveUiState, activeRealmId } = useStore();
   const manager = usePluginManager();
   const engineRef = useRef<SheetEngine | null>(null);
   const [computed, setComputed] = useState<ComputedSheet | null>(null);
   const [nome, setNome] = useState('');
   const [auditPath, setAuditPath] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // layout: override da ficha (null = herda padrão do sistema ou embutido)
+  const realmDefault = useMemo(() => {
+    const raw = activeRealmId ? uiState.realmSettings?.[activeRealmId]?.sheetLayouts?.[osrPack.id] : undefined;
+    return parseSheetLayout(raw);
+  }, [uiState.realmSettings, activeRealmId]);
+  const [layoutOverride, setLayoutOverride] = useState<SheetLayout | null>(
+    () => (parseSheet(doc.content) as SheetDocumentWithLayout).layout ?? null,
+  );
+  const layout = layoutOverride ?? realmDefault ?? defaultSheetLayout();
+  const layoutRef = useRef<SheetLayout | null>(layoutOverride);
+  layoutRef.current = layoutOverride;
+
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dirty = useRef(false);
+  const scheduleSaveRef = useRef<(() => void) | null>(null);
+
+  // conteúdo serializado = documento do motor + layout (override) da ficha
+  const buildContent = (): string => {
+    const e = engineRef.current;
+    const base = (e ? e.document : parseSheet(doc.content)) as SheetDocumentWithLayout;
+    const next: SheetDocumentWithLayout = { ...base };
+    if (layoutRef.current) next.layout = layoutRef.current;
+    else delete next.layout;
+    return serializeSheet(next);
+  };
+  const buildContentRef = useRef(buildContent);
+  buildContentRef.current = buildContent;
 
   // motor por documento: cria no mount, persiste a cada 'computed', destrói no unmount
   useEffect(() => {
@@ -58,24 +76,28 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     const engine = new SheetEngine(parseSheet(doc.content), { pack: osrPack, bus });
     engineRef.current = engine;
     // conteúdo que este editor conhece/persistiu — para distinguir mudanças externas de ecos
-    let lastKnownContent = doc.content ?? serializeSheet(engine.document);
+    let lastKnownContent = doc.content ?? buildContentRef.current();
+    const scheduleSave = () => {
+      dirty.current = true;
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      const docId = doc.id;
+      saveTimer.current = setTimeout(() => {
+        dirty.current = false;
+        lastKnownContent = buildContentRef.current();
+        updateDocument(docId, { content: lastKnownContent });
+      }, 400);
+    };
+    scheduleSaveRef.current = scheduleSave;
     const persistImmediate = () => {
       dirty.current = false;
-      lastKnownContent = serializeSheet(engine.document);
+      lastKnownContent = buildContentRef.current();
       flushDocument(doc.id, { content: lastKnownContent });
     };
     const detach = engine.attach();
     const off = bus.on('computed', () => {
       setComputed(engine.compute());
       setNome(String((engine.document.identity.nome as string) ?? ''));
-      dirty.current = true;
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      const docId = doc.id;
-      saveTimer.current = setTimeout(() => {
-        dirty.current = false;
-        lastKnownContent = serializeSheet(engine.document);
-        updateDocument(docId, { content: lastKnownContent });
-      }, 400);
+      scheduleSave();
     });
     // mudança externa (IA, outra aba, sync de realm): recarrega o motor em vez
     // de deixar o próximo save debounced sobrescrever a mudança
@@ -85,7 +107,9 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       dirty.current = false;
       lastKnownContent = external.content ?? '';
-      engine.loadDocument(parseSheet(external.content));
+      const parsed = parseSheet(external.content) as SheetDocumentWithLayout;
+      setLayoutOverride(parsed.layout ?? null);
+      engine.loadDocument(parsed);
       engine.refresh();
     });
     setComputed(engine.compute());
@@ -93,6 +117,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     return () => {
       off();
       offExternal();
+      scheduleSaveRef.current = null;
       if (saveTimer.current) clearTimeout(saveTimer.current);
       // flush ANTES de destruir o motor (não depender de internals de destroy())
       if (dirty.current) persistImmediate();
@@ -136,156 +161,172 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     }
   };
 
+  // ---------- mutações de layout (modo edição) ----------
+
+  const mutateLayout = (fn: (l: SheetLayout) => SheetLayout) => {
+    // fork automático: editar uma ficha herdada cria o override próprio dela
+    const next = fn(layoutRef.current ?? realmDefault ?? defaultSheetLayout());
+    layoutRef.current = next;
+    setLayoutOverride(next);
+    scheduleSaveRef.current?.();
+  };
+
+  const onMoveBlock = (id: string, dx: number, dy: number) => {
+    if (dx === 0 && dy === 0) return;
+    mutateLayout((l) => ({
+      ...l,
+      blocks: l.blocks.map((b) => (b.id === id ? clampBlock(l, { ...b, x: b.x + dx, y: b.y + dy }) : b)),
+    }));
+  };
+
+  const onResizeBlock = (id: string, w: number, h: number) => {
+    mutateLayout((l) => ({
+      ...l,
+      blocks: l.blocks.map((b) => (b.id === id ? clampBlock(l, { ...b, w, h }) : b)),
+    }));
+  };
+
+  const onRemoveBlock = (id: string) => {
+    setSelectedId((sel) => (sel === id ? null : sel));
+    mutateLayout((l) => ({ ...l, blocks: l.blocks.filter((b) => b.id !== id) }));
+  };
+
+  const onDropPalette = (kind: string, x: number, y: number) => {
+    const item = paletteItem(kind);
+    if (!item) return;
+    const block = item.make(x, y);
+    mutateLayout((l) => ({ ...l, blocks: [...l.blocks, clampBlock(l, block)] }));
+    setSelectedId(block.id);
+  };
+
+  const updateBlock = (id: string, patch: Record<string, unknown>) => {
+    mutateLayout((l) => ({
+      ...l,
+      blocks: l.blocks.map((b) => (b.id === id ? ({ ...b, ...patch } as SheetBlock) : b)),
+    }));
+  };
+
+  /** grava o layout atual como padrão do sistema (realm) — novas fichas herdam */
+  const saveAsSystemDefault = () => {
+    if (!activeRealmId) return;
+    const realmSettings = {
+      ...(uiState.realmSettings ?? {}),
+      [activeRealmId]: {
+        ...(uiState.realmSettings?.[activeRealmId] ?? {}),
+        sheetLayouts: {
+          ...(uiState.realmSettings?.[activeRealmId]?.sheetLayouts ?? {}),
+          [osrPack.id]: layout,
+        },
+      },
+    };
+    saveUiState({ realmSettings });
+  };
+
+  /** remove o override da ficha — volta a herdar o padrão do sistema/embutido */
+  const resetToDefault = () => {
+    layoutRef.current = null;
+    setLayoutOverride(null);
+    setSelectedId(null);
+    scheduleSaveRef.current?.();
+  };
+
   const values = computed?.values ?? {};
-  const baseValue = (path: string): unknown => (computed ? getPath(computed.values, path) : undefined);
   const auditFor = auditPath ? (computed?.audit ?? []).filter((a) => a.path === auditPath) : [];
   const effectLabel = (fx: EffectInstance) =>
     fx.ref ? (engine()?.getDefinition(fx.ref)?.label ?? fx.ref) : (fx.inline?.label ?? 'Efeito');
 
+  const blockCtx: SheetBlockCtx = {
+    computed,
+    nome,
+    editing,
+    auditPath,
+    setAuditPath,
+    setBaseValue,
+    setIdentity,
+    identityValue: (key) => String(engine()?.document.identity[key] ?? ''),
+    rollTemplate,
+    applyEffect: (defId) => engine()?.applyEffect(defId, { source: { kind: 'manual' } }),
+    setEffectEnabled: (id, on) => engine()?.setEnabled(id, on),
+    removeEffect: (id) => engine()?.removeEffect(id),
+    effectLabel,
+    updateBlock,
+  };
+
+  const selectedBlock = selectedId ? layout.blocks.find((b) => b.id === selectedId) : undefined;
+
   return (
-    <div className="h-full overflow-y-auto custom-scrollbar bg-app">
-      <div className="max-w-[720px] mx-auto px-6 py-5 flex flex-col gap-6">
-        {/* identidade */}
-        <div>
-          <input
-            value={nome}
-            onChange={(e) => setIdentity('nome', e.target.value)}
-            placeholder="Nome do personagem"
-            spellCheck={false}
-            className="w-full bg-transparent text-[22px] font-semibold text-ink-1 outline-none placeholder:text-ink-3"
-          />
-          <div className="text-[11px] text-ink-3 mt-0.5 select-none">
-            {osrPack.id}@{osrPack.version}
-          </div>
+    <div className="h-full overflow-y-auto custom-scrollbar bg-app" onClick={() => setSelectedId(null)}>
+      <div className="max-w-[860px] mx-auto px-6 py-5 flex flex-col gap-3">
+        {/* toolbar */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(!editing);
+              setSelectedId(null);
+            }}
+            title={editing ? 'Concluir edição do layout' : 'Customizar layout'}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] transition-colors ${
+              editing
+                ? 'border-accent bg-accent-soft text-accent-ink'
+                : 'border-line bg-elevated/60 text-ink-2 hover:text-ink-1 hover:border-accent/40'
+            }`}
+          >
+            {editing ? <Check size={13} /> : <Pencil size={13} />}
+            {editing ? 'Concluir' : 'Customizar'}
+          </button>
+          {editing && (
+            <>
+              <button
+                type="button"
+                onClick={saveAsSystemDefault}
+                title="Usar este layout como padrão de todas as fichas do sistema"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-line bg-elevated/60 text-[12px] text-ink-2 hover:text-ink-1 hover:border-accent/40 transition-colors"
+              >
+                <Save size={13} />
+                Salvar como padrão do sistema
+              </button>
+              {layoutOverride && (
+                <button
+                  type="button"
+                  onClick={resetToDefault}
+                  title="Remover layout próprio e voltar a herdar o padrão"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-line bg-elevated/60 text-[12px] text-ink-2 hover:text-ink-1 hover:border-accent/40 transition-colors"
+                >
+                  <RotateCcw size={13} />
+                  Restaurar padrão
+                </button>
+              )}
+              <span className="ml-auto text-[11px] text-ink-3 select-none">
+                {layoutOverride ? 'layout próprio desta ficha' : 'herdando padrão do sistema'}
+              </span>
+            </>
+          )}
         </div>
 
-        {/* stats base */}
-        <section>
-          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-ink-3 mb-2 select-none">Atributos</h2>
-          <div className="grid grid-cols-4 gap-2">
-            {BASE_FIELDS.map((f) => (
-              <label key={f.path} className="rounded-lg border border-line bg-elevated/60 px-2.5 py-2 flex flex-col gap-1">
-                <span className="text-[10.5px] text-ink-3 select-none">{f.label}</span>
-                {f.kind === 'die' ? (
-                  <select
-                    value={String(baseValue(f.path) ?? 'd8')}
-                    onChange={(e) => setBaseValue(f.path, e.target.value)}
-                    className="bg-transparent text-[14px] font-mono text-ink-1 outline-none"
-                  >
-                    {DIE_OPTIONS.map((d) => (
-                      <option key={d} value={d} className="bg-elevated">
-                        {d}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type="number"
-                    value={typeof baseValue(f.path) === 'number' ? (baseValue(f.path) as number) : 0}
-                    onChange={(e) => setBaseValue(f.path, Number(e.target.value))}
-                    className="bg-transparent text-[14px] font-mono text-ink-1 outline-none [appearance:textfield]"
-                  />
+        <SheetCanvas
+          layout={layout}
+          editing={editing}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          onMoveBlock={onMoveBlock}
+          onResizeBlock={onResizeBlock}
+          onRemoveBlock={onRemoveBlock}
+          onDropPalette={onDropPalette}
+          renderContent={(b) => <SheetBlockContent block={b} ctx={blockCtx} />}
+          header={
+            editing ? (
+              <div className="flex flex-col gap-2 mb-3">
+                <SheetPalette />
+                {selectedBlock && (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <BlockConfig block={selectedBlock} onChange={(patch) => updateBlock(selectedBlock.id, patch)} />
+                  </div>
                 )}
-              </label>
-            ))}
-          </div>
-          {/* derivados (read-only, clicável p/ audit trail) */}
-          <div className="flex gap-2 mt-2 flex-wrap">
-            {DERIVED_FIELDS.map((path) => (
-              <button
-                key={path}
-                type="button"
-                onClick={() => setAuditPath(auditPath === path ? null : path)}
-                title="Por quê este valor?"
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11.5px] font-mono transition-colors ${
-                  auditPath === path
-                    ? 'border-accent bg-accent-soft text-accent-ink'
-                    : 'border-line bg-elevated/40 text-ink-2 hover:text-ink-1'
-                }`}
-              >
-                {path} = {String(getPath(values, path) ?? '—')}
-                <HelpCircle size={11} className="text-ink-3" />
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* rolagens */}
-        <section>
-          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-ink-3 mb-2 select-none">Rolagens</h2>
-          <div className="flex gap-2 flex-wrap">
-            {Object.keys(osrPack.rollTemplates ?? {}).map((id) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => rollTemplate(id)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-elevated/60 text-[12.5px] text-ink-1 hover:border-accent/50 hover:bg-accent-soft transition-colors"
-              >
-                <Dices size={13} className="text-sheet" />
-                {ROLL_LABELS[id] ?? id}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* efeitos */}
-        <section>
-          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-ink-3 mb-2 select-none">Efeitos</h2>
-          <div className="flex gap-1.5 flex-wrap mb-2">
-            {(osrPack.definitions ?? []).map((def) => (
-              <button
-                key={def.id}
-                type="button"
-                onClick={() => engine()?.applyEffect(def.id, { source: { kind: 'manual' } })}
-                title={def.label}
-                className="flex items-center gap-1 px-2 py-1 rounded-md border border-line text-[11.5px] text-ink-2 hover:text-ink-1 hover:border-sheet/50 transition-colors"
-              >
-                <Plus size={11} /> {def.label}
-              </button>
-            ))}
-          </div>
-          {computed && computed.effects.length === 0 && (
-            <div className="text-[12px] text-ink-3">Nenhum efeito ativo.</div>
-          )}
-          <div className="flex flex-col gap-1">
-            {(computed?.effects ?? []).map((fx) => (
-              <div
-                key={fx.id}
-                className="flex items-center gap-2 rounded-lg border border-line bg-elevated/60 px-3 py-1.5"
-              >
-                <Sparkles size={12} className={fx.enabled ? 'text-sheet' : 'text-ink-3'} />
-                <span className={`text-[12.5px] ${fx.enabled ? 'text-ink-1' : 'text-ink-3 line-through'}`}>
-                  {effectLabel(fx)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => engine()?.setEnabled(fx.id, !fx.enabled)}
-                  className="ml-auto text-[11px] text-ink-3 hover:text-ink-1 transition-colors"
-                >
-                  {fx.enabled ? 'desativar' : 'ativar'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => engine()?.removeEffect(fx.id)}
-                  className="p-1 rounded text-ink-3 hover:text-danger hover:bg-danger-soft transition-colors"
-                >
-                  <Trash2 size={12} />
-                </button>
               </div>
-            ))}
-            {(computed?.suppressed ?? []).map((s) => (
-              <div
-                key={s.instance.id}
-                className="flex items-center gap-2 rounded-lg border border-line/50 px-3 py-1.5 opacity-60"
-              >
-                <Sparkles size={12} className="text-ink-3" />
-                <span className="text-[12px] text-ink-3">
-                  {effectLabel(s.instance)} — suprimido ({s.reason})
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
+            ) : undefined
+          }
+        />
 
         {/* audit trail */}
         {auditPath && (
