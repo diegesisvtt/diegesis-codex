@@ -2,10 +2,11 @@
 // @diegesis/sheet: base editável, pipeline de efeitos (apply/enable/remove),
 // valores computados com audit trail ("por que CA é 14?") e roll templates
 // que alimentam o histórico global ('roller:rolled'). O layout é um grid
-// customizável por drag and drop (modo edição), persistido no JSON da ficha
-// com herança do padrão por sistema (RealmSettings.sheetLayouts).
+// customizável por drag and drop com floating toolbar (modo edição) e
+// modelos nomeados por reino (Personagem, Monstro/NPC, ...): a ficha herda
+// o layout do modelo e pode sobrescrevê-lo individualmente.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Pencil, RotateCcw, Save } from 'lucide-react';
+import { Check, Pencil, RotateCcw } from 'lucide-react';
 import {
   SheetEngine,
   createSheetBus,
@@ -19,18 +20,24 @@ import { toFormula } from '@diegesis/dice-notation';
 import type { DocNode } from '@shared/types';
 import { osrPack, parseSheet, serializeSheet, type SheetDocumentWithLayout } from '@shared/sheet';
 import {
+  builtinSheetTemplates,
   clampBlock,
   defaultSheetLayout,
+  newTemplateId,
   parseSheetLayout,
+  parseSheetTemplate,
+  SHEET_TEMPLATE_PERSONAGEM,
   type SheetBlock,
   type SheetLayout,
+  type SheetTemplate,
 } from '@shared/sheetLayout';
 import { useStore } from '../../../state/store';
 import { usePluginManager } from '../../../plugins/manager';
 import { SheetCanvas } from './SheetCanvas';
 import { SheetBlockContent, ROLL_LABELS, type SheetBlockCtx } from './blocks';
-import { SheetPalette, paletteItem } from './SheetPalette';
+import { FloatingToolbar, toolItem } from './FloatingToolbar';
 import { BlockConfig } from './BlockConfig';
+import { SheetTemplateMenu } from './SheetTemplateMenu';
 
 export function SheetEditor({ doc }: { doc: DocNode }) {
   const { updateDocument, flushDocument, subscribeExternalDocChange, uiState, saveUiState, activeRealmId } = useStore();
@@ -41,16 +48,41 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   const [auditPath, setAuditPath] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [armedTool, setArmedTool] = useState<string | null>(null);
+  const dragGuardRef = useRef(false);
 
-  // layout: override da ficha (null = herda padrão do sistema ou embutido)
-  const realmDefault = useMemo(() => {
+  // ---------- modelos (templates) ----------
+
+  /** modelos do reino (válidos) + embutidos, com os do reino tendo precedência por id */
+  const templates = useMemo(() => {
+    const raw = activeRealmId ? uiState.realmSettings?.[activeRealmId]?.sheetTemplates : undefined;
+    const realm: SheetTemplate[] = [];
+    if (raw) for (const v of Object.values(raw)) {
+      const t = parseSheetTemplate(v);
+      if (t) realm.push(t);
+    }
+    const realmIds = new Set(realm.map((t) => t.id));
+    return [...realm, ...builtinSheetTemplates().filter((t) => !realmIds.has(t.id))];
+  }, [uiState.realmSettings, activeRealmId]);
+
+  /** legado: "padrão por sistema" (sheetLayouts) — último fallback antes do embutido */
+  const legacyDefault = useMemo(() => {
     const raw = activeRealmId ? uiState.realmSettings?.[activeRealmId]?.sheetLayouts?.[osrPack.id] : undefined;
     return parseSheetLayout(raw);
   }, [uiState.realmSettings, activeRealmId]);
+
+  const [templateId, setTemplateId] = useState<string | undefined>(
+    () => (parseSheet(doc.content) as SheetDocumentWithLayout).templateId,
+  );
+  const templateRef = useRef(templateId);
+  templateRef.current = templateId;
+  const activeTemplate = templates.find((t) => t.id === templateId);
+
+  // layout: override da ficha (null = herda modelo / legado / embutido)
   const [layoutOverride, setLayoutOverride] = useState<SheetLayout | null>(
     () => (parseSheet(doc.content) as SheetDocumentWithLayout).layout ?? null,
   );
-  const layout = layoutOverride ?? realmDefault ?? defaultSheetLayout();
+  const layout = layoutOverride ?? activeTemplate?.layout ?? legacyDefault ?? defaultSheetLayout();
   const layoutRef = useRef<SheetLayout | null>(layoutOverride);
   layoutRef.current = layoutOverride;
 
@@ -58,11 +90,13 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   const dirty = useRef(false);
   const scheduleSaveRef = useRef<(() => void) | null>(null);
 
-  // conteúdo serializado = documento do motor + layout (override) da ficha
+  // conteúdo serializado = documento do motor + templateId + layout (override)
   const buildContent = (): string => {
     const e = engineRef.current;
     const base = (e ? e.document : parseSheet(doc.content)) as SheetDocumentWithLayout;
     const next: SheetDocumentWithLayout = { ...base };
+    if (templateRef.current) next.templateId = templateRef.current;
+    else delete next.templateId;
     if (layoutRef.current) next.layout = layoutRef.current;
     else delete next.layout;
     return serializeSheet(next);
@@ -109,6 +143,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
       lastKnownContent = external.content ?? '';
       const parsed = parseSheet(external.content) as SheetDocumentWithLayout;
       setLayoutOverride(parsed.layout ?? null);
+      setTemplateId(parsed.templateId);
       engine.loadDocument(parsed);
       engine.refresh();
     });
@@ -145,15 +180,15 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     e.refresh();
   };
 
-  const rollTemplate = (templateId: string) => {
+  const rollTemplate = (template: string) => {
     const e = engine();
     if (!e) return;
     try {
-      const expr = e.buildRoll(templateId);
+      const expr = e.buildRoll(template);
       const roll = evaluateRoll(expr, { scope: e.compute().scope });
       const formula = toFormula(expr);
       manager.events.emit('roller:rolled', {
-        tableTitle: `${doc.title || 'Ficha'} — ${ROLL_LABELS[templateId] ?? templateId}`,
+        tableTitle: `${doc.title || 'Ficha'} — ${ROLL_LABELS[template] ?? template}`,
         steps: [{ title: doc.title || 'Ficha', formula, roll, text: `Total: ${String(roll.value)}` }],
       });
     } catch (err) {
@@ -165,7 +200,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
 
   const mutateLayout = (fn: (l: SheetLayout) => SheetLayout) => {
     // fork automático: editar uma ficha herdada cria o override próprio dela
-    const next = fn(layoutRef.current ?? realmDefault ?? defaultSheetLayout());
+    const next = fn(layout);
     layoutRef.current = next;
     setLayoutOverride(next);
     scheduleSaveRef.current?.();
@@ -191,12 +226,13 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     mutateLayout((l) => ({ ...l, blocks: l.blocks.filter((b) => b.id !== id) }));
   };
 
-  const onDropPalette = (kind: string, x: number, y: number) => {
-    const item = paletteItem(kind);
+  const onDropTool = (kind: string, x: number, y: number) => {
+    const item = toolItem(kind);
     if (!item) return;
     const block = item.make(x, y);
     mutateLayout((l) => ({ ...l, blocks: [...l.blocks, clampBlock(l, block)] }));
     setSelectedId(block.id);
+    setArmedTool(null);
   };
 
   const updateBlock = (id: string, patch: Record<string, unknown>) => {
@@ -206,24 +242,50 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     }));
   };
 
-  /** grava o layout atual como padrão do sistema (realm) — novas fichas herdam */
-  const saveAsSystemDefault = () => {
+  // ---------- modelos: aplicar / salvar / renomear / excluir ----------
+
+  const rawRealmTemplates = (activeRealmId ? uiState.realmSettings?.[activeRealmId]?.sheetTemplates : undefined) ?? {};
+
+  const writeRealmTemplates = (map: Record<string, SheetTemplate>) => {
     if (!activeRealmId) return;
     const realmSettings = {
       ...(uiState.realmSettings ?? {}),
-      [activeRealmId]: {
-        ...(uiState.realmSettings?.[activeRealmId] ?? {}),
-        sheetLayouts: {
-          ...(uiState.realmSettings?.[activeRealmId]?.sheetLayouts ?? {}),
-          [osrPack.id]: layout,
-        },
-      },
+      [activeRealmId]: { ...(uiState.realmSettings?.[activeRealmId] ?? {}), sheetTemplates: map },
     };
     saveUiState({ realmSettings });
   };
 
-  /** remove o override da ficha — volta a herdar o padrão do sistema/embutido */
-  const resetToDefault = () => {
+  /** aplica um modelo: a ficha passa a herdá-lo (override próprio é descartado) */
+  const applyTemplate = (id: string) => {
+    templateRef.current = id;
+    setTemplateId(id);
+    layoutRef.current = null;
+    setLayoutOverride(null);
+    setSelectedId(null);
+    scheduleSaveRef.current?.();
+  };
+
+  const saveAsTemplate = (name: string) => {
+    const id = newTemplateId();
+    writeRealmTemplates({ ...rawRealmTemplates, [id]: { id, name, layout } });
+    applyTemplate(id);
+  };
+
+  const renameTemplate = (id: string, name: string) => {
+    const existing = rawRealmTemplates[id];
+    if (!existing) return;
+    writeRealmTemplates({ ...rawRealmTemplates, [id]: { ...existing, name } });
+  };
+
+  const deleteTemplate = (id: string) => {
+    const map = { ...rawRealmTemplates };
+    delete map[id];
+    writeRealmTemplates(map);
+    if (templateRef.current === id) applyTemplate(SHEET_TEMPLATE_PERSONAGEM);
+  };
+
+  /** remove o override da ficha — volta a herdar o modelo */
+  const resetToTemplate = () => {
     layoutRef.current = null;
     setLayoutOverride(null);
     setSelectedId(null);
@@ -254,106 +316,108 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
 
   const selectedBlock = selectedId ? layout.blocks.find((b) => b.id === selectedId) : undefined;
 
-  return (
-    <div className="h-full overflow-y-auto custom-scrollbar bg-app" onClick={() => setSelectedId(null)}>
-      <div className="max-w-[860px] mx-auto px-6 py-5 flex flex-col gap-3">
-        {/* toolbar */}
-        <div className="flex items-center gap-2">
+  const topbar = (
+    <div className="flex items-center gap-2">
+      <SheetTemplateMenu
+        templates={templates}
+        activeId={templateId}
+        onApply={applyTemplate}
+        onSaveAs={saveAsTemplate}
+        onRename={renameTemplate}
+        onDelete={deleteTemplate}
+      />
+      <span className="ml-auto flex items-center gap-2">
+        {editing && (
+          <span className="text-[11px] text-ink-3 select-none">
+            {layoutOverride ? 'layout próprio desta ficha' : 'herdando o modelo'}
+          </span>
+        )}
+        {editing && layoutOverride && (
           <button
             type="button"
-            onClick={() => {
-              setEditing(!editing);
-              setSelectedId(null);
-            }}
-            title={editing ? 'Concluir edição do layout' : 'Customizar layout'}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] transition-colors ${
-              editing
-                ? 'border-accent bg-accent-soft text-accent-ink'
-                : 'border-line bg-elevated/60 text-ink-2 hover:text-ink-1 hover:border-accent/40'
-            }`}
+            onClick={resetToTemplate}
+            title="Descartar o layout próprio e voltar a herdar o modelo"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-line bg-elevated/60 text-[12px] text-ink-2 hover:text-ink-1 hover:border-sheet/40 transition-colors"
           >
-            {editing ? <Check size={13} /> : <Pencil size={13} />}
-            {editing ? 'Concluir' : 'Customizar'}
+            <RotateCcw size={13} />
+            Herdar modelo
           </button>
-          {editing && (
-            <>
-              <button
-                type="button"
-                onClick={saveAsSystemDefault}
-                title="Usar este layout como padrão de todas as fichas do sistema"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-line bg-elevated/60 text-[12px] text-ink-2 hover:text-ink-1 hover:border-accent/40 transition-colors"
-              >
-                <Save size={13} />
-                Salvar como padrão do sistema
-              </button>
-              {layoutOverride && (
-                <button
-                  type="button"
-                  onClick={resetToDefault}
-                  title="Remover layout próprio e voltar a herdar o padrão"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-line bg-elevated/60 text-[12px] text-ink-2 hover:text-ink-1 hover:border-accent/40 transition-colors"
-                >
-                  <RotateCcw size={13} />
-                  Restaurar padrão
-                </button>
-              )}
-              <span className="ml-auto text-[11px] text-ink-3 select-none">
-                {layoutOverride ? 'layout próprio desta ficha' : 'herdando padrão do sistema'}
-              </span>
-            </>
-          )}
-        </div>
-
-        <SheetCanvas
-          layout={layout}
-          editing={editing}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          onMoveBlock={onMoveBlock}
-          onResizeBlock={onResizeBlock}
-          onRemoveBlock={onRemoveBlock}
-          onDropPalette={onDropPalette}
-          renderContent={(b) => <SheetBlockContent block={b} ctx={blockCtx} />}
-          header={
-            editing ? (
-              <div className="flex flex-col gap-2 mb-3">
-                <SheetPalette />
-                {selectedBlock && (
-                  <div onClick={(e) => e.stopPropagation()}>
-                    <BlockConfig block={selectedBlock} onChange={(patch) => updateBlock(selectedBlock.id, patch)} />
-                  </div>
-                )}
-              </div>
-            ) : undefined
-          }
-        />
-
-        {/* audit trail */}
-        {auditPath && (
-          <section>
-            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-ink-3 mb-2 select-none">
-              Por que {auditPath} é {String(getPath(values, auditPath) ?? '—')}?
-            </h2>
-            {auditFor.length === 0 ? (
-              <div className="text-[12px] text-ink-3">Valor direto da base, sem efeitos.</div>
-            ) : (
-              <div className="flex flex-col gap-1">
-                {auditFor.map((a, i) => (
-                  <div
-                    key={i}
-                    className="flex items-baseline gap-2 rounded-lg border border-line bg-elevated/60 px-3 py-1.5 text-[12px]"
-                  >
-                    <span className="text-ink-3 font-mono text-[10.5px] uppercase">{a.pass}</span>
-                    <span className="text-ink-1">{a.effectId === 'system' ? 'sistema' : a.effectId}</span>
-                    {a.op && <span className="text-ink-3 font-mono">{a.op}</span>}
-                    <span className="ml-auto font-mono text-ink-2">→ {JSON.stringify(a.result)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
         )}
-      </div>
+        <button
+          type="button"
+          onClick={() => {
+            setEditing(!editing);
+            setSelectedId(null);
+            setArmedTool(null);
+          }}
+          title={editing ? 'Concluir edição do layout' : 'Customizar layout'}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] transition-colors ${
+            editing
+              ? 'border-sheet/60 bg-sheet-soft text-sheet-strong'
+              : 'border-line bg-elevated/60 text-ink-2 hover:text-ink-1 hover:border-sheet/40'
+          }`}
+        >
+          {editing ? <Check size={13} /> : <Pencil size={13} />}
+          {editing ? 'Concluir' : 'Customizar'}
+        </button>
+      </span>
     </div>
+  );
+
+  const footer = auditPath ? (
+    <section>
+      <h2 className="font-display text-[12px] font-semibold uppercase tracking-[0.22em] text-sheet/90 mb-2 select-none">
+        Por que {auditPath} é {String(getPath(values, auditPath) ?? '—')}?
+      </h2>
+      {auditFor.length === 0 ? (
+        <div className="text-[12px] text-ink-3">Valor direto da base, sem efeitos.</div>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {auditFor.map((a, i) => (
+            <div
+              key={i}
+              className="flex items-baseline gap-2 rounded-lg border border-line bg-elevated/60 px-3 py-1.5 text-[12px]"
+            >
+              <span className="text-ink-3 font-mono text-[10.5px] uppercase">{a.pass}</span>
+              <span className="text-ink-1">{a.effectId === 'system' ? 'sistema' : a.effectId}</span>
+              {a.op && <span className="text-ink-3 font-mono">{a.op}</span>}
+              <span className="ml-auto font-mono text-ink-2">→ {JSON.stringify(a.result)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  ) : undefined;
+
+  const floating = editing ? (
+    <>
+      <FloatingToolbar armedTool={armedTool} onArm={setArmedTool} dragGuardRef={dragGuardRef} />
+      {selectedBlock && (
+        <div className="absolute top-3 right-3 z-40" onClick={(e) => e.stopPropagation()}>
+          <BlockConfig block={selectedBlock} onChange={(patch) => updateBlock(selectedBlock.id, patch)} />
+        </div>
+      )}
+    </>
+  ) : undefined;
+
+  return (
+    <SheetCanvas
+      layout={layout}
+      editing={editing}
+      selectedId={selectedId}
+      armedTool={armedTool}
+      onSelect={setSelectedId}
+      onMoveBlock={onMoveBlock}
+      onResizeBlock={onResizeBlock}
+      onRemoveBlock={onRemoveBlock}
+      onDropTool={onDropTool}
+      onToolDragEnd={() => {
+        dragGuardRef.current = true;
+      }}
+      renderContent={(b) => <SheetBlockContent block={b} ctx={blockCtx} />}
+      topbar={topbar}
+      footer={footer}
+      floating={floating}
+    />
   );
 }

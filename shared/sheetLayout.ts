@@ -122,3 +122,71 @@ export function clampBlock(layout: SheetLayout, b: SheetBlock): SheetBlock {
   const x = Math.min(Math.max(0, b.x), cols - w);
   return { ...b, x, w, y: Math.max(0, b.y), h: Math.max(1, b.h) };
 }
+
+// ---------- modelos de ficha ----------
+
+/**
+ * Modelo nomeado de ficha. Um mesmo jogo/mundo pode ter vários tipos de ficha
+ * (Personagem, Monstro, NPC, Facção...). Fichas referenciam um modelo por
+ * `templateId` e podem sobrescrever o layout individualmente.
+ */
+export interface SheetTemplate {
+  id: string;
+  name: string;
+  layout: SheetLayout;
+  /** true para modelos embutidos (não podem ser renomeados/excluídos) */
+  builtin?: boolean;
+}
+
+/** valida modelo vindo do realm settings (entrada hostil); null se inválido */
+export function parseSheetTemplate(raw: unknown): SheetTemplate | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== 'string' || typeof r.name !== 'string' || !r.name) return null;
+  const layout = parseSheetLayout(r.layout);
+  if (!layout) return null;
+  return { id: r.id, name: r.name, layout };
+}
+
+/** layout compacto para criaturas e NPCs: stats em duas linhas + notas */
+export function monsterSheetLayout(): SheetLayout {
+  const g = SHEET_GRID;
+  const field = (path: string, label: string, input: BlockInput, x: number, y: number, w = 3): SheetBlock => ({
+    id: newBlockId(), type: 'field', path, label, input, x, y, w, h: 2,
+  });
+  return {
+    version: 1,
+    grid: g,
+    blocks: [
+      { id: newBlockId(), type: 'title', x: 0, y: 0, w: 12, h: 2 },
+      field('dv', 'DV', 'number', 0, 2),
+      field('dadoVida', 'Dado de Vida', 'die', 3, 2),
+      field('pv.atual', 'PV', 'number', 6, 2),
+      field('pv.max', 'PV Máx', 'number', 9, 2),
+      field('ca', 'CA', 'number', 0, 4),
+      field('atq', 'Atq', 'number', 3, 4),
+      field('moral', 'Moral', 'number', 6, 4),
+      field('save', 'Save', 'number', 9, 4),
+      { id: newBlockId(), type: 'rolls', templates: ['ataque', 'dano', 'moral', 'save'], x: 0, y: 6, w: 12, h: 2 },
+      { id: newBlockId(), type: 'section', title: 'Notas', x: 0, y: 8, w: 12, h: 1 },
+      { id: newBlockId(), type: 'identity', key: 'notas', label: 'Notas', multiline: true, x: 0, y: 9, w: 12, h: 3 },
+      { id: newBlockId(), type: 'section', title: 'Efeitos', x: 0, y: 12, w: 12, h: 1 },
+      { id: newBlockId(), type: 'effects', x: 0, y: 13, w: 12, h: 3 },
+    ],
+  };
+}
+
+export const SHEET_TEMPLATE_PERSONAGEM = 'personagem';
+export const SHEET_TEMPLATE_MONSTRO = 'monstro';
+
+/** modelos embutidos — novas fichas começam de um deles */
+export function builtinSheetTemplates(): SheetTemplate[] {
+  return [
+    { id: SHEET_TEMPLATE_PERSONAGEM, name: 'Personagem', layout: defaultSheetLayout(), builtin: true },
+    { id: SHEET_TEMPLATE_MONSTRO, name: 'Monstro / NPC', layout: monsterSheetLayout(), builtin: true },
+  ];
+}
+
+export function newTemplateId(): string {
+  return `tpl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}

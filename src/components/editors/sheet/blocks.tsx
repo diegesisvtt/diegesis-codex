@@ -1,5 +1,6 @@
 // Renderers do conteúdo de cada tipo de bloco da ficha (modo jogo e edição).
-// Extrai o JSX original do SheetEditor estático para componentes por bloco.
+// Visual premium dark-fantasy: título hero com ornamentos, stat cards com
+// numerais display, seções com filetes, chips de rolagem dourados.
 import { Dices, HelpCircle, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { getPath, type ComputedSheet, type EffectInstance } from '@diegesis/sheet';
 import type { SheetBlock } from '@shared/sheetLayout';
@@ -52,18 +53,31 @@ export function SheetBlockContent({ block, ctx }: { block: SheetBlock; ctx: Shee
   }
 }
 
-function TitleBlock({ ctx }: { ctx: SheetBlockCtx }) {
+/** filete ornamental com losango central — motivo visual recorrente da ficha */
+function Ornament({ className = '' }: { className?: string }) {
   return (
-    <div className="h-full flex flex-col justify-center">
+    <div className={`flex items-center gap-2 ${className}`} aria-hidden>
+      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-sheet/35 to-sheet/60" />
+      <div className="w-1.5 h-1.5 rotate-45 border border-sheet/70 bg-sheet/20" />
+      <div className="h-px flex-1 bg-gradient-to-l from-transparent via-sheet/35 to-sheet/60" />
+    </div>
+  );
+}
+
+function TitleBlock({ ctx }: { ctx: SheetBlockCtx }) {
+  const tipo = ctx.identityValue('tipo');
+  return (
+    <div className="h-full flex flex-col justify-center gap-1 select-text">
+      <Ornament />
       <input
         value={ctx.nome}
         onChange={(e) => ctx.setIdentity('nome', e.target.value)}
         placeholder="Nome do personagem"
         spellCheck={false}
-        className="w-full bg-transparent text-[22px] font-semibold text-ink-1 outline-none placeholder:text-ink-3"
+        className="w-full bg-transparent text-center font-display text-[30px] leading-tight font-semibold tracking-[0.06em] text-sheet-strong outline-none placeholder:text-ink-3/60 placeholder:font-display drop-shadow-[0_2px_10px_rgba(201,168,106,0.15)]"
       />
-      <div className="text-[11px] text-ink-3 mt-0.5 select-none">
-        {osrPack.id}@{osrPack.version}
+      <div className="text-center text-[10.5px] uppercase tracking-[0.28em] text-ink-3 select-none">
+        {tipo || `${osrPack.id}@${osrPack.version}`}
       </div>
     </div>
   );
@@ -72,35 +86,48 @@ function TitleBlock({ ctx }: { ctx: SheetBlockCtx }) {
 function SectionBlock({ block, ctx }: { block: SheetBlock & { type: 'section' }; ctx: SheetBlockCtx }) {
   if (ctx.editing) {
     return (
-      <input
-        value={block.title}
-        onChange={(e) => ctx.updateBlock(block.id, { title: e.target.value })}
-        placeholder="Título da seção"
-        spellCheck={false}
-        className="w-full h-full bg-transparent text-[11px] font-semibold uppercase tracking-wide text-ink-3 outline-none placeholder:text-ink-3/60"
-      />
+      <div className="h-full flex items-center gap-3">
+        <div className="h-px flex-1 bg-line" />
+        <input
+          value={block.title}
+          onChange={(e) => ctx.updateBlock(block.id, { title: e.target.value })}
+          placeholder="Título da seção"
+          spellCheck={false}
+          className="bg-transparent text-center font-display text-[12px] font-semibold uppercase tracking-[0.22em] text-ink-2 outline-none placeholder:text-ink-3/50"
+        />
+        <div className="h-px flex-1 bg-line" />
+      </div>
     );
   }
   return (
-    <div className="h-full flex items-end">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide text-ink-3 select-none">{block.title}</h2>
+    <div className="h-full flex items-center gap-3 select-none">
+      <div className="h-px flex-1 bg-gradient-to-r from-transparent to-sheet/30" />
+      <h2 className="font-display text-[12px] font-semibold uppercase tracking-[0.22em] text-sheet/90">{block.title}</h2>
+      <div className="h-px flex-1 bg-gradient-to-l from-transparent to-sheet/30" />
     </div>
   );
 }
 
+const CARD =
+  'h-full w-full rounded-xl border border-line bg-gradient-to-b from-elevated/90 to-app/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_2px_10px_rgba(0,0,0,0.35)] transition-colors';
+
 function FieldBlock({ block, ctx }: { block: SheetBlock & { type: 'field' }; ctx: SheetBlockCtx }) {
   const value = ctx.computed ? getPath(ctx.computed.values, block.path) : undefined;
   return (
-    <label className="h-full rounded-lg border border-line bg-elevated/60 px-2.5 py-2 flex flex-col gap-1 overflow-hidden">
-      <span className="text-[10.5px] text-ink-3 select-none truncate">{block.label}</span>
+    <label
+      className={`${CARD} px-2 py-1.5 flex flex-col items-center justify-center gap-0.5 overflow-hidden cursor-text hover:border-sheet/35`}
+    >
+      <span className="text-[9.5px] uppercase tracking-[0.16em] text-ink-3 select-none truncate max-w-full">
+        {block.label}
+      </span>
       {block.input === 'die' ? (
         <select
           value={String(value ?? 'd8')}
           onChange={(e) => ctx.setBaseValue(block.path, e.target.value)}
-          className="bg-transparent text-[14px] font-mono text-ink-1 outline-none"
+          className="bg-transparent text-center font-display text-[19px] font-semibold text-ink-1 outline-none cursor-pointer"
         >
           {DIE_OPTIONS.map((d) => (
-            <option key={d} value={d} className="bg-elevated">
+            <option key={d} value={d} className="bg-elevated text-[13px]">
               {d}
             </option>
           ))}
@@ -110,21 +137,21 @@ function FieldBlock({ block, ctx }: { block: SheetBlock & { type: 'field' }; ctx
           type="checkbox"
           checked={Boolean(value)}
           onChange={(e) => ctx.setBaseValue(block.path, e.target.checked)}
-          className="w-4 h-4 accent-[var(--color-sheet)]"
+          className="w-4 h-4 accent-[var(--color-sheet)] cursor-pointer"
         />
       ) : block.input === 'text' ? (
         <input
           value={typeof value === 'string' ? value : ''}
           onChange={(e) => ctx.setBaseValue(block.path, e.target.value)}
           spellCheck={false}
-          className="bg-transparent text-[13px] text-ink-1 outline-none"
+          className="w-full bg-transparent text-center text-[13.5px] text-ink-1 outline-none"
         />
       ) : (
         <input
           type="number"
           value={typeof value === 'number' ? value : 0}
           onChange={(e) => ctx.setBaseValue(block.path, Number(e.target.value))}
-          className="bg-transparent text-[14px] font-mono text-ink-1 outline-none [appearance:textfield]"
+          className="w-full bg-transparent text-center font-display text-[21px] font-semibold text-ink-1 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         />
       )}
     </label>
@@ -139,15 +166,15 @@ function DerivedBlock({ block, ctx }: { block: SheetBlock & { type: 'derived' };
       type="button"
       onClick={() => ctx.setAuditPath(active ? null : block.path)}
       title="Por quê este valor?"
-      className={`h-full w-full rounded-lg border px-2.5 py-2 flex flex-col gap-1 items-start overflow-hidden transition-colors ${
-        active ? 'border-accent bg-accent-soft' : 'border-line bg-elevated/40 hover:border-accent/40'
+      className={`${CARD} px-2 py-1.5 flex flex-col items-center justify-center gap-0.5 overflow-hidden ${
+        active ? 'border-sheet/60 bg-sheet-soft' : 'hover:border-sheet/35'
       }`}
     >
-      <span className="text-[10.5px] text-ink-3 select-none flex items-center gap-1 truncate">
+      <span className="text-[9.5px] uppercase tracking-[0.16em] text-ink-3 select-none flex items-center gap-1 truncate max-w-full">
         {block.label}
-        <HelpCircle size={10} />
+        <HelpCircle size={9} className="shrink-0 opacity-70" />
       </span>
-      <span className={`text-[14px] font-mono ${active ? 'text-accent-ink' : 'text-ink-1'}`}>{String(value ?? '—')}</span>
+      <span className={`font-mono text-[15px] ${active ? 'text-sheet-strong' : 'text-ink-2'}`}>{String(value ?? '—')}</span>
     </button>
   );
 }
@@ -155,14 +182,14 @@ function DerivedBlock({ block, ctx }: { block: SheetBlock & { type: 'derived' };
 function IdentityBlock({ block, ctx }: { block: SheetBlock & { type: 'identity' }; ctx: SheetBlockCtx }) {
   const current = ctx.identityValue(block.key);
   return (
-    <label className="h-full rounded-lg border border-line bg-elevated/60 px-2.5 py-2 flex flex-col gap-1 overflow-hidden">
-      <span className="text-[10.5px] text-ink-3 select-none truncate">{block.label}</span>
+    <label className={`${CARD} px-3 py-2 flex flex-col gap-1 overflow-hidden hover:border-sheet/35`}>
+      <span className="text-[9.5px] uppercase tracking-[0.16em] text-ink-3 select-none truncate">{block.label}</span>
       {block.multiline ? (
         <textarea
           value={current}
           onChange={(e) => ctx.setIdentity(block.key, e.target.value)}
           spellCheck={false}
-          className="flex-1 bg-transparent text-[12.5px] text-ink-1 outline-none resize-none custom-scrollbar"
+          className="flex-1 bg-transparent text-[12.5px] leading-relaxed text-ink-1 outline-none resize-none custom-scrollbar"
         />
       ) : (
         <input
@@ -179,13 +206,13 @@ function IdentityBlock({ block, ctx }: { block: SheetBlock & { type: 'identity' 
 function RollsBlock({ block, ctx }: { block: SheetBlock & { type: 'rolls' }; ctx: SheetBlockCtx }) {
   const templates = block.templates.length > 0 ? block.templates : Object.keys(osrPack.rollTemplates ?? {});
   return (
-    <div className="h-full flex gap-2 flex-wrap content-start overflow-y-auto custom-scrollbar">
+    <div className="h-full flex gap-2 flex-wrap content-start overflow-y-auto custom-scrollbar py-0.5">
       {templates.map((id) => (
         <button
           key={id}
           type="button"
           onClick={() => ctx.rollTemplate(id)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-elevated/60 text-[12.5px] text-ink-1 hover:border-accent/50 hover:bg-accent-soft transition-colors"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-line bg-elevated/70 text-[12px] font-medium text-ink-1 hover:border-sheet/60 hover:text-sheet-strong hover:shadow-[0_0_14px_rgba(201,168,106,0.22)] active:scale-[0.97] transition-all"
         >
           <Dices size={13} className="text-sheet" />
           {ROLL_LABELS[id] ?? id}
@@ -198,7 +225,7 @@ function RollsBlock({ block, ctx }: { block: SheetBlock & { type: 'rolls' }; ctx
 function EffectsBlock({ ctx }: { ctx: SheetBlockCtx }) {
   const computed = ctx.computed;
   return (
-    <div className="h-full overflow-y-auto custom-scrollbar flex flex-col gap-1.5">
+    <div className="h-full overflow-y-auto custom-scrollbar flex flex-col gap-1.5 py-0.5">
       <div className="flex gap-1.5 flex-wrap">
         {(osrPack.definitions ?? []).map((def) => (
           <button
@@ -206,17 +233,22 @@ function EffectsBlock({ ctx }: { ctx: SheetBlockCtx }) {
             type="button"
             onClick={() => ctx.applyEffect(def.id)}
             title={def.label}
-            className="flex items-center gap-1 px-2 py-1 rounded-md border border-line text-[11.5px] text-ink-2 hover:text-ink-1 hover:border-sheet/50 transition-colors"
+            className="flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-line text-[11px] text-ink-3 hover:text-sheet-strong hover:border-sheet/50 transition-colors"
           >
-            <Plus size={11} /> {def.label}
+            <Plus size={10} /> {def.label}
           </button>
         ))}
       </div>
       {computed && computed.effects.length === 0 && <div className="text-[12px] text-ink-3">Nenhum efeito ativo.</div>}
       {(computed?.effects ?? []).map((fx) => (
-        <div key={fx.id} className="flex items-center gap-2 rounded-lg border border-line bg-elevated/60 px-3 py-1.5">
+        <div
+          key={fx.id}
+          className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 ${
+            fx.enabled ? 'border-sheet/30 bg-sheet-soft' : 'border-line bg-elevated/50'
+          }`}
+        >
           <Sparkles size={12} className={fx.enabled ? 'text-sheet' : 'text-ink-3'} />
-          <span className={`text-[12.5px] ${fx.enabled ? 'text-ink-1' : 'text-ink-3 line-through'}`}>
+          <span className={`text-[12.5px] ${fx.enabled ? 'text-sheet-strong' : 'text-ink-3 line-through'}`}>
             {ctx.effectLabel(fx)}
           </span>
           <button
@@ -255,12 +287,12 @@ function TextBlock({ block, ctx }: { block: SheetBlock & { type: 'text' }; ctx: 
         onChange={(e) => ctx.updateBlock(block.id, { text: e.target.value })}
         placeholder="Anotação..."
         spellCheck={false}
-        className="h-full w-full rounded-lg border border-line bg-elevated/40 px-2.5 py-2 text-[12.5px] text-ink-1 outline-none resize-none custom-scrollbar placeholder:text-ink-3"
+        className={`${CARD} px-3 py-2 text-[12.5px] leading-relaxed text-ink-1 outline-none resize-none custom-scrollbar placeholder:text-ink-3`}
       />
     );
   }
   return (
-    <div className="h-full rounded-lg border border-line bg-elevated/40 px-2.5 py-2 text-[12.5px] text-ink-2 whitespace-pre-wrap overflow-y-auto custom-scrollbar">
+    <div className={`${CARD} px-3 py-2 text-[12.5px] leading-relaxed text-ink-2 whitespace-pre-wrap overflow-y-auto custom-scrollbar`}>
       {block.text}
     </div>
   );

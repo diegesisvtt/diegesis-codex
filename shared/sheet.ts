@@ -10,10 +10,10 @@ import {
   type CharacterDocument,
 } from '@diegesis/sheet';
 import { fromFormula } from '@diegesis/dice-notation';
-import { parseSheetLayout, type SheetLayout } from './sheetLayout';
+import { parseSheetLayout, SHEET_TEMPLATE_MONSTRO, SHEET_TEMPLATE_PERSONAGEM, type SheetLayout } from './sheetLayout';
 
-/** documento com layout opcional (campo extra tolerado pelo SheetEngine) */
-export type SheetDocumentWithLayout = CharacterDocument & { layout?: SheetLayout };
+/** documento com layout/template opcionais (campos extras tolerados pelo SheetEngine) */
+export type SheetDocumentWithLayout = CharacterDocument & { layout?: SheetLayout; templateId?: string };
 
 export const SHEET_DOC_KIND = 'diegesis-sheet';
 export const SHEET_DOC_TYPE = 'diegesis/sheet';
@@ -79,7 +79,7 @@ export const osrPack = defineSystemPack({
 
 /** documento novo e vazio para o pack padrão */
 export function createDefaultSheet(): CharacterDocument {
-  return createSheetDocument(osrPack, {
+  const doc = createSheetDocument(osrPack, {
     identity: { nome: '' },
     base: {
       dv: 1,
@@ -92,6 +92,8 @@ export function createDefaultSheet(): CharacterDocument {
       save: 15,
     },
   });
+  (doc as SheetDocumentWithLayout).templateId = SHEET_TEMPLATE_PERSONAGEM;
+  return doc;
 }
 
 export function serializeSheet(doc: CharacterDocument): string {
@@ -122,6 +124,7 @@ export function parseSheet(content: string | null | undefined): CharacterDocumen
     };
     const layout = parseSheetLayout(raw.layout);
     if (layout) doc.layout = layout;
+    if (typeof raw.templateId === 'string' && raw.templateId) doc.templateId = raw.templateId;
     return doc;
   } catch {
     return createDefaultSheet();
@@ -181,7 +184,7 @@ export function statblockToSheet(parsed: {
   tag: 'monster' | 'npc';
   fields: { key: string; value: string }[];
   notes: string;
-}): CharacterDocument {
+}): SheetDocumentWithLayout {
   const base: Record<string, unknown> = { ...createDefaultSheet().base };
   const campos: Record<string, string> = {};
   for (const f of parsed.fields) {
@@ -196,6 +199,7 @@ export function statblockToSheet(parsed: {
   if (dieMatch) base.dadoVida = `d${dieMatch[1]}`;
   return {
     ...createSheetDocument(osrPack),
+    templateId: SHEET_TEMPLATE_MONSTRO,
     identity: {
       nome: parsed.title,
       tipo: parsed.tag,

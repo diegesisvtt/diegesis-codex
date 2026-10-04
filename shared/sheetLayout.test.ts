@@ -1,4 +1,13 @@
-import { defaultSheetLayout, parseSheetLayout, layoutRows, clampBlock, SHEET_GRID } from './sheetLayout';
+import {
+  builtinSheetTemplates,
+  defaultSheetLayout,
+  monsterSheetLayout,
+  parseSheetLayout,
+  parseSheetTemplate,
+  layoutRows,
+  clampBlock,
+  SHEET_GRID,
+} from './sheetLayout';
 
 const def = defaultSheetLayout();
 console.assert(parseSheetLayout(JSON.parse(JSON.stringify(def))) !== null, 'default layout deve fazer round-trip');
@@ -15,4 +24,11 @@ console.assert(
 console.assert(layoutRows(def) >= 17, 'layout padrao cobre efeitos');
 const clamped = clampBlock(def, { id: 'x', type: 'text', text: '', x: 10, y: 0, w: 8, h: 1 });
 console.assert(clamped.x + clamped.w <= SHEET_GRID.cols, 'clamp dentro das colunas');
+
+// modelos
+const builtins = builtinSheetTemplates();
+console.assert(builtins.length === 2 && builtins.every((t) => parseSheetTemplate(JSON.parse(JSON.stringify(t))) !== null), 'builtins fazem round-trip');
+console.assert(parseSheetTemplate({ id: 'x', name: '', layout: def }) === null, 'nome vazio -> null');
+console.assert(parseSheetTemplate({ id: 'x', name: 'X', layout: { version: 2 } }) === null, 'layout invalido -> null');
+console.assert(parseSheetLayout(JSON.parse(JSON.stringify(monsterSheetLayout()))) !== null, 'monstro faz round-trip');
 console.log('sheetLayout.test: OK');

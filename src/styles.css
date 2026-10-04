@@ -2,6 +2,9 @@
 @import "flexlayout-react/style/dark.css";
 @import "@blocknote/core/fonts/inter.css";
 @import "@blocknote/ariakit/style.css";
+@import "@fontsource/cinzel/400.css";
+@import "@fontsource/cinzel/600.css";
+@import "@fontsource/cinzel/700.css";
 
 /* ============================================================
    DIEGESIS CODEX — Design tokens (Notion-inspired dark)
@@ -24,6 +27,8 @@
   --color-accent-ink: #529cca;
   --color-danger: #eb5757;
   --color-danger-soft: rgba(235, 87, 87, 0.14);
+  --color-success: #4dab6a;
+  --color-success-soft: rgba(77, 171, 106, 0.14);
   --color-note: #529cca;
   --color-board: #4dab9a;
   --color-pdf: #d96a5f;
@@ -31,11 +36,25 @@
   --color-timeline: #b48ad9;
   --color-table: #d987b5;
   --color-sheet: #a3be8c;
+  --color-sheet-soft: rgba(163, 190, 140, 0.14);
+  --color-sheet-strong: #c2d8af;
 
   --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica,
     "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
   --font-serif: Lyon-Text, Georgia, ui-serif, serif;
   --font-mono: iawriter-mono, Nitti, Menlo, Courier, monospace;
+  --font-display: "Cinzel", "Times New Roman", ui-serif, serif;
+}
+
+/* ============================================================
+   SHEET THEME — dark fantasy premium (ouro envelhecido)
+   Escopada ao editor de ficha: sobrescreve os tokens --color-sheet*
+   apenas dentro da árvore .sheet-theme.
+   ============================================================ */
+.sheet-theme {
+  --color-sheet: #c9a86a;
+  --color-sheet-soft: rgba(201, 168, 106, 0.12);
+  --color-sheet-strong: #e6cfa0;
 }
 
 :root {
@@ -641,5 +660,288 @@ textarea {
   }
   to {
     opacity: 1;
+  }
+}
+
+/* ============================================================
+   Boot / loading screen — premium, progress driven by real work
+   ============================================================ */
+.boot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--color-app);
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 340ms ease, transform 340ms cubic-bezier(0.22, 0.9, 0.3, 1);
+  will-change: opacity, transform;
+}
+.boot-overlay--exit {
+  opacity: 0;
+  transform: scale(1.02);
+  pointer-events: none;
+}
+
+.boot-screen {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* layered atmosphere — aurora glows + faint dot grid, echoing the timeline */
+.boot-atmosphere {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.boot-glow {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(90px);
+  opacity: 0.5;
+  animation: boot-drift 14s ease-in-out infinite alternate;
+}
+.boot-glow--a {
+  width: 620px;
+  height: 620px;
+  top: -220px;
+  right: -140px;
+  background: radial-gradient(circle, rgba(35, 131, 226, 0.32), transparent 66%);
+}
+.boot-glow--b {
+  width: 520px;
+  height: 520px;
+  bottom: -200px;
+  left: -120px;
+  background: radial-gradient(circle, rgba(180, 138, 217, 0.22), transparent 66%);
+  animation-delay: -5s;
+}
+.boot-glow--c {
+  width: 420px;
+  height: 420px;
+  top: 40%;
+  left: 55%;
+  background: radial-gradient(circle, rgba(217, 164, 95, 0.12), transparent 68%);
+  animation-delay: -9s;
+}
+.boot-grid {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse at 50% 45%, black 12%, transparent 72%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 45%, black 12%, transparent 72%);
+}
+@keyframes boot-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-40px, 30px, 0) scale(1.08);
+  }
+}
+
+.boot-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(360px, 82vw);
+  animation: boot-in 520ms cubic-bezier(0.22, 0.9, 0.3, 1) both;
+}
+@keyframes boot-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* emblem: rotating rings + pulsing crystal */
+.boot-emblem {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 26px;
+}
+.boot-emblem-core {
+  width: 64px;
+  height: 64px;
+  filter: drop-shadow(0 0 14px rgba(35, 131, 226, 0.4));
+}
+.boot-emblem-ring {
+  position: absolute;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.boot-emblem-ring--outer {
+  inset: 0;
+  border-top-color: rgba(82, 156, 202, 0.7);
+  border-right-color: rgba(35, 131, 226, 0.25);
+  animation: boot-spin 4.6s linear infinite;
+}
+.boot-emblem-ring--inner {
+  inset: 12px;
+  border-bottom-color: rgba(180, 138, 217, 0.6);
+  border-left-color: rgba(180, 138, 217, 0.2);
+  animation: boot-spin 3.2s linear infinite reverse;
+}
+.boot-emblem-orbit {
+  position: absolute;
+  inset: 0;
+  animation: boot-spin 3.6s linear infinite;
+}
+.boot-emblem-orbit::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 999px;
+  background: #529cca;
+  box-shadow: 0 0 10px 2px rgba(82, 156, 202, 0.8);
+}
+.boot-pulse {
+  transform-origin: 32px 33px;
+  animation: boot-pulse 1.9s ease-in-out infinite;
+}
+@keyframes boot-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes boot-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.86);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+
+.boot-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-ink-1);
+}
+.boot-title span {
+  background: linear-gradient(120deg, #529cca, #b48ad9);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.boot-tagline {
+  margin: 6px 0 30px;
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+}
+
+/* progress track */
+.boot-progress {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+.boot-bar {
+  position: relative;
+  height: 100%;
+  min-width: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2383e2, #529cca 60%, #b48ad9);
+  transition: width 420ms cubic-bezier(0.22, 0.9, 0.3, 1);
+  overflow: hidden;
+}
+.boot-bar-sheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: translateX(-100%);
+  animation: boot-sheen 1.6s ease-in-out infinite;
+}
+@keyframes boot-sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+.boot-bar--indeterminate {
+  width: 38%;
+  animation: boot-indeterminate 1.35s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes boot-indeterminate {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+.boot-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-top: 12px;
+}
+.boot-label {
+  font-size: 12.5px;
+  color: var(--color-ink-2);
+}
+.boot-pct {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-3);
+}
+.boot-detail {
+  width: 100%;
+  margin-top: 6px;
+  height: 16px;
+  font-size: 11.5px;
+  color: var(--color-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.boot-detail--visible {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-glow,
+  .boot-emblem-ring,
+  .boot-emblem-orbit,
+  .boot-pulse,
+  .boot-bar-sheen,
+  .boot-bar--indeterminate,
+  .boot-content {
+    animation: none !important;
+  }
+  .boot-bar--indeterminate {
+    width: 100%;
+    opacity: 0.6;
   }
 }

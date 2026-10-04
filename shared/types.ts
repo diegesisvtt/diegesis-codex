@@ -1,6 +1,6 @@
 // Types shared between main, preload and renderer.
 
-import type { SheetLayout } from './sheetLayout';
+import type { SheetLayout, SheetTemplate } from './sheetLayout';
 
 export const APP_VERSION = '1.0.0';
 
@@ -116,8 +116,10 @@ export interface CustomFont {
 export interface RealmSettings {
   /** custom fonts uploaded for this realm */
   fonts?: CustomFont[];
-  /** default character sheet layout per systemId (e.g. 'diegesis/osr') */
+  /** @deprecated legado: layout padrão por systemId — usar sheetTemplates */
   sheetLayouts?: Record<string, SheetLayout>;
+  /** named sheet templates for this realm, keyed by template id */
+  sheetTemplates?: Record<string, SheetTemplate>;
 }
 
 export interface AudioUiState {
