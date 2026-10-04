@@ -11,6 +11,7 @@ import { pdfFilePath } from './pdf';
 import { audioFilePath, extractAudioRefs, isValidAudioData } from './audio';
 import { imageFilePath, extractImageRefs, isValidImageData } from './images';
 import type { ChatRole, DocumentType, RealmTransferResult, RetrievedChunk } from '../shared/types';
+import { parseTable, serializeTable } from '../shared/table';
 
 const FORMAT = 'diegesis-realm';
 const VERSION = 2;
@@ -26,6 +27,8 @@ const VALID_TYPES: DocumentType[] = [
   'core/pdf',
   'hexcrawl/map',
   'diegesis/timeline',
+  'diegesis/table',
+  'diegesis/sheet',
 ];
 const VALID_ROLES: ChatRole[] = ['system', 'user', 'assistant'];
 
@@ -220,6 +223,89 @@ function remapSources(sources: RetrievedChunk[] | undefined, idMap: Map<string, 
   return JSON.stringify(mapped);
 }
 
+/**
+ * Document ids are remapped on import, so content that references other
+ * documents must be rewritten too — otherwise table roll chains, hexcrawl
+ * notes/pins, whiteboard reference cards and pdf folder styles silently
+ * dead-end at the old ids. References to docs not present in the file
+ * become null (dangling-link guard).
+ */
+function remapContentReferences(type: DocumentType, content: string | null, idMap: Map<string, string>): string | null {
+  if (!content) return content;
+  const remap = (id: unknown): string | null => (typeof id === 'string' && id ? (idMap.get(id) ?? null) : null);
+  try {
+    switch (type) {
+      case 'diegesis/table': {
+        const table = parseTable(content);
+        let changed = false;
+        for (const row of table.rows) {
+          if (row.docId) {
+            row.docId = idMap.get(row.docId) ?? null;
+            changed = true;
+          }
+        }
+        return changed ? serializeTable(table) : content;
+      }
+      case 'hexcrawl/map': {
+        const doc = JSON.parse(content) as {
+          cells?: Record<string, { noteDocId?: unknown }>;
+          pins?: { docId?: unknown }[];
+        };
+        let changed = false;
+        if (doc.cells && typeof doc.cells === 'object') {
+          for (const cell of Object.values(doc.cells)) {
+            if (typeof cell.noteDocId === 'string' && cell.noteDocId) {
+              cell.noteDocId = remap(cell.noteDocId);
+              changed = true;
+            }
+          }
+        }
+        if (Array.isArray(doc.pins)) {
+          for (const pin of doc.pins) {
+            if (typeof pin?.docId === 'string' && pin.docId) {
+              pin.docId = remap(pin.docId);
+              changed = true;
+            }
+          }
+        }
+        return changed ? JSON.stringify(doc) : content;
+      }
+      case 'core/whiteboard': {
+        const shapes = JSON.parse(content) as Record<string, { docId?: unknown; pdfDocId?: unknown }>;
+        let changed = false;
+        if (shapes && typeof shapes === 'object') {
+          for (const shape of Object.values(shapes)) {
+            if (typeof shape.docId === 'string' && shape.docId) {
+              shape.docId = remap(shape.docId);
+              changed = true;
+            }
+            if (typeof shape.pdfDocId === 'string' && shape.pdfDocId) {
+              shape.pdfDocId = remap(shape.pdfDocId);
+              changed = true;
+            }
+          }
+        }
+        return changed ? JSON.stringify(shapes) : content;
+      }
+      case 'core/pdf': {
+        const doc = JSON.parse(content) as { folderStyle?: Record<string, unknown> };
+        if (!doc.folderStyle || typeof doc.folderStyle !== 'object') return content;
+        const next: Record<string, unknown> = {};
+        for (const [folderId, style] of Object.entries(doc.folderStyle)) {
+          const mapped = idMap.get(folderId);
+          if (mapped) next[mapped] = style; // dangling folder refs are dropped
+        }
+        doc.folderStyle = next;
+        return JSON.stringify(doc);
+      }
+      default:
+        return content;
+    }
+  } catch {
+    return content; // conteúdo inválido: importa como está; os parsers defensivos dos editors resolvem
+  }
+}
+
 export async function importRealm(): Promise<RealmTransferResult> {
   const win = BrowserWindow.getAllWindows()[0];
   if (!win) return { ok: false, error: 'Janela principal não disponível.' };
@@ -270,6 +356,7 @@ export async function importRealm(): Promise<RealmTransferResult> {
 
   // Ids are remapped so re-importing into the same app never collides.
   const idMap = new Map<string, string>();
+
   for (const d of docs) {
     if (idMap.has(d.id)) return { ok: false, error: 'Arquivo inválido: documentos com identificadores duplicados.' };
     idMap.set(d.id, db.generateId());
@@ -303,7 +390,7 @@ export async function importRealm(): Promise<RealmTransferResult> {
             type: d.type,
             title: d.title,
             icon: d.icon ?? null,
-            content: d.content,
+            content: remapContentReferences(d.type, d.content, idMap),
             position: d.position,
           });
           inserted.add(d.id);

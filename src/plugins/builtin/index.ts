@@ -10,6 +10,8 @@ import { hexcrawlPlugin } from './hexcrawlPlugin';
 import { timelinePlugin } from './timelinePlugin';
 import { tablePlugin } from './tablePlugin';
 import { rollerPlugin } from './rollerPlugin';
+import { dice3dPlugin } from './dice3dPlugin';
+import { sheetPlugin } from './sheetPlugin';
 import { secondWindowPlugin } from './secondWindowPlugin';
 
 /**
@@ -28,5 +30,7 @@ export const builtinPlugins: Plugin[] = [
   timelinePlugin,
   tablePlugin,
   rollerPlugin,
+  dice3dPlugin,
+  sheetPlugin,
   secondWindowPlugin,
 ];

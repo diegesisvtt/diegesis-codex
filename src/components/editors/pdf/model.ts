@@ -2,6 +2,8 @@
 // Heavy content (note bodies) lives in real child `core/note` documents;
 // this JSON keeps only lightweight spatial/visual state.
 
+import { newId } from '@diegesis/core';
+
 export type PdfPinTag =
   | 'monster'
   | 'npc'
@@ -198,4 +200,4 @@ export function parsePdfContent(content: string | null): PdfDocContent {
   }
 }
 
-export const pinId = () => Math.random().toString(36).slice(2, 10);
+export const pinId = newId;

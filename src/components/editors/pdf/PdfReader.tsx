@@ -37,6 +37,7 @@ import { HighlightPanel } from './HighlightPanel';
 import { ensurePageThumb } from './Scry';
 import { usePdfAnnotations } from './useAnnotations';
 import { parseStatblock } from './rpg';
+import { serializeSheet, statblockToSheet } from '@shared/sheet';
 import { OnboardingModal } from './OnboardingModal';
 import { extractRegionText } from './tableCapture';
 import { createDefaultTable, createEmptyRow, serializeTable } from '@shared/table';
@@ -678,6 +679,17 @@ export function PdfReader({ doc }: { doc: DocNode }) {
     setHlPopover(null);
     window.getSelection()?.removeAllRanges();
     annotations.createPinFromStatblock(page, first.x, first.y, parsed).then(selectPin);
+  };
+
+  // seleção → documento de Ficha de Personagem (diegesis/sheet)
+  const sheetFromSelection = async () => {
+    if (!hlPopover) return;
+    const parsed = parseStatblock(hlPopover.text);
+    setHlPopover(null);
+    window.getSelection()?.removeAllRanges();
+    const sheet = statblockToSheet(parsed);
+    const newDoc = await createDocument('diegesis/sheet', null, parsed.title, serializeSheet(sheet));
+    openDocument(newDoc.id);
   };
 
   // Escape cascade: context menu → placing → linking → close active panel tab
@@ -1366,6 +1378,7 @@ export function PdfReader({ doc }: { doc: DocNode }) {
           labels={content.hlLabels}
           onPickColor={applyHighlight}
           onStatblock={statblockFromSelection}
+          onImportSheet={sheetFromSelection}
           onClose={() => setHlPopover(null)}
         />
       )}

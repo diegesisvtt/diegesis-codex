@@ -38,7 +38,8 @@ export type DocumentType =
   | 'core/pdf'
   | 'hexcrawl/map'
   | 'diegesis/timeline'
-  | 'diegesis/table';
+  | 'diegesis/table'
+  | 'diegesis/sheet';
 
 export interface Realm {
   id: string;

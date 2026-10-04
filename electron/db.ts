@@ -8,6 +8,7 @@ import type { ChatRole, Conversation, DocChanges, DocInput, DocNode, Realm, Retr
 import { blocksToPlainText, isTiptapDoc, tiptapToBlocks } from '../shared/blockContent';
 import { extractTimelineText } from '../shared/timeline';
 import { extractTableText } from '../shared/table';
+import { extractSheetText, SHEET_DOC_KIND } from '../shared/sheet';
 
 export const generateId = () => crypto.randomBytes(6).toString('hex');
 
@@ -234,6 +235,10 @@ export function extractPlainText(content: string | null): string {
     // tabelas interativas: resultados, detalhes e fórmula
     if (parsed && typeof parsed === 'object' && parsed.kind === 'diegesis-table') {
       return extractTableText(content);
+    }
+    // fichas de personagem: identidade, stats base e efeitos
+    if (parsed && typeof parsed === 'object' && parsed.kind === SHEET_DOC_KIND) {
+      return extractSheetText(content);
     }
     // notes (BlockNote JSON), whiteboards and legacy content
     return blocksToPlainText(content);

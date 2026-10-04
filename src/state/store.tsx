@@ -1,7 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { newId } from '@diegesis/core';
 import type { CustomFont, DocNode, DocChanges, DocumentType, PdfImportResult, Realm, RealmTransferResult, UiState } from '@shared/types';
 
-const generateId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+const generateId = newId;
 
 export type PanelKind = 'ai-chat' | 'settings';
 
@@ -41,6 +42,8 @@ interface StoreActions {
   /** imports a PDF via native file dialog; doc is null when cancelled */
   importPdf(parentId: string | null): Promise<PdfImportResult>;
   updateDocument(id: string, changes: DocChanges): void; // optimistic + debounced persist
+  /** like updateDocument but cancels any pending debounce and persists immediately */
+  flushDocument(id: string, changes: DocChanges): void;
   deleteDocument(id: string): Promise<void>;
   moveDocument(id: string, parentId: string | null, position: number): Promise<void>;
 
@@ -87,6 +90,7 @@ const DEFAULT_TITLES: Partial<Record<DocumentType, string>> = {
   'core/whiteboard': 'Novo Quadro',
   'core/folder': 'Nova Pasta',
   'core/pdf': 'Novo PDF',
+  'diegesis/sheet': 'Nova Ficha',
 };
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
@@ -248,6 +252,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
+  const flushDocument = useCallback((id: string, changes: DocChanges) => {
+    setState((s) => ({
+      ...s,
+      docs: s.docs.map((d) => (d.id === id ? { ...d, ...changes, updatedAt: Date.now() } : d)),
+    }));
+    const prev = saveTimers.current.get(id);
+    if (prev) {
+      clearTimeout(prev);
+      saveTimers.current.delete(id);
+    }
+    window.diegesis.docs.update(id, changes).catch(console.error);
+  }, []);
+
   const deleteDocument = useCallback(
     async (id: string) => {
       await window.diegesis.docs.delete(id);
@@ -338,6 +355,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       createDocument,
       importPdf,
       updateDocument,
+      flushDocument,
       deleteDocument,
       moveDocument,
       saveUiState,
@@ -367,6 +385,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       createDocument,
       importPdf,
       updateDocument,
+      flushDocument,
       deleteDocument,
       moveDocument,
       saveUiState,

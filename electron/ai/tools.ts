@@ -154,7 +154,9 @@ export async function executeTool(
                       ? 'timeline'
                       : d.type === 'diegesis/table'
                         ? 'table'
-                        : 'note',
+                        : d.type === 'diegesis/sheet'
+                          ? 'sheet'
+                          : 'note',
           parentId: d.parentId,
         }));
         return { result: JSON.stringify({ documents: docs }), summary: 'Listou os documentos', ok: true };

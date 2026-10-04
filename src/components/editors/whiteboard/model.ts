@@ -5,6 +5,8 @@
    and store coordinates relative to the group origin.
    ============================================================ */
 
+import { newId } from '@diegesis/core';
+
 export type ShapeType =
   | 'group'
   | 'text'
@@ -61,10 +63,7 @@ export interface WBBounds {
   h: number;
 }
 
-export const generateId = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID().slice(0, 8)
-    : Math.random().toString(36).slice(2, 10);
+export const generateId = newId;
 
 /* ---------- per-type defaults (shape registry) ---------- */
 

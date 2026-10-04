@@ -5,12 +5,13 @@
 
 import {
   evaluateRoll,
-  type FacesSpec,
-  type Modifier,
+  exprBounds,
   type RollExpr,
   type RollResult as DiceRoll,
 } from '@diegesis/dice-core';
 import { fromFormula } from '@diegesis/dice-notation';
+import { newId } from '@diegesis/core';
+import { createTable, type RandomTable } from '@diegesis/roll-tables';
 
 export interface TableRow {
   id: string;
@@ -51,7 +52,7 @@ export function rollTotal(result: RollResult): number | null {
 }
 
 export function generateId(): string {
-  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  return newId();
 }
 
 export function createEmptyRow(): TableRow {
@@ -133,153 +134,13 @@ export interface FormulaBounds {
   max: number;
 }
 
-/** modificadores que tornam o máximo ilimitado (explosão, rerrolagem recursiva) */
-const UNBOUNDED_OPS = new Set([
-  'explode',
-  'explode-once',
-  'explode-compound',
-  'explode-penetrating',
-  'reroll-recursive',
-]);
-/** modificadores cujo resultado é uma contagem (0..dados mantidos) */
-const COUNT_OPS = new Set([
-  'count-success',
-  'count-failure',
-  'deduct-failure',
-  'subtract-failure',
-  'count-even',
-  'count-odd',
-]);
-
-/** quantidade de dados mantidos após keep/drop */
-function keptCount(count: number, mods: readonly Modifier[]): number {
-  let kept = count;
-  for (const m of mods) {
-    if (m.op === 'keep-highest' || m.op === 'keep-lowest') kept = Math.min(kept, m.count ?? 1);
-    else if (m.op === 'drop-highest' || m.op === 'drop-lowest') kept = Math.max(0, kept - (m.count ?? 1));
-  }
-  return kept;
-}
-
-function faceBounds(faces: FacesSpec): FormulaBounds | null {
-  switch (faces.kind) {
-    case 'number':
-      return { min: 1, max: faces.value };
-    case 'percentile':
-      return { min: 1, max: 100 };
-    case 'fate':
-      return { min: -1, max: 1 };
-    case 'coin':
-      return { min: 0, max: 1 };
-    case 'expr':
-      return boundsOf(faces.value);
-  }
-}
-
-/** aplica o efeito dos modificadores sobre os limites de `count` dados com faces [lo..hi] */
-function applyModifierBounds(
-  bounds: FormulaBounds,
-  count: number,
-  mods: readonly Modifier[]
-): FormulaBounds | null {
-  if (mods.some((m) => UNBOUNDED_OPS.has(m.op))) return null;
-  const kept = keptCount(count, mods);
-  let { min: lo, max: hi } = bounds;
-  for (const m of mods) {
-    if (m.op === 'min') lo = Math.max(lo, m.value ?? 0);
-    else if (m.op === 'max') hi = Math.min(hi, m.value ?? 0);
-  }
-  for (const m of mods) {
-    if (COUNT_OPS.has(m.op)) return { min: 0, max: kept };
-    if (m.op === 'margin-success') {
-      const target = m.target ?? 0;
-      return { min: lo * kept - target, max: hi * kept - target };
-    }
-  }
-  return { min: lo * kept, max: hi * kept };
-}
-
-/** limites [min,max] estáticos de um termo de dado (null quando ilimitado ou dinâmico) */
-function dieBounds(term: Extract<RollExpr, { type: 'die' }>): FormulaBounds | null {
-  const cb = boundsOf(term.count);
-  if (!cb || cb.min !== cb.max || !Number.isInteger(cb.min) || cb.min < 0) return null;
-  const fb = faceBounds(term.faces);
-  if (!fb) return null;
-  return applyModifierBounds(fb, cb.min, term.modifiers ?? []);
-}
-
-function poolBounds(pool: Extract<RollExpr, { type: 'pool' }>): FormulaBounds | null {
-  const mods = pool.modifiers ?? [];
-  if (mods.some((m) => UNBOUNDED_OPS.has(m.op))) return null;
-  const entries = pool.entries.map(boundsOf);
-  if (entries.some((b) => !b)) return null;
-  const sum = (entries as FormulaBounds[]).reduce(
-    (acc, b) => ({ min: acc.min + b.min, max: acc.max + b.max }),
-    { min: 0, max: 0 }
-  );
-  if (mods.length === 0) return sum;
-  // keep/drop em pool: aproximação — cada entrada vale como 1 "dado" na faixa [min..max] combinada
-  const kept = keptCount(entries.length, mods);
-  const lo = Math.min(...(entries as FormulaBounds[]).map((b) => b.min));
-  const hi = Math.max(...(entries as FormulaBounds[]).map((b) => b.max));
-  for (const m of mods) if (COUNT_OPS.has(m.op)) return { min: 0, max: kept };
-  return { min: lo * kept, max: hi * kept };
-}
-
 /**
  * Limites estáticos [min,max] de uma expressão de rolagem. Retorna null quando
  * o valor não é determinável estaticamente (variáveis @, explosões, comparações).
- * Usado para derivar as faixas das linhas e para exibição ("1d20 cobre 1–20").
+ * Delegado ao dice-core (`exprBounds`); usado para derivar as faixas das linhas
+ * e para exibição ("1d20 cobre 1–20").
  */
-export function boundsOf(expr: RollExpr): FormulaBounds | null {
-  if (typeof expr === 'number') return { min: expr, max: expr };
-  if (!expr || typeof expr !== 'object') return null;
-  if ('type' in expr && expr.type === 'die') return dieBounds(expr);
-  if ('type' in expr && expr.type === 'pool') return poolBounds(expr);
-  if ('var' in expr) return null;
-
-  const entry = Object.entries(expr)[0];
-  if (!entry) return null;
-  const [op, args] = entry as [string, readonly RollExpr[]];
-  const bs = args.map(boundsOf);
-  if (bs.some((b) => b === null)) return null;
-  const nb = bs as FormulaBounds[];
-
-  switch (op) {
-    case '+':
-      return { min: nb[0].min + nb[1].min, max: nb[0].max + nb[1].max };
-    case '-':
-      return nb.length === 1
-        ? { min: -nb[0].max, max: -nb[0].min }
-        : { min: nb[0].min - nb[1].max, max: nb[0].max - nb[1].min };
-    case '*': {
-      const products = [nb[0].min * nb[1].min, nb[0].min * nb[1].max, nb[0].max * nb[1].min, nb[0].max * nb[1].max];
-      return { min: Math.min(...products), max: Math.max(...products) };
-    }
-    case '/': {
-      if (nb[1].min <= 0 && nb[1].max >= 0) return null; // divisor pode ser zero
-      const quotients = [nb[0].min / nb[1].min, nb[0].min / nb[1].max, nb[0].max / nb[1].min, nb[0].max / nb[1].max];
-      return { min: Math.min(...quotients), max: Math.max(...quotients) };
-    }
-    case 'floor':
-      return { min: Math.floor(nb[0].min), max: Math.floor(nb[0].max) };
-    case 'ceil':
-      return { min: Math.ceil(nb[0].min), max: Math.ceil(nb[0].max) };
-    case 'round':
-      return { min: Math.round(nb[0].min), max: Math.round(nb[0].max) };
-    case 'abs':
-      return nb[0].min < 0 && nb[0].max > 0
-        ? { min: 0, max: Math.max(-nb[0].min, nb[0].max) }
-        : { min: Math.min(Math.abs(nb[0].min), Math.abs(nb[0].max)), max: Math.max(Math.abs(nb[0].min), Math.abs(nb[0].max)) };
-    case 'min':
-      return { min: Math.min(...nb.map((b) => b.min)), max: Math.min(...nb.map((b) => b.max)) };
-    case 'max':
-      return { min: Math.max(...nb.map((b) => b.min)), max: Math.max(...nb.map((b) => b.max)) };
-    default:
-      // comparações, and/or/if/!, '%', clamp dinâmico… — sem limite estático útil
-      return null;
-  }
-}
+export const boundsOf = exprBounds;
 
 export const formulaMin = (expr: RollExpr) => boundsOf(expr)?.min ?? null;
 export const formulaMax = (expr: RollExpr) => boundsOf(expr)?.max ?? null;
@@ -316,39 +177,113 @@ export function computeRanges(rows: TableRow[], formula: RollExpr): (RowRange | 
 
 // ---------- rolagem ----------
 
-/** sorteio ponderado simples entre linhas com peso > 0 */
-function weightedPick(rows: TableRow[]): TableRow | null {
-  const eligible = rows.filter((r) => r.weight > 0);
-  if (eligible.length === 0) return null;
-  const total = eligible.reduce((s, r) => s + r.weight, 0);
-  let pick = Math.random() * total;
-  for (const r of eligible) {
-    pick -= r.weight;
-    if (pick <= 0) return r;
+/**
+ * Monta os motores de rolagem (roll-tables) para a tabela, no uso pretendido
+ * da lib — sem dados sintéticos:
+ * - `ranged`: apenas linhas roláveis (peso > 0), cada uma com sua faixa real
+ *   derivada dos pesos sobre o intervalo da fórmula. Como computeRanges cobre
+ *   [min..max] contiguamente, todo total possível cai numa faixa — o lookup
+ *   nunca erra e nunca precisa de faixas artificiais.
+ * - `weighted`: as mesmas linhas roláveis com peso puro, sem faixa (a lib dá
+ *   peso pela largura da faixa quando ela existe — por isso as duas visões).
+ */
+function buildEngineTables(table: InteractiveTable): {
+  ranged: RandomTable;
+  weighted: RandomTable;
+  ranges: (RowRange | null)[];
+} {
+  const expr = parseFormula(table.formula);
+  const allRanges = expr ? computeRanges(table.rows, expr) : table.rows.map(() => null);
+  const rollable = table.rows
+    .map((row, i) => ({ row, range: allRanges[i] }))
+    .filter((e) => e.row.weight > 0);
+  const ranged = createTable({
+    name: 'table',
+    formula: '1', // count fixo: 1 sorteio — a fórmula do doc escolhe a FAIXA, não a quantidade
+    entries: rollable
+      .filter((e): e is { row: TableRow; range: RowRange } => e.range !== null)
+      .map((e) => ({
+        id: e.row.id,
+        type: 'text' as const,
+        weight: e.row.weight,
+        text: e.row.text,
+        range: [e.range.min, e.range.max] as [number, number],
+      })),
+  });
+  const weighted = createTable({
+    name: 'table',
+    formula: '1',
+    entries: rollable.map((e) => ({
+      id: e.row.id,
+      type: 'text' as const,
+      weight: e.row.weight,
+      text: e.row.text,
+    })),
+  });
+  return { ranged, weighted, ranges: allRanges };
+}
+
+// cache por referência das linhas: editar a tabela gera um novo array
+// (parseTable), invalidando naturalmente; evita reconstruir dois RandomTable
+// por rolagem (schema valibot + parse de fórmula + Maps)
+const engineCache = new WeakMap<
+  readonly TableRow[],
+  { formula: string; engines: ReturnType<typeof buildEngineTables> }
+>();
+
+function getEngineTables(table: InteractiveTable): ReturnType<typeof buildEngineTables> {
+  const cached = engineCache.get(table.rows);
+  if (cached && cached.formula === table.formula) return cached.engines;
+  const engines = buildEngineTables(table);
+  engineCache.set(table.rows, { formula: table.formula, engines });
+  return engines;
+}
+
+/** lookup só falha quando o total sai do domínio das faixas (fórmulas com min < 1) */
+function safeLookup(rt: RandomTable, value: number) {
+  try {
+    return rt.lookup(value);
+  } catch {
+    return undefined;
   }
-  return eligible[eligible.length - 1];
+}
+
+/** sorteio ponderado via motor (fallback e tabelas sem fórmula); null quando não há linhas roláveis */
+function weightedDraw(rt: RandomTable): string | null {
+  try {
+    return rt.draw({ count: 1 }).draws[0]?.entryId ?? null;
+  } catch {
+    return null; // tabela vazia / pesos zerados
+  }
 }
 
 /**
  * Rola na tabela. Com fórmula válida: avalia a expressão via dice-core e
  * procura a linha cuja faixa contém o total (fallback ponderado se houver
- * lacunas, limites indeterminados ou valor booleano). Sem fórmula: sorteio
+ * lacunas, limites indeterminados ou valor booleano). Totais fora do domínio
+ * das faixas (fórmulas com min < 1, ex. dados fate) caem no caminho ponderado
+ * — ambos estatisticamente proporcionais aos pesos. Sem fórmula: sorteio
  * ponderado puro. Null quando não há linhas roláveis.
  */
 export function rollOnTable(table: InteractiveTable): RollResult | null {
+  const { ranged, weighted, ranges } = getEngineTables(table);
+  const byId = new Map(table.rows.map((r) => [r.id, r]));
   const expr = parseFormula(table.formula);
   if (expr) {
     const roll = evaluateRoll(expr);
     const total = typeof roll.value === 'number' ? roll.value : null;
     if (total != null) {
-      const ranges = computeRanges(table.rows, expr);
-      const idx = ranges.findIndex((r) => r && total >= r.min && total <= r.max);
-      if (idx >= 0) return { row: table.rows[idx], roll, range: ranges[idx] };
+      const entry = safeLookup(ranged, total);
+      const row = entry && byId.get(entry.id);
+      const range = ranges.find((r) => r && total >= r.min && total <= r.max) ?? null;
+      if (row && range) return { row, roll, range };
     }
-    const row = weightedPick(table.rows);
+    const id = weightedDraw(weighted);
+    const row = id ? byId.get(id) : null;
     return row ? { row, roll, range: null } : null;
   }
-  const row = weightedPick(table.rows);
+  const id = weightedDraw(weighted);
+  const row = id ? byId.get(id) : null;
   return row ? { row, roll: null, range: null } : null;
 }
 

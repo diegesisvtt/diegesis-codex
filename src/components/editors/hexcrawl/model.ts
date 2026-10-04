@@ -7,6 +7,7 @@
 
 import type { HexCoord, HexGeom, HexOffset, HexOrientation, Point } from './hexMath';
 import { findPath, hexCenter, hexDistance, hexKey, parseHexKey, pixelToHex, polylineDistance } from './hexMath';
+import { newId } from '@diegesis/core';
 
 export { hexKey, parseHexKey };
 export type { HexCoord, Point };
@@ -278,10 +279,7 @@ export const DEFAULT_SETTINGS: HexMapSettings = {
 
 export const DEFAULT_GRID: HexGridConfig = { cols: 32, rows: 24, orientation: 'flat', offset: 'odd', size: 46 };
 
-export const generateId = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID().slice(0, 12)
-    : Math.random().toString(36).slice(2, 14);
+export const generateId = newId;
 
 export const REGION_COLORS = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d68910', '#16a085', '#e84393', '#6c7a35'];
 

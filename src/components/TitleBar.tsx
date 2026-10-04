@@ -4,8 +4,9 @@ import { useStore } from '../state/store';
 import { usePluginManager, useRibbonItems } from '../plugins';
 import { Modal, Button } from './ui';
 import type { CustomFont, Realm } from '@shared/types';
+import { newId } from '@diegesis/core';
 
-const generateId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+const generateId = newId;
 
 export function TitleBar() {
   const { realms, activeRealmId, setActiveRealm, createRealm, renameRealm, deleteRealm, exportRealm, importRealm, uiState, saveUiState } =

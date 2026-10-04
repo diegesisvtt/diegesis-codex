@@ -3,8 +3,9 @@ import { Bot, ChevronDown, Globe, Library, MessageSquare, Plus, Send, Settings2,
 import type { ChatMessage, Conversation, RetrievedChunk } from '@shared/types';
 import { useStore } from '../state/store';
 import { AssistantMessage } from './AssistantMessage';
+import { newId } from '@diegesis/core';
 
-const generateChatId = () => Math.random().toString(36).slice(2, 12);
+const generateChatId = newId;
 
 interface DisplayMessage extends ChatMessage {
   sources?: RetrievedChunk[];

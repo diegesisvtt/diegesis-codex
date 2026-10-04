@@ -25,6 +25,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { daysPerYear, type TimelineCalendar, type TimelineData, type TimelineEvent, type TimelineLane } from '@shared/timeline';
+import { newId } from '@diegesis/core';
 
 /** ícones selecionáveis de evento (badge no canvas / card no modo história) */
 export const EVENT_ICONS: { id: string; Icon: LucideIcon; label: string }[] = [
@@ -56,7 +57,7 @@ export function eventIcon(id: string | null | undefined): LucideIcon {
   return EVENT_ICON_MAP.get(id ?? '') ?? Flag;
 }
 
-export const generateId = () => Math.random().toString(36).slice(2, 10);
+export const generateId = newId;
 
 /** laneId sentinela para eventos sem lane (filtros e render) */
 export const NO_LANE = '__none__';

@@ -1,28 +1,20 @@
 import { useRef, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
+import { applyInlineMath } from '@diegesis/inline-math';
 
 /**
  * Parse inline math commands typed into a numeric input:
  *   "+5"  -> current + 5
  *   "-5"  -> current - 5
+ *   "*2"  -> current * 2
+ *   "/2"  -> current / 2
  *   "=-7" -> set to -7 (absolute, allows negatives)
  *   "12"  -> set to 12 (absolute)
+ * Delegado ao @diegesis/inline-math (aceita vírgula decimal: "2,5").
  * Returns null for unparseable input (the input reverts to the current value).
- * Note: the dash must come LAST in [+=-] — [+-=] is a range covering 0-9!
  */
 export function parseMathCommand(input: string, current: number): number | null {
-  const m = input.trim().match(/^([+=-]?)\s*(-?\d+(?:[.,]\d+)?)$/);
-  if (!m) return null;
-  const n = parseFloat(m[2].replace(',', '.'));
-  if (Number.isNaN(n)) return null;
-  switch (m[1]) {
-    case '+':
-      return current + n;
-    case '-':
-      return current - n;
-    default:
-      return n; // '=' or plain number: absolute set
-  }
+  return applyInlineMath(current, input)?.value ?? null;
 }
 
 interface MathInputProps {

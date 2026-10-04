@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/ariakit';
 import { pt } from '@blocknote/core/locales';
-import { BookOpen, FileText, History, Map, Presentation, Table } from 'lucide-react';
+import { BookOpen, FileText, History, Map, Presentation, Table, UserSquare } from 'lucide-react';
 import type { RetrievedChunk } from '@shared/types';
 
 const SOURCE_URL = 'https://diegesis.source/';
@@ -146,6 +146,8 @@ export function AssistantMessage({
               <History size={12} className="shrink-0 text-timeline" />
             ) : tipSource.type === 'diegesis/table' ? (
               <Table size={12} className="shrink-0 text-table" />
+            ) : tipSource.type === 'diegesis/sheet' ? (
+              <UserSquare size={12} className="shrink-0 text-sheet" />
             ) : (
               <BookOpen size={12} className="shrink-0 text-note" />
             )}
@@ -165,7 +167,9 @@ export function AssistantMessage({
                         ? 'Timeline'
                         : tipSource.type === 'diegesis/table'
                           ? 'Tabela'
-                          : 'Nota'}
+                          : tipSource.type === 'diegesis/sheet'
+                            ? 'Ficha'
+                            : 'Nota'}
               </dd>
             </div>
             {tipSource.type === 'core/pdf' && tipSource.page != null && (

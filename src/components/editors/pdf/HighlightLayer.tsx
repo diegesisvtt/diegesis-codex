@@ -17,12 +17,15 @@ export function HighlightPopover({
   labels,
   onPickColor,
   onStatblock,
+  onImportSheet,
   onClose,
 }: {
   state: HighlightPopoverState;
   labels: Record<string, string>;
   onPickColor: (color: string) => void;
   onStatblock: () => void;
+  /** cria um documento 'diegesis/sheet' a partir do statblock selecionado */
+  onImportSheet?: () => void;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -57,6 +60,15 @@ export function HighlightPopover({
       >
         + Ficha
       </button>
+      {onImportSheet && (
+        <button
+          className="text-[11px] text-ink-2 hover:text-ink-1 px-1.5 py-0.5 rounded hover:bg-hover"
+          title="Criar documento de Ficha de Personagem a partir do texto selecionado"
+          onClick={onImportSheet}
+        >
+          + Personagem
+        </button>
+      )}
     </div>
   );
 }
