@@ -1,5 +1,7 @@
 // Types shared between main, preload and renderer.
 
+import type { SheetLayout } from './sheetLayout';
+
 export const APP_VERSION = '1.0.0';
 
 /**
@@ -88,8 +90,10 @@ export interface UiState {
   layout?: unknown; // serialized flexlayout model
   activeRealmId?: string;
   sidebarVisible?: boolean;
-  /** width (px) of the right-side AI chat panel */
+  /** width (px) of the right-side panel (legacy key, kept for migration) */
   aiPanelWidth?: number;
+  /** width (px) of the right-side panel */
+  rightPanelWidth?: number;
   /** width (px) of the hexcrawl map side panel */
   hexmapPanelWidth?: number;
   /** plugin manager persistence (enabled state + per-plugin settings) */
@@ -112,6 +116,8 @@ export interface CustomFont {
 export interface RealmSettings {
   /** custom fonts uploaded for this realm */
   fonts?: CustomFont[];
+  /** default character sheet layout per systemId (e.g. 'diegesis/osr') */
+  sheetLayouts?: Record<string, SheetLayout>;
 }
 
 export interface AudioUiState {
@@ -319,7 +325,7 @@ export interface RealmTransferResult {
   filePath?: string;
 }
 
-// ---------- second window (player view) ----------
+// ---------- player view (second window) ----------
 
 /** hexcrawl viewport: CENTER of the view in hex-space world coordinates +
  *  zoom. Window-size independent — each window rebuilds its own screen
@@ -331,10 +337,12 @@ export interface MapViewport {
 }
 
 /** what the player-facing second window should display */
-export type SecondWindowState =
+export type PlayerViewState =
   | { kind: 'none' }
   | { kind: 'note'; realmId: string; docId: string }
-  | { kind: 'map'; realmId: string; docId: string; viewport?: MapViewport | null };
+  | { kind: 'map'; realmId: string; docId: string; viewport?: MapViewport | null }
+  /** an image attached to a note or whiteboard, shown full-screen */
+  | { kind: 'image'; realmId: string; docId: string; src: string; name?: string };
 
 export interface DiegesisCodexApi {
   realms: {
@@ -419,16 +427,16 @@ export interface DiegesisCodexApi {
     /** reveals the plugins folder in the OS file manager */
     openFolder(): Promise<void>;
   };
-  secondWindow: {
+  playerView: {
     open(): Promise<void>;
     close(): Promise<void>;
     /** open state + last pushed content (used by the player window on load) */
-    status(): Promise<{ open: boolean; state: SecondWindowState }>;
+    status(): Promise<{ open: boolean; state: PlayerViewState }>;
     /** pushes content to the player window (called from the GM window) */
-    send(state: SecondWindowState): Promise<void>;
+    send(state: PlayerViewState): Promise<void>;
     /** player window: content pushed by the GM window */
-    onState(cb: (state: SecondWindowState) => void): () => void;
-    /** GM window: the second window was opened/closed */
+    onState(cb: (state: PlayerViewState) => void): () => void;
+    /** GM window: the player window was opened/closed */
     onStatus(cb: (status: { open: boolean }) => void): () => void;
   };
 }
@@ -438,5 +446,5 @@ export interface DiegesisCodexApi {
  *  management or AI capabilities). */
 export interface PlayerDiegesisCodexApi {
   docs: Pick<DiegesisCodexApi['docs'], 'listByRealm' | 'onChanged'>;
-  secondWindow: Pick<DiegesisCodexApi['secondWindow'], 'status' | 'onState'>;
+  playerView: Pick<DiegesisCodexApi['playerView'], 'status' | 'onState'>;
 }

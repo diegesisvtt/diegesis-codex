@@ -10,6 +10,10 @@ import {
   type CharacterDocument,
 } from '@diegesis/sheet';
 import { fromFormula } from '@diegesis/dice-notation';
+import { parseSheetLayout, type SheetLayout } from './sheetLayout';
+
+/** documento com layout opcional (campo extra tolerado pelo SheetEngine) */
+export type SheetDocumentWithLayout = CharacterDocument & { layout?: SheetLayout };
 
 export const SHEET_DOC_KIND = 'diegesis-sheet';
 export const SHEET_DOC_TYPE = 'diegesis/sheet';
@@ -109,13 +113,16 @@ export function parseSheet(content: string | null | undefined): CharacterDocumen
       console.warn(`[sheet] systemId desconhecido "${raw.systemId}" — usando ficha padrão`);
       return createDefaultSheet();
     }
-    return {
+    const doc: SheetDocumentWithLayout = {
       systemId: raw.systemId,
       systemVersion: raw.systemVersion,
       identity: raw.identity && typeof raw.identity === 'object' ? raw.identity : {},
       base: raw.base && typeof raw.base === 'object' ? raw.base : {},
       effects: Array.isArray(raw.effects) ? raw.effects : [],
     };
+    const layout = parseSheetLayout(raw.layout);
+    if (layout) doc.layout = layout;
+    return doc;
   } catch {
     return createDefaultSheet();
   }
