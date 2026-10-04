@@ -1,0 +1,124 @@
+// Layout customizável da ficha (diegesis/sheet): grid livre de blocos
+// posicionados por {x, y, w, h} em unidades de grid. TS puro — usado pelo
+// renderer (canvas) e pelo main (parse tolerante). O SheetEngine ignora o
+// campo `layout`; ele viaja no JSON serializado do documento.
+
+export interface SheetGrid {
+  cols: number;
+  rowHeight: number;
+  gap: number;
+}
+
+export interface SheetLayout {
+  version: 1;
+  grid: SheetGrid;
+  blocks: SheetBlock[];
+}
+
+export type BlockInput = 'number' | 'die' | 'text' | 'checkbox';
+
+interface BlockBase {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export type SheetBlock =
+  | (BlockBase & { type: 'title' })
+  | (BlockBase & { type: 'field'; path: string; label: string; input: BlockInput })
+  | (BlockBase & { type: 'derived'; path: string; label: string })
+  | (BlockBase & { type: 'identity'; key: string; label: string; multiline?: boolean })
+  | (BlockBase & { type: 'rolls'; templates: string[] })
+  | (BlockBase & { type: 'effects' })
+  | (BlockBase & { type: 'text'; text: string })
+  | (BlockBase & { type: 'section'; title: string });
+
+export const SHEET_GRID: SheetGrid = { cols: 12, rowHeight: 44, gap: 8 };
+
+let counter = 0;
+export function newBlockId(): string {
+  counter += 1;
+  return `blk-${Date.now().toString(36)}-${counter}`;
+}
+
+/** layout padrão reproduzindo a ficha OSR atual (nome, atributos, derivados, rolagens, efeitos) */
+export function defaultSheetLayout(): SheetLayout {
+  const g = SHEET_GRID;
+  const field = (path: string, label: string, input: BlockInput, x: number, y: number, w = 3): SheetBlock => ({
+    id: newBlockId(), type: 'field', path, label, input, x, y, w, h: 2,
+  });
+  return {
+    version: 1,
+    grid: g,
+    blocks: [
+      { id: newBlockId(), type: 'title', x: 0, y: 0, w: 12, h: 2 },
+      { id: newBlockId(), type: 'section', title: 'Atributos', x: 0, y: 2, w: 12, h: 1 },
+      field('dv', 'DV', 'number', 0, 3),
+      field('dadoVida', 'Dado de Vida', 'die', 3, 3),
+      field('pv.atual', 'PV', 'number', 6, 3),
+      field('pv.max', 'PV Máx', 'number', 9, 3),
+      field('ca', 'CA', 'number', 0, 5),
+      field('atq', 'Atq', 'number', 3, 5),
+      field('moral', 'Moral', 'number', 6, 5),
+      field('desl.quad', 'Desl.', 'number', 9, 5),
+      field('save', 'Save', 'number', 0, 7),
+      { id: newBlockId(), type: 'derived', path: 'pv.metade', label: 'pv.metade', x: 3, y: 7, w: 3, h: 2 },
+      { id: newBlockId(), type: 'derived', path: 'desl.pes', label: 'desl.pes', x: 6, y: 7, w: 3, h: 2 },
+      { id: newBlockId(), type: 'derived', path: 'desl.m', label: 'desl.m', x: 9, y: 7, w: 3, h: 2 },
+      { id: newBlockId(), type: 'section', title: 'Rolagens', x: 0, y: 9, w: 12, h: 1 },
+      { id: newBlockId(), type: 'rolls', templates: ['ataque', 'dano', 'moral', 'save'], x: 0, y: 10, w: 12, h: 2 },
+      { id: newBlockId(), type: 'section', title: 'Efeitos', x: 0, y: 12, w: 12, h: 1 },
+      { id: newBlockId(), type: 'effects', x: 0, y: 13, w: 12, h: 4 },
+    ],
+  };
+}
+
+const BLOCK_TYPES = new Set(['title', 'field', 'derived', 'identity', 'rolls', 'effects', 'text', 'section']);
+
+function isNum(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+/** valida entrada hostil (realm import, versões futuras); retorna null se irreconhecível */
+export function parseSheetLayout(raw: unknown): SheetLayout | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (r.version !== 1) return null;
+  const grid = (r.grid && typeof r.grid === 'object' ? r.grid : {}) as Record<string, unknown>;
+  const g: SheetGrid = {
+    cols: isNum(grid.cols) && grid.cols > 0 ? grid.cols : SHEET_GRID.cols,
+    rowHeight: isNum(grid.rowHeight) && grid.rowHeight > 0 ? grid.rowHeight : SHEET_GRID.rowHeight,
+    gap: isNum(grid.gap) && grid.gap >= 0 ? grid.gap : SHEET_GRID.gap,
+  };
+  if (!Array.isArray(r.blocks)) return null;
+  const blocks: SheetBlock[] = [];
+  for (const b of r.blocks) {
+    if (!b || typeof b !== 'object') continue;
+    const blk = b as Record<string, unknown>;
+    if (typeof blk.id !== 'string' || typeof blk.type !== 'string' || !BLOCK_TYPES.has(blk.type)) continue;
+    if (![blk.x, blk.y, blk.w, blk.h].every(isNum)) continue;
+    blocks.push({
+      ...blk,
+      x: Math.max(0, Math.round(blk.x as number)),
+      y: Math.max(0, Math.round(blk.y as number)),
+      w: Math.max(1, Math.round(blk.w as number)),
+      h: Math.max(1, Math.round(blk.h as number)),
+    } as unknown as SheetBlock);
+  }
+  return { version: 1, grid: g, blocks };
+}
+
+/** altura total do canvas em unidades de grid (última linha ocupada + margem) */
+export function layoutRows(layout: SheetLayout): number {
+  return layout.blocks.reduce((max, b) => Math.max(max, b.y + b.h), 0) + 1;
+}
+
+/** clamp de posição/tamanho dentro das colunas do grid */
+export function clampBlock(layout: SheetLayout, b: SheetBlock): SheetBlock {
+  const cols = layout.grid.cols;
+  const w = Math.min(Math.max(1, b.w), cols);
+  const x = Math.min(Math.max(0, b.x), cols - w);
+  return { ...b, x, w, y: Math.max(0, b.y), h: Math.max(1, b.h) };
+}

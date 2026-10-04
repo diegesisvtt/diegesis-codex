@@ -1,0 +1,18 @@
+import { defaultSheetLayout, parseSheetLayout, layoutRows, clampBlock, SHEET_GRID } from './sheetLayout';
+
+const def = defaultSheetLayout();
+console.assert(parseSheetLayout(JSON.parse(JSON.stringify(def))) !== null, 'default layout deve fazer round-trip');
+console.assert(parseSheetLayout(null) === null, 'null -> null');
+console.assert(parseSheetLayout({ version: 2, blocks: [] }) === null, 'versao futura -> null');
+console.assert(
+  parseSheetLayout({ version: 1, blocks: [{ id: 'a', type: 'field', path: 'ca', label: 'CA', input: 'number', x: -3, y: 0, w: 2, h: 1 }] })!.blocks[0].x === 0,
+  'x negativo clampado',
+);
+console.assert(
+  parseSheetLayout({ version: 1, blocks: [{ id: 'a', type: 'wat', x: 0, y: 0, w: 1, h: 1 }] })!.blocks.length === 0,
+  'tipo desconhecido descartado',
+);
+console.assert(layoutRows(def) >= 17, 'layout padrao cobre efeitos');
+const clamped = clampBlock(def, { id: 'x', type: 'text', text: '', x: 10, y: 0, w: 8, h: 1 });
+console.assert(clamped.x + clamped.w <= SHEET_GRID.cols, 'clamp dentro das colunas');
+console.log('sheetLayout.test: OK');
