@@ -106,7 +106,7 @@ export function gateContext(ctx: PluginContext, perms: Set<PluginPermission>, is
 
   if (!perms.has('ui')) {
     // navegação/manipulação de UI exige a permissão 'ui'
-    for (const method of ['openDocument', 'openPanel', 'openView', 'setAiChatOpen'] as const) {
+    for (const method of ['openDocument', 'openPanel', 'openView', 'setAiChatOpen', 'setRightPanelView'] as const) {
       app[method] = () => {
         throw new PermissionError('ui', pluginId);
       };
@@ -130,11 +130,33 @@ export function gateContext(ctx: PluginContext, perms: Set<PluginPermission>, is
           assertLive();
           return ctx.settings.all();
         },
+        registerAll: (declarations) => {
+          assertLive();
+          return ctx.settings.registerAll(declarations);
+        },
+        subscribe: (listener) => {
+          assertLive();
+          return ctx.settings.subscribe(listener);
+        },
       }
-    : (denied('settings', pluginId, ['get', 'set', 'all']) as unknown as PluginContext['settings']);
+    : (denied('settings', pluginId, ['get', 'set', 'all', 'registerAll', 'subscribe']) as unknown as PluginContext['settings']);
 
+  // páginas de configuração aparecem na UI do Settings e leem/escrevem o blob
+  // do plugin — exigem 'ui' E 'settings'
+  const settingsPages: PluginContext['settingsPages'] =
+    perms.has('ui') && perms.has('settings')
+      ? {
+          add: (page) => {
+            assertLive();
+            return ctx.settingsPages.add(page);
+          },
+        }
+      : (denied('ui+settings', pluginId, ['add']) as unknown as PluginContext['settingsPages']);
+
+  // lista branca (não spread): capacidades novas do PluginContext NÃO vazam
+  // para plugins externos sem um gate explícito aqui
   return {
-    ...ctx,
+    manifest: ctx.manifest,
     app,
     events: perms.has('events')
       ? ctx.events
@@ -167,7 +189,36 @@ export function gateContext(ctx: PluginContext, perms: Set<PluginPermission>, is
           },
         }
       : (denied('ui', pluginId, ['add']) as unknown as PluginContext['editors']),
+    docTypes: perms.has('ui')
+      ? {
+          add: (contribution) => {
+            assertLive();
+            return ctx.docTypes.add(contribution);
+          },
+        }
+      : (denied('ui', pluginId, ['add']) as unknown as PluginContext['docTypes']),
+    menus: perms.has('ui')
+      ? {
+          add: (item) => {
+            assertLive();
+            return ctx.menus.add(item);
+          },
+        }
+      : (denied('ui', pluginId, ['add']) as unknown as PluginContext['menus']),
     settings,
+    settingsPages,
+    hooks: perms.has('events')
+      ? {
+          register: (name, handler) => {
+            assertLive();
+            return ctx.hooks.register(name, handler);
+          },
+        }
+      : (denied('events', pluginId, ['register']) as unknown as PluginContext['hooks']),
+    register: (d) => {
+      assertLive();
+      return ctx.register(d);
+    },
   };
 }
 

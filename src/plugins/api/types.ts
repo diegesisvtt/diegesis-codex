@@ -6,6 +6,8 @@ import type { RibbonItem, ViewContribution } from './views';
 import type { EditorContribution } from './editors';
 import type { DocTypeContribution } from './docTypes';
 import type { MenuItemContribution } from './menus';
+import type { SettingDeclaration, SettingsPageContribution } from './settings';
+import type { HookHandler, HookMap } from './hooks';
 
 import { PLUGIN_API_VERSION } from '@shared/types';
 
@@ -57,10 +59,17 @@ export interface AppFacade {
   readonly activeRealmId: string | null;
   openDocument(docId: string): void;
   openPanel(panel: 'ai-chat' | 'settings'): void;
+  /** opens the Settings panel; `sectionId` pre-selects a section —
+   *  plugin pages are addressable as `plugin:<pluginId>` */
+  openSettings(sectionId?: string): void;
   /** opens a registered 'workspace-tab' view as a tab in the workspace */
   openView(viewId: string): void;
   setAiChatOpen(open: boolean): void;
   readonly aiChatOpen: boolean;
+  /** id of the view shown in the right-side panel, or null when closed */
+  readonly rightPanelView: string | null;
+  /** opens a registered 'right-panel' view; null closes the panel */
+  setRightPanelView(viewId: string | null): void;
   /** introspection into other plugins' lifecycle state */
   readonly plugins: {
     /** true when the plugin is registered AND currently active */
@@ -73,6 +82,12 @@ export interface PluginSettings {
   get<T>(key: string, fallback: T): T;
   set(key: string, value: unknown): void;
   all(): Record<string, unknown>;
+  /** declares typed fields so the host can auto-generate a settings form
+   *  (Foundry-style). Disposed automatically on deactivation. */
+  registerAll(declarations: SettingDeclaration[]): Disposable;
+  /** notified whenever this plugin's settings blob changes (including own
+   *  writes) — the reactive alternative to polling `get` */
+  subscribe(listener: () => void): Disposable;
 }
 
 export interface PluginContext {
@@ -80,6 +95,11 @@ export interface PluginContext {
   readonly app: AppFacade;
   /** typed pub/sub; subscriptions made via `on` are auto-disposed */
   readonly events: EventBus<AppEvents>;
+  /** named plugin-provided services with return values (vs. fire-and-forget
+   *  events). First registration wins; auto-disposed on deactivation. */
+  readonly hooks: {
+    register<K extends keyof HookMap>(name: K, handler: HookHandler<HookMap[K]['payload'], HookMap[K]['result']>): Disposable;
+  };
   readonly commands: {
     add(command: Command): Disposable;
   };
@@ -100,6 +120,12 @@ export interface PluginContext {
     add(item: MenuItemContribution): Disposable;
   };
   readonly settings: PluginSettings;
+  readonly settingsPages: {
+    /** contribute a settings page (Obsidian-style). Without `component`, the
+     *  host auto-generates the form from the declared settings schema.
+     *  A custom page replaces the auto-generated one. */
+    add(page: SettingsPageContribution): Disposable;
+  };
   /** collect an arbitrary disposable for deactivation cleanup */
   register(disposable: Disposable): void;
 }

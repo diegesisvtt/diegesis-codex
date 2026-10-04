@@ -14,8 +14,10 @@ import { ViewRegistry, type RibbonItem, type ViewContribution, type ViewLocation
 import { EditorRegistry, type EditorContribution } from './api/editors';
 import { DocTypeRegistry, type DocTypeContribution } from './api/docTypes';
 import { MenuRegistry, type MenuItemContribution, type MenuLocation } from './api/menus';
+import { SettingsRegistry, type SettingsNavEntry } from './api/settings';
 import { File, Folder, LayoutGrid } from 'lucide-react';
 import { createAppEventBus, type AppEvents } from './api/events';
+import { HookRegistry } from './api/hooks';
 import {
   PLUGIN_API_VERSION,
   type AppFacade,
@@ -27,6 +29,7 @@ import {
 } from './api/types';
 import type { PluginUiState } from '@shared/types';
 import { loadExternalPlugins } from './external/loader';
+import { bootFinish, bootPlan, bootProgress, bootStep } from '../state/boot';
 
 export interface PluginInfo {
   manifest: PluginManifest;
@@ -49,6 +52,8 @@ interface SettingsAdapter {
   write(pluginId: string, settings: Record<string, unknown>): void;
   readDisabled(): string[];
   writeDisabled(disabled: string[]): void;
+  /** notified when the given plugin's settings blob changes (own writes too) */
+  subscribe(pluginId: string, fn: () => void): Disposable;
 }
 
 /**
@@ -62,7 +67,9 @@ export class PluginManager {
   readonly editors = new EditorRegistry();
   readonly docTypes = new DocTypeRegistry();
   readonly menus = new MenuRegistry();
+  readonly settingsPages = new SettingsRegistry();
   readonly events = createAppEventBus();
+  readonly hooks = new HookRegistry();
 
   constructor() {
     // core creatable types live in the same registry as plugin types so
@@ -128,11 +135,14 @@ export class PluginManager {
     return this.settings?.readDisabled() ?? [];
   }
 
-  async activateAll(): Promise<void> {
+  async activateAll(onProgress?: (info: { id: string; name: string; status: 'start' | 'done' }) => void): Promise<void> {
     const disabled = new Set(this.settings?.readDisabled() ?? []);
     for (const [id, record] of this.records) {
       // required plugins always activate, even if persisted as disabled
-      if (record.plugin.manifest.required || !disabled.has(id)) await this.activate(id);
+      if (!record.plugin.manifest.required && disabled.has(id)) continue;
+      onProgress?.({ id, name: record.plugin.manifest.name, status: 'start' });
+      await this.activate(id);
+      onProgress?.({ id, name: record.plugin.manifest.name, status: 'done' });
     }
     // self-heal: scrub required plugins from the persisted disabled list
     // (e.g. disabled before they became required)
@@ -264,18 +274,13 @@ export class PluginManager {
     record.disposables = [];
   }
 
-  private createContext(record: PluginRecord): PluginContext {
-    if (!this.facade || !this.settings) throw new Error('PluginManager not configured');
-    const { plugin } = record;
-    const collect = (d: Disposable): Disposable => {
-      record.disposables.push(d);
-      return d;
-    };
-    const events = this.events;
+  /** Settings handle for host UI (settings pages read/write even when the
+   *  plugin never touched its own settings). Listeners are NOT auto-disposed —
+   *  callers own the returned disposables. */
+  getSettings(pluginId: string): PluginSettings {
+    if (!this.settings) throw new Error('PluginManager not configured');
     const settingsAdapter = this.settings;
-    const pluginId = plugin.manifest.id;
-
-    const settings: PluginSettings = {
+    return {
       get: <T,>(key: string, fallback: T): T => {
         const value = settingsAdapter.read(pluginId)[key];
         return value === undefined ? fallback : (value as T);
@@ -284,6 +289,27 @@ export class PluginManager {
         settingsAdapter.write(pluginId, { ...settingsAdapter.read(pluginId), [key]: value });
       },
       all: () => settingsAdapter.read(pluginId),
+      registerAll: (declarations) => this.settingsPages.addSchema(pluginId, declarations),
+      subscribe: (fn) => settingsAdapter.subscribe(pluginId, fn),
+    };
+  }
+
+  private createContext(record: PluginRecord): PluginContext {
+    if (!this.facade || !this.settings) throw new Error('PluginManager not configured');
+    const { plugin } = record;
+    const collect = (d: Disposable): Disposable => {
+      record.disposables.push(d);
+      return d;
+    };
+    const events = this.events;
+    const pluginId = plugin.manifest.id;
+
+    // everything a plugin registers is torn down on deactivation
+    const base = this.getSettings(pluginId);
+    const settings: PluginSettings = {
+      ...base,
+      registerAll: (declarations) => collect(base.registerAll(declarations)),
+      subscribe: (fn) => collect(base.subscribe(fn)),
     };
 
     return {
@@ -300,6 +326,9 @@ export class PluginManager {
       commands: {
         add: (command: Command) => collect(this.commands.add(command)),
       },
+      hooks: {
+        register: (name, handler) => collect(this.hooks.register(name, handler)),
+      },
       views: {
         add: (view: ViewContribution) => collect(this.views.addView(view)),
         addRibbonItem: (item: RibbonItem) => collect(this.views.addRibbonItem(item)),
@@ -314,6 +343,9 @@ export class PluginManager {
         add: (item: MenuItemContribution) => collect(this.menus.add(item)),
       },
       settings,
+      settingsPages: {
+        add: (page) => collect(this.settingsPages.addPage(pluginId, page)),
+      },
       register: (d) => collect(d),
     };
   }
@@ -394,6 +426,25 @@ export function usePlugins(): PluginInfo[] {
   return manager.list();
 }
 
+/** Settings nav entries contributed by plugins (custom pages + schema-only). */
+export function useSettingsPages(): SettingsNavEntry[] {
+  const manager = usePluginManager();
+  useRegistryVersion(manager.settingsPages);
+  return manager.settingsPages.listNavEntries();
+}
+
+/** Reactive settings handle for a plugin: re-renders the caller whenever the
+ *  plugin's settings blob changes (writes from any source). */
+export function usePluginSettings(pluginId: string): PluginSettings {
+  const manager = usePluginManager();
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const d = manager.getSettings(pluginId).subscribe(() => bump((c) => c + 1));
+    return () => d.dispose();
+  }, [manager, pluginId]);
+  return useMemo(() => manager.getSettings(pluginId), [manager, pluginId]);
+}
+
 export function usePluginEvent<K extends keyof AppEvents>(type: K, handler: (payload: AppEvents[K]) => void): void {
   const manager = usePluginManager();
   const handlerRef = useRef(handler);
@@ -465,8 +516,13 @@ export function PluginProvider({
       get aiChatOpen() {
         return storeRef.current.aiChatOpen;
       },
+      get rightPanelView() {
+        return storeRef.current.rightPanelView;
+      },
+      setRightPanelView: (viewId) => storeRef.current.setRightPanelView(viewId),
       openDocument: (docId) => storeRef.current.openDocument(docId),
       openPanel: (panel) => storeRef.current.openPanel(panel),
+      openSettings: (sectionId) => storeRef.current.openSettings(sectionId),
       openView: (viewId) => storeRef.current.openView(viewId),
       setAiChatOpen: (open) => storeRef.current.setAiChatOpen(open),
       plugins: {
@@ -480,6 +536,12 @@ export function PluginProvider({
     let pluginsCache: PluginUiState = { ...(storeRef.current.uiState.plugins ?? {}) };
     const persist = () => storeRef.current.saveUiState({ plugins: pluginsCache });
 
+    // per-plugin change listeners (PluginSettings.subscribe)
+    const settingsListeners = new Map<string, Set<() => void>>();
+    const notifySettings = (pluginId: string) => {
+      for (const fn of settingsListeners.get(pluginId) ?? []) fn();
+    };
+
     const settings: SettingsAdapter = {
       read: (pluginId) => pluginsCache.settings?.[pluginId] ?? {},
       write: (pluginId, pluginSettings) => {
@@ -488,11 +550,26 @@ export function PluginProvider({
           settings: { ...(pluginsCache.settings ?? {}), [pluginId]: pluginSettings },
         };
         persist();
+        notifySettings(pluginId);
       },
       readDisabled: () => pluginsCache.disabled ?? [],
       writeDisabled: (disabled) => {
         pluginsCache = { ...pluginsCache, disabled };
         persist();
+      },
+      subscribe: (pluginId, fn) => {
+        let set = settingsListeners.get(pluginId);
+        if (!set) {
+          set = new Set();
+          settingsListeners.set(pluginId, set);
+        }
+        set.add(fn);
+        return {
+          dispose: () => {
+            set.delete(fn);
+            if (set.size === 0) settingsListeners.delete(pluginId);
+          },
+        };
       },
     };
 
@@ -500,13 +577,26 @@ export function PluginProvider({
 
     let cancelled = false;
     (async () => {
+      bootProgress({ phase: 'plugins', label: 'Procurando recursos', detail: 'Verificando plugins externos' });
       for (const plugin of pluginsRef.current) manager.register(plugin);
+      bootPlan(1);
       const external = await loadExternalPlugins();
       if (cancelled) return;
+      bootStep();
       externalIdsRef.current = external.map((p) => p.manifest.id);
       for (const plugin of external) manager.register(plugin);
-      await manager.activateAll();
-      if (!cancelled) setReady(true);
+      const disabled = new Set(manager.listDisabled());
+      const activatable = [...pluginsRef.current, ...external].filter(
+        (p) => p.manifest.required || !disabled.has(p.manifest.id)
+      );
+      bootPlan(activatable.length);
+      await manager.activateAll(({ name, status }) => {
+        if (status === 'start') bootProgress({ phase: 'plugins', label: 'Ativando recursos', detail: name });
+        else bootStep();
+      });
+      if (cancelled) return;
+      bootFinish();
+      setReady(true);
     })();
 
     const onKeydown = (e: KeyboardEvent) => manager.commands.handleKeydown(e);

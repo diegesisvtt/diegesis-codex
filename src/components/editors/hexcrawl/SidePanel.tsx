@@ -34,6 +34,8 @@ import { pinIcon } from '../pdf/rpg';
 import { ConfirmDeleteButton } from './ConfirmDelete';
 import type { LayerVisibility } from './HexcrawlMap';
 import type { HexTool, PanelTab } from './Toolbar';
+import { PanelShell } from '../../ui/PanelShell';
+import { Check, Color, Field, Num, Section, inputCls } from '../../ui/fields';
 
 export interface MeasureTotals {
   hexes: number;
@@ -87,58 +89,7 @@ const TITLES: Record<PanelTab, string> = {
   config: 'Configurar',
 };
 
-/* ---------- small form helpers ---------- */
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex items-center justify-between gap-2 py-1 text-[12px] text-ink-2">
-      <span className="shrink-0">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-const inputCls = 'w-full min-w-0 bg-overlay border border-line rounded px-1.5 py-1 text-[12px] text-ink-1 outline-none focus:border-accent';
-
-function Num({ value, onChange, min, max, step, className }: { value: number; onChange(v: number): void; min?: number; max?: number; step?: number; className?: string }) {
-  return (
-    <input
-      type="number"
-      value={value}
-      min={min}
-      max={max}
-      step={step ?? 1}
-      onChange={(e) => {
-        if (e.target.value === '') return;
-        const v = Number(e.target.value);
-        if (!Number.isNaN(v)) onChange(v);
-      }}
-      className={`${inputCls} text-right ${className ?? 'w-16'}`}
-    />
-  );
-}
-
-function Color({ value, onChange }: { value: string; onChange(v: string): void }) {
-  return <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="w-8 h-6 rounded border border-line bg-overlay cursor-pointer" />;
-}
-
-function Check({ checked, onChange, label }: { checked: boolean; onChange(v: boolean): void; label: string }) {
-  return (
-    <label className="flex items-center gap-1.5 text-[12px] text-ink-2 cursor-pointer select-none">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-[#2383e2]" />
-      {label}
-    </label>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mt-3 first:mt-0">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-3 mb-1">{title}</div>
-      {children}
-    </div>
-  );
-}
+/* ---------- small form helpers (compartilhados em ui/fields) ---------- */
 
 function uploadImage(cb: (dataUrl: string) => void) {
   const input = document.createElement('input');
@@ -169,24 +120,16 @@ function downloadJson(data: unknown, filename: string) {
 export function HexSidePanel(props: PanelProps) {
   const { tab, setTab } = props;
   return (
-    <div className="shrink-0 border-l border-line bg-sidebar flex flex-col min-h-0" style={{ width: props.width }}>
-      <div className="h-9 px-3 border-b border-line flex items-center justify-between shrink-0">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-3">{TITLES[tab]}</span>
-        <button onClick={() => setTab(null)} className="text-ink-3 hover:text-ink-1 p-1 rounded hover:bg-hover">
-          <X size={14} />
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-3">
-        {tab === 'hex' && <HexTab {...props} />}
-        {tab === 'styles' && <StylesTab {...props} />}
-        {tab === 'layers' && <LayersTab {...props} />}
-        {tab === 'regions' && <RegionsTab {...props} />}
-        {tab === 'travel' && <TravelTab {...props} />}
-        {tab === 'generate' && <GenerateTab {...props} />}
-        {tab === 'key' && <KeyTab {...props} />}
-        {tab === 'config' && <ConfigTab {...props} />}
-      </div>
-    </div>
+    <PanelShell title={TITLES[tab]} width={props.width} onClose={() => setTab(null)}>
+      {tab === 'hex' && <HexTab {...props} />}
+      {tab === 'styles' && <StylesTab {...props} />}
+      {tab === 'layers' && <LayersTab {...props} />}
+      {tab === 'regions' && <RegionsTab {...props} />}
+      {tab === 'travel' && <TravelTab {...props} />}
+      {tab === 'generate' && <GenerateTab {...props} />}
+      {tab === 'key' && <KeyTab {...props} />}
+      {tab === 'config' && <ConfigTab {...props} />}
+    </PanelShell>
   );
 }
 

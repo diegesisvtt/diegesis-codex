@@ -185,12 +185,18 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     if (!e) return;
     try {
       const expr = e.buildRoll(template);
-      const roll = evaluateRoll(expr, { scope: e.compute().scope });
       const formula = toFormula(expr);
-      manager.events.emit('roller:rolled', {
-        tableTitle: `${doc.title || 'Ficha'} — ${ROLL_LABELS[template] ?? template}`,
-        steps: [{ title: doc.title || 'Ficha', formula, roll, text: `Total: ${String(roll.value)}` }],
-      });
+      const label = `${doc.title || 'Ficha'} — ${ROLL_LABELS[template] ?? template}`;
+      // via hook do plugin de rolagens (mesa 3D/overlay quando abertos);
+      // fallback: rola aqui e emite o evento para quem estiver ouvindo
+      const handled = manager.hooks.call('roller:roll', { formula, label });
+      if (handled === undefined) {
+        const roll = evaluateRoll(expr, { scope: e.compute().scope });
+        manager.events.emit('roller:rolled', {
+          tableTitle: label,
+          steps: [{ title: doc.title || 'Ficha', formula, roll, text: `Total: ${String(roll.value)}` }],
+        });
+      }
     } catch (err) {
       console.error('[sheet] roll failed', err);
     }
