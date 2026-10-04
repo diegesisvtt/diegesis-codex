@@ -8,6 +8,7 @@ import {
   createDocument as createSheetDocument,
   defineSystemPack,
   type CharacterDocument,
+  type EffectInstance,
 } from '@diegesis/sheet';
 import { fromFormula } from '@diegesis/dice-notation';
 import { parseSheetLayout, SHEET_TEMPLATE_MONSTRO, SHEET_TEMPLATE_PERSONAGEM, type SheetLayout } from './sheetLayout';
@@ -104,6 +105,17 @@ export function parseSheet(content: string | null | undefined): CharacterDocumen
   } catch {
     return createDefaultSheet();
   }
+}
+
+/**
+ * Remove instâncias de efeito cujo `ref` não tem definição conhecida (ex.:
+ * efeitos embutidos removidos do pack, defs customizadas excluídas). Sem
+ * isso o SheetEngine explode com UnknownEffectError no primeiro compute.
+ * Instâncias inline (definição embutida) são sempre preservadas.
+ */
+export function stripUnknownEffects<T extends { effects: EffectInstance[] }>(doc: T, knownRefs: ReadonlySet<string>): T {
+  const effects = doc.effects.filter((fx) => fx.inline || !fx.ref || knownRefs.has(fx.ref));
+  return effects.length === doc.effects.length ? doc : { ...doc, effects };
 }
 
 /** texto indexável (FTS/RAG): identidade + valores base + rótulos de efeitos */

@@ -10,6 +10,7 @@ import { Check, Pencil, RotateCcw, Sparkles } from 'lucide-react';
 import {
   SheetEngine,
   createSheetBus,
+  defineSystemPack,
   getPath,
   setPath,
   type ComputedSheet,
@@ -19,7 +20,7 @@ import {
 import { evaluateRoll } from '@diegesis/dice-core';
 import { toFormula } from '@diegesis/dice-notation';
 import type { DocNode } from '@shared/types';
-import { osrPack, parseSheet, serializeSheet, type SheetDocumentWithLayout } from '@shared/sheet';
+import { osrPack, parseSheet, serializeSheet, stripUnknownEffects, type SheetDocumentWithLayout } from '@shared/sheet';
 import { parseEffectDefinitions } from '@shared/sheetEffects';
 import {
   builtinSheetTemplates,
@@ -86,6 +87,12 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   customDefsRef.current = customDefs;
   const effectDefs = useMemo(() => customDefs.map((d) => ({ id: d.id, label: d.label })), [customDefs]);
 
+  /** pack OSR + definições do reino: o motor já nasce conhecendo todos os refs */
+  const sheetPack = useMemo(() => defineSystemPack({ ...osrPack, definitions: customDefs }), [customDefs]);
+  const sheetPackRef = useRef(sheetPack);
+  sheetPackRef.current = sheetPack;
+  const knownEffectRefs = () => new Set(customDefsRef.current.map((d) => d.id));
+
   const [templateId, setTemplateId] = useState<string | undefined>(
     () => (parseSheet(doc.content) as SheetDocumentWithLayout).templateId,
   );
@@ -122,9 +129,10 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   // motor por documento: cria no mount, persiste a cada 'computed', destrói no unmount
   useEffect(() => {
     const bus = createSheetBus();
-    const engine = new SheetEngine(parseSheet(doc.content), { pack: osrPack, bus });
-    // efeitos globais do reino: registra definições para que refs resolvam
-    for (const def of customDefsRef.current) engine.registerDefinition(def);
+    // refs sem definição (efeitos removidos) são descartados na carga —
+    // o SheetEngine explode com UnknownEffectError no primeiro compute
+    const initialDoc = stripUnknownEffects(parseSheet(doc.content), knownEffectRefs());
+    const engine = new SheetEngine(initialDoc, { pack: sheetPackRef.current, bus });
     engineRef.current = engine;
     // conteúdo que este editor conhece/persistiu — para distinguir mudanças externas de ecos
     let lastKnownContent = doc.content ?? buildContentRef.current();
@@ -158,7 +166,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       dirty.current = false;
       lastKnownContent = external.content ?? '';
-      const parsed = parseSheet(external.content) as SheetDocumentWithLayout;
+      const parsed = stripUnknownEffects(parseSheet(external.content), knownEffectRefs()) as SheetDocumentWithLayout;
       setLayoutOverride(parsed.layout ?? null);
       setTemplateId(parsed.templateId);
       engine.loadDocument(parsed);
