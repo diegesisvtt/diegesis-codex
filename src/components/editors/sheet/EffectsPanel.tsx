@@ -20,12 +20,11 @@ const VALUE_OPS: [ValueOp, string][] = [
 
 export interface EffectsPanelProps {
   custom: EffectDefinition[];
-  builtin: readonly EffectDefinition[];
   onSave(def: EffectDefinition): void;
   onDelete(id: string): void;
 }
 
-export function EffectsPanel({ custom, builtin, onSave, onDelete }: EffectsPanelProps) {
+export function EffectsPanel({ custom, onSave, onDelete }: EffectsPanelProps) {
   const [selectedId, setSelectedId] = useState<string | null>(custom[0]?.id ?? null);
   const selected = custom.find((d) => d.id === selectedId) ?? null;
 
@@ -185,16 +184,6 @@ export function EffectsPanel({ custom, builtin, onSave, onDelete }: EffectsPanel
           </button>
         </Section>
       )}
-
-      <Section title="Efeitos embutidos do pack">
-        <div className="flex flex-wrap gap-1">
-          {builtin.map((d) => (
-            <span key={d.id} className="px-2 py-0.5 rounded-md border border-line text-[11px] text-ink-3">
-              {d.label}
-            </span>
-          ))}
-        </div>
-      </Section>
     </div>
   );
 }

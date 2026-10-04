@@ -84,10 +84,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   );
   const customDefsRef = useRef(customDefs);
   customDefsRef.current = customDefs;
-  const effectDefs = useMemo(
-    () => [...(osrPack.definitions ?? []).map((d) => ({ id: d.id, label: d.label })), ...customDefs.map((d) => ({ id: d.id, label: d.label }))],
-    [customDefs],
-  );
+  const effectDefs = useMemo(() => customDefs.map((d) => ({ id: d.id, label: d.label })), [customDefs]);
 
   const [templateId, setTemplateId] = useState<string | undefined>(
     () => (parseSheet(doc.content) as SheetDocumentWithLayout).templateId,
@@ -492,12 +489,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
           </div>
         )
       ) : (
-        <EffectsPanel
-          custom={customDefs}
-          builtin={osrPack.definitions ?? []}
-          onSave={saveEffectDef}
-          onDelete={deleteEffectDef}
-        />
+        <EffectsPanel custom={customDefs} onSave={saveEffectDef} onDelete={deleteEffectDef} />
       )}
     </PanelShell>
   ) : undefined;

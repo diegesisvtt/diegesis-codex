@@ -22,8 +22,8 @@ export const SHEET_DOC_TYPE = 'diegesis/sheet';
  * System pack OSR. Base aninhada (pv.atual/max, desl.quad) para que paths
  * derivados não colidam com folhas; derived expõem valores calculados;
  * rollTemplates são as rolagens prontas (ataque 1d20+@atq, moral 2d6, dano
- * 1d6). Efeitos podem somar em paths (ca, atq, pv.max) ou transformar
- * rolagens por tag ('dano').
+ * 1d6). Nenhuma definição de efeito é embutida — efeitos são criados pelo
+ * usuário como globais do reino e registrados no motor em runtime.
  */
 export const osrPack = defineSystemPack({
   id: 'diegesis/osr',
@@ -46,33 +46,8 @@ export const osrPack = defineSystemPack({
     moral: { expr: fromFormula('2d6'), tags: ['moral'] },
     save: { expr: fromFormula('1d20'), tags: ['save'] },
   },
-  definitions: [
-    {
-      id: 'escudo',
-      label: 'Escudo',
-      changes: [{ kind: 'value', path: 'ca', op: 'add', value: '2' }],
-    },
-    {
-      id: 'bencao',
-      label: 'Bênção',
-      changes: [{ kind: 'value', path: 'atq', op: 'add', value: '1' }],
-    },
-    {
-      id: 'forca-do-touro',
-      label: 'Força do Touro',
-      changes: [{ kind: 'roll', target: 'dano', transform: { bonus: '2' } }],
-    },
-    {
-      id: 'gigantismo',
-      label: 'Gigantismo (dado de vida ↑)',
-      changes: [{ kind: 'value', path: 'dadoVida', op: 'upgrade', value: 'dado', steps: 1 }],
-    },
-    {
-      id: 'ferido',
-      label: 'Ferido',
-      changes: [{ kind: 'value', path: 'atq', op: 'add', value: '-2' }],
-    },
-  ],
+  // sem efeitos embutidos: todas as definições são criadas pelo usuário
+  // (efeitos globais do reino — shared/sheetEffects.ts)
 });
 
 // ---------- parse / serialização ----------
