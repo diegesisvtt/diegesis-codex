@@ -1,0 +1,47 @@
+// Efeitos customizados globais do reino: definições criadas pelo usuário no
+// painel da ficha, persistidas em RealmSettings.sheetEffects e registradas
+// no SheetEngine em runtime (registerDefinition) — aplicáveis em qualquer
+// ficha do reino, ao lado das definições embutidas do pack.
+import type { Change, EffectDefinition } from '@diegesis/sheet';
+
+/** valida entrada hostil (realm settings, imports); descarta defs inválidas */
+export function parseEffectDefinitions(raw: unknown): EffectDefinition[] {
+  if (!raw || typeof raw !== 'object') return [];
+  const list = Array.isArray(raw) ? raw : Object.values(raw);
+  const out: EffectDefinition[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const d = item as Record<string, unknown>;
+    if (typeof d.id !== 'string' || !d.id) continue;
+    if (typeof d.label !== 'string' || !d.label) continue;
+    const changes = Array.isArray(d.changes) ? (d.changes.filter(isChange) as Change[]) : [];
+    if (changes.length === 0) continue;
+    out.push({ id: d.id, label: d.label, changes });
+  }
+  return out;
+}
+
+function isChange(c: unknown): boolean {
+  if (!c || typeof c !== 'object') return false;
+  const k = (c as Record<string, unknown>).kind;
+  return k === 'value' || k === 'roll' || k === 'flag';
+}
+
+/** id estável a partir do rótulo (prefixo custom: evita colisão com o pack) */
+export function newEffectId(label: string): string {
+  const slug =
+    label
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'efeito';
+  return `custom:${slug}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/** resumo curto de uma alteração para listagens */
+export function summarizeChange(c: Change): string {
+  if (c.kind === 'value') return `${c.path} ${c.op} ${c.value}`;
+  if (c.kind === 'roll') return `rolagem[${c.target}]${c.transform.bonus ? ` ${c.transform.bonus.startsWith('-') ? '' : '+'}${c.transform.bonus}` : ''}`;
+  return `${c.path} = ${String(c.value)}`;
+}

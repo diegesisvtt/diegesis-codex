@@ -30,6 +30,8 @@ export interface SheetBlockCtx {
   removeEffect: (id: string) => void;
   effectLabel: (fx: EffectInstance) => string;
   updateBlock: (id: string, patch: Record<string, unknown>) => void;
+  /** definições aplicáveis (pack + customizadas do reino) */
+  effectDefs: { id: string; label: string }[];
 }
 
 export function SheetBlockContent({ block, ctx }: { block: SheetBlock; ctx: SheetBlockCtx }) {
@@ -227,7 +229,7 @@ function EffectsBlock({ ctx }: { ctx: SheetBlockCtx }) {
   return (
     <div className="h-full overflow-y-auto custom-scrollbar flex flex-col gap-1.5 py-0.5">
       <div className="flex gap-1.5 flex-wrap">
-        {(osrPack.definitions ?? []).map((def) => (
+        {ctx.effectDefs.map((def) => (
           <button
             key={def.id}
             type="button"

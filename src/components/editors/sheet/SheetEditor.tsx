@@ -6,19 +6,21 @@
 // modelos nomeados por reino (Personagem, Monstro/NPC, ...): a ficha herda
 // o layout do modelo e pode sobrescrevê-lo individualmente.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Pencil, RotateCcw } from 'lucide-react';
+import { Check, Pencil, RotateCcw, Sparkles } from 'lucide-react';
 import {
   SheetEngine,
   createSheetBus,
   getPath,
   setPath,
   type ComputedSheet,
+  type EffectDefinition,
   type EffectInstance,
 } from '@diegesis/sheet';
 import { evaluateRoll } from '@diegesis/dice-core';
 import { toFormula } from '@diegesis/dice-notation';
 import type { DocNode } from '@shared/types';
 import { osrPack, parseSheet, serializeSheet, type SheetDocumentWithLayout } from '@shared/sheet';
+import { parseEffectDefinitions } from '@shared/sheetEffects';
 import {
   builtinSheetTemplates,
   clampBlock,
@@ -37,7 +39,9 @@ import { SheetCanvas } from './SheetCanvas';
 import { SheetBlockContent, ROLL_LABELS, type SheetBlockCtx } from './blocks';
 import { FloatingToolbar, toolItem } from './FloatingToolbar';
 import { BlockConfig } from './BlockConfig';
+import { EffectsPanel } from './EffectsPanel';
 import { SheetTemplateMenu } from './SheetTemplateMenu';
+import { PanelShell } from '../../ui/PanelShell';
 
 export function SheetEditor({ doc }: { doc: DocNode }) {
   const { updateDocument, flushDocument, subscribeExternalDocChange, uiState, saveUiState, activeRealmId } = useStore();
@@ -49,6 +53,8 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   const [editing, setEditing] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [armedTool, setArmedTool] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelTab, setPanelTab] = useState<'bloco' | 'efeitos'>('bloco');
   const dragGuardRef = useRef(false);
 
   // ---------- modelos (templates) ----------
@@ -70,6 +76,18 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     const raw = activeRealmId ? uiState.realmSettings?.[activeRealmId]?.sheetLayouts?.[osrPack.id] : undefined;
     return parseSheetLayout(raw);
   }, [uiState.realmSettings, activeRealmId]);
+
+  /** efeitos globais do reino (definições customizadas) */
+  const customDefs = useMemo(
+    () => parseEffectDefinitions(activeRealmId ? uiState.realmSettings?.[activeRealmId]?.sheetEffects : undefined),
+    [uiState.realmSettings, activeRealmId],
+  );
+  const customDefsRef = useRef(customDefs);
+  customDefsRef.current = customDefs;
+  const effectDefs = useMemo(
+    () => [...(osrPack.definitions ?? []).map((d) => ({ id: d.id, label: d.label })), ...customDefs.map((d) => ({ id: d.id, label: d.label }))],
+    [customDefs],
+  );
 
   const [templateId, setTemplateId] = useState<string | undefined>(
     () => (parseSheet(doc.content) as SheetDocumentWithLayout).templateId,
@@ -108,6 +126,8 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   useEffect(() => {
     const bus = createSheetBus();
     const engine = new SheetEngine(parseSheet(doc.content), { pack: osrPack, bus });
+    // efeitos globais do reino: registra definições para que refs resolvam
+    for (const def of customDefsRef.current) engine.registerDefinition(def);
     engineRef.current = engine;
     // conteúdo que este editor conhece/persistiu — para distinguir mudanças externas de ecos
     let lastKnownContent = doc.content ?? buildContentRef.current();
@@ -162,6 +182,14 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc.id]);
+
+  // registra/atualiza definições customizadas no motor vivo (efeitos do reino)
+  useEffect(() => {
+    const e = engineRef.current;
+    if (!e) return;
+    for (const def of customDefs) e.registerDefinition(def);
+    e.refresh();
+  }, [customDefs]);
 
   const engine = () => engineRef.current;
 
@@ -290,6 +318,33 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     if (templateRef.current === id) applyTemplate(SHEET_TEMPLATE_PERSONAGEM);
   };
 
+  // ---------- efeitos globais do reino ----------
+
+  const rawRealmEffects = (activeRealmId ? uiState.realmSettings?.[activeRealmId]?.sheetEffects : undefined) ?? {};
+
+  const writeRealmEffects = (map: Record<string, EffectDefinition>) => {
+    if (!activeRealmId) return;
+    const realmSettings = {
+      ...(uiState.realmSettings ?? {}),
+      [activeRealmId]: { ...(uiState.realmSettings?.[activeRealmId] ?? {}), sheetEffects: map },
+    };
+    saveUiState({ realmSettings });
+  };
+
+  const saveEffectDef = (def: EffectDefinition) => writeRealmEffects({ ...rawRealmEffects, [def.id]: def });
+
+  const deleteEffectDef = (id: string) => {
+    const map = { ...rawRealmEffects };
+    delete map[id];
+    writeRealmEffects(map);
+  };
+
+  /** abre o painel de propriedades numa aba (selecionar bloco → aba Bloco) */
+  const openPanel = (tab: 'bloco' | 'efeitos') => {
+    setPanelTab(tab);
+    setPanelOpen(true);
+  };
+
   /** remove o override da ficha — volta a herdar o modelo */
   const resetToTemplate = () => {
     layoutRef.current = null;
@@ -318,9 +373,15 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     removeEffect: (id) => engine()?.removeEffect(id),
     effectLabel,
     updateBlock,
+    effectDefs,
   };
 
   const selectedBlock = selectedId ? layout.blocks.find((b) => b.id === selectedId) : undefined;
+
+  const selectBlock = (id: string | null) => {
+    setSelectedId(id);
+    if (id && editing) openPanel('bloco');
+  };
 
   const topbar = (
     <div className="flex items-center gap-2">
@@ -349,6 +410,19 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
             Herdar modelo
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => (panelOpen && panelTab === 'efeitos' ? setPanelOpen(false) : openPanel('efeitos'))}
+          title="Gerenciar efeitos globais do reino"
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] transition-colors ${
+            panelOpen && panelTab === 'efeitos'
+              ? 'border-sheet/60 bg-sheet-soft text-sheet-strong'
+              : 'border-line bg-elevated/60 text-ink-2 hover:text-ink-1 hover:border-sheet/40'
+          }`}
+        >
+          <Sparkles size={13} />
+          Efeitos
+        </button>
         <button
           type="button"
           onClick={() => {
@@ -395,15 +469,37 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     </section>
   ) : undefined;
 
-  const floating = editing ? (
-    <>
-      <FloatingToolbar armedTool={armedTool} onArm={setArmedTool} dragGuardRef={dragGuardRef} />
-      {selectedBlock && (
-        <div className="absolute top-3 right-3 z-40" onClick={(e) => e.stopPropagation()}>
+  const floating = editing ? <FloatingToolbar armedTool={armedTool} onArm={setArmedTool} dragGuardRef={dragGuardRef} /> : undefined;
+
+  const sidePanel = panelOpen ? (
+    <PanelShell
+      title={panelTab === 'bloco' ? (selectedBlock ? `Bloco · ${selectedBlock.type}` : 'Propriedades') : 'Efeitos globais'}
+      width={288}
+      onClose={() => setPanelOpen(false)}
+      tabs={[
+        { id: 'bloco', title: 'Bloco' },
+        { id: 'efeitos', title: 'Efeitos' },
+      ]}
+      tab={panelTab}
+      onTabChange={(id) => setPanelTab(id as 'bloco' | 'efeitos')}
+    >
+      {panelTab === 'bloco' ? (
+        selectedBlock ? (
           <BlockConfig block={selectedBlock} onChange={(patch) => updateBlock(selectedBlock.id, patch)} />
-        </div>
+        ) : (
+          <div className="text-[12px] text-ink-3 leading-snug">
+            Selecione um bloco no canvas para editar suas propriedades.
+          </div>
+        )
+      ) : (
+        <EffectsPanel
+          custom={customDefs}
+          builtin={osrPack.definitions ?? []}
+          onSave={saveEffectDef}
+          onDelete={deleteEffectDef}
+        />
       )}
-    </>
+    </PanelShell>
   ) : undefined;
 
   return (
@@ -412,7 +508,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
       editing={editing}
       selectedId={selectedId}
       armedTool={armedTool}
-      onSelect={setSelectedId}
+      onSelect={selectBlock}
       onMoveBlock={onMoveBlock}
       onResizeBlock={onResizeBlock}
       onRemoveBlock={onRemoveBlock}
@@ -424,6 +520,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
       topbar={topbar}
       footer={footer}
       floating={floating}
+      sidePanel={sidePanel}
     />
   );
 }

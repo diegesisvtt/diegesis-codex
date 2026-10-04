@@ -1,6 +1,7 @@
 // Types shared between main, preload and renderer.
 
 import type { SheetLayout, SheetTemplate } from './sheetLayout';
+import type { EffectDefinition } from '@diegesis/sheet';
 
 export const APP_VERSION = '1.0.0';
 
@@ -120,6 +121,8 @@ export interface RealmSettings {
   sheetLayouts?: Record<string, SheetLayout>;
   /** named sheet templates for this realm, keyed by template id */
   sheetTemplates?: Record<string, SheetTemplate>;
+  /** user-created global effect definitions, keyed by effect id */
+  sheetEffects?: Record<string, EffectDefinition>;
 }
 
 export interface AudioUiState {
@@ -327,6 +330,70 @@ export interface RealmTransferResult {
   filePath?: string;
 }
 
+// ---------- cloud sync ----------
+
+export type SyncProviderKind = 'local' | 'webdav' | 'onedrive' | 's3';
+
+export type SyncState = 'disabled' | 'idle' | 'syncing' | 'offline' | 'error' | 'auth-required';
+
+export interface SyncLogEntry {
+  at: number;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+}
+
+export interface SyncStatus {
+  state: SyncState;
+  providerId: SyncProviderKind | null;
+  enabled: boolean;
+  lastSyncAt: number | null;
+  pending: number;
+  conflictCount: number;
+  lastError: string | null;
+  log: SyncLogEntry[];
+}
+
+export interface SyncConflictInfo {
+  id: string;
+  realmId: string;
+  docId: string;
+  title: string;
+  detectedAt: number;
+}
+
+export interface SyncVersionInfo {
+  docId: string;
+  timestamp: number;
+  path: string;
+}
+
+export interface RemoteRealmInfo {
+  realmId: string;
+  name: string;
+  updatedAt: number;
+  docCount: number;
+}
+
+export interface SyncSettings {
+  provider: AIProviderConfig | null;
+  enabled: boolean;
+  realmIds: string[];
+  intervalMin: number;
+  retentionDays: number;
+  deviceId: string;
+}
+
+export interface OneDriveAuthResult {
+  ok: boolean;
+  tokens?: { accessToken: string; refreshToken: string; expiresAt: number };
+  error?: string;
+}
+
+export interface SyncOperationResult {
+  ok: boolean;
+  error?: string;
+}
+
 // ---------- player view (second window) ----------
 
 /** hexcrawl viewport: CENTER of the view in hex-space world coordinates +
@@ -440,6 +507,29 @@ export interface DiegesisCodexApi {
     onState(cb: (state: PlayerViewState) => void): () => void;
     /** GM window: the player window was opened/closed */
     onStatus(cb: (status: { open: boolean }) => void): () => void;
+  };
+  sync: {
+    /** provider metadata (fields shown in the settings form) */
+    providers(): Promise<ProviderInfo[]>;
+    getSettings(): Promise<SyncSettings>;
+    setProvider(cfg: AIProviderConfig | null): Promise<void>;
+    setPrefs(patch: Partial<Pick<SyncSettings, 'enabled' | 'realmIds' | 'intervalMin' | 'retentionDays'>>): Promise<void>;
+    testProvider(providerId: string, config: Record<string, string>): Promise<ProviderTestResult>;
+    /** interactive Microsoft sign-in via the system browser */
+    onedriveAuth(clientId?: string): Promise<OneDriveAuthResult>;
+    /** native folder picker for the local provider */
+    pickFolder(): Promise<string | null>;
+    now(realmId?: string): Promise<void>;
+    status(): Promise<SyncStatus | null>;
+    onStatus(cb: (status: SyncStatus) => void): () => void;
+    listConflicts(): Promise<SyncConflictInfo[]>;
+    /** returns an error message, or null on success */
+    resolveConflict(id: string, resolution: 'local' | 'remote' | 'both'): Promise<string | null>;
+    listVersions(realmId: string, docId: string): Promise<SyncVersionInfo[]>;
+    /** returns an error message, or null on success */
+    restoreVersion(realmId: string, docId: string, timestamp: number): Promise<string | null>;
+    listRemoteRealms(): Promise<RemoteRealmInfo[]>;
+    restoreRealm(realmId: string): Promise<SyncOperationResult>;
   };
 }
 

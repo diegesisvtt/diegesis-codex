@@ -34,8 +34,10 @@ export interface SheetCanvasProps {
   topbar?: React.ReactNode;
   /** conteúdo abaixo do canvas (audit trail) */
   footer?: React.ReactNode;
-  /** overlays flutuantes (toolbar, painel de config) — dentro do DndContext */
+  /** overlays flutuantes (toolbar) — dentro do DndContext */
   floating?: React.ReactNode;
+  /** painel lateral docked de propriedades (PanelShell) */
+  sidePanel?: React.ReactNode;
 }
 
 interface Metrics {
@@ -106,26 +108,29 @@ export function SheetCanvas(props: SheetCanvasProps) {
 
   return (
     <DndContext sensors={sensors} modifiers={editing ? [snapToGrid] : []} onDragEnd={onDragEnd}>
-      <div className="sheet-theme relative h-full bg-app">
-        <div className="h-full overflow-y-auto custom-scrollbar" onClick={() => props.onSelect(null)}>
-          <div className="max-w-[860px] mx-auto px-6 pt-4 pb-24 flex flex-col gap-3">
-            {props.topbar}
-            <CanvasDropZone
-              innerRef={canvasRef}
-              editing={editing}
-              height={rows * stepY}
-              crosshair={editing && props.armedTool !== null}
-              onClick={onCanvasClick}
-            >
-              {width > 0 &&
-                layout.blocks.map((b) => (
-                  <BlockShell key={b.id} block={b} metrics={metrics} canvasProps={props} />
-                ))}
-            </CanvasDropZone>
-            {props.footer}
+      <div className="sheet-theme h-full bg-app flex min-h-0">
+        <div className="relative flex-1 min-w-0">
+          <div className="h-full overflow-y-auto custom-scrollbar" onClick={() => props.onSelect(null)}>
+            <div className="max-w-[860px] mx-auto px-6 pt-4 pb-24 flex flex-col gap-3">
+              {props.topbar}
+              <CanvasDropZone
+                innerRef={canvasRef}
+                editing={editing}
+                height={rows * stepY}
+                crosshair={editing && props.armedTool !== null}
+                onClick={onCanvasClick}
+              >
+                {width > 0 &&
+                  layout.blocks.map((b) => (
+                    <BlockShell key={b.id} block={b} metrics={metrics} canvasProps={props} />
+                  ))}
+              </CanvasDropZone>
+              {props.footer}
+            </div>
           </div>
+          {props.floating}
         </div>
-        {props.floating}
+        {props.sidePanel}
       </div>
     </DndContext>
   );
