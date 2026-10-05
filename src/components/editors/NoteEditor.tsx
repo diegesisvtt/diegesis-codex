@@ -1,6 +1,6 @@
 // Notion-like note editor built on BlockNote. Drag handle, side menu,
 // slash menu and formatting toolbar are all native BlockNote UI.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   useCreateBlockNote,
   FormattingToolbar,
@@ -15,22 +15,65 @@ import { BlockNoteView } from '@blocknote/ariakit';
 import { pt } from '@blocknote/core/locales';
 import { BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core';
 import { filterSuggestionItems, insertOrUpdateBlockForSlashMenu } from '@blocknote/core/extensions';
-import { ImagePlus, Sparkles, Table } from 'lucide-react';
+import { BookMarked, Clock, FileText, ImagePlus, Layers, Sparkles, Table } from 'lucide-react';
 import { REF_DRAG_MIME, parseExplorerDragRef } from '@shared/dragDrop';
 import type { DocNode } from '@shared/types';
 import { parseNoteContent } from '@shared/blockContent';
 import { useStore } from '../../state/store';
+import { Badge } from '../ui/Badge';
 import { DocIconPicker } from './shared/DocIconPicker';
 import { AudioBlock } from './note/audioBlock';
 import { InteractiveTableBlock } from './note/tableBlock';
+import { CalloutBlockNote } from './note/calloutBlock';
+import { InlineAiPopover } from './note/InlineAiPopover';
+
+/** rótulo legível por tipo de documento (metadados) */
+const DOC_TYPE_LABEL: Record<string, string> = {
+  'core/note': 'Nota',
+  'core/whiteboard': 'Quadro branco',
+  'core/pdf': 'PDF',
+  'hexcrawl/map': 'Mapa',
+  'diegesis/timeline': 'Linha do tempo',
+  'diegesis/table': 'Tabela',
+  'diegesis/sheet': 'Ficha',
+};
+
+/** contagem aproximada de palavras do conteúdo serializado (BlockNote JSON) */
+function countWords(content: string | null): number {
+  if (!content) return 0;
+  try {
+    const parsed = JSON.parse(content);
+    let words = 0;
+    const walk = (node: unknown): void => {
+      if (Array.isArray(node)) {
+        for (const x of node) walk(x);
+        return;
+      }
+      if (node && typeof node === 'object') {
+        const n = node as { text?: string; content?: unknown; children?: unknown };
+        if (typeof n.text === 'string' && n.text.trim()) {
+          words += n.text.trim().split(/\s+/).filter(Boolean).length;
+        }
+        if (n.content) walk(n.content);
+        if (n.children) walk(n.children);
+      }
+    };
+    walk(parsed);
+    return words;
+  } catch {
+    return 0;
+  }
+}
 
 /** note schema: defaults + custom blocks (audio: disk-backed, loop-capable;
- *  interactiveTable: embeds a diegesis/table document with roll button) */
+ *  interactiveTable: embeds a diegesis/table document with roll button;
+ *  callout: destaque tático rule/lore/secret/quote) */
 const schema = BlockNoteSchema.create({
   blockSpecs: {
     ...defaultBlockSpecs,
     audio: AudioBlock(),
     interactiveTable: InteractiveTableBlock(),
+    callout: CalloutBlockNote(),
   },
 });
 
@@ -93,10 +136,15 @@ export function NoteEditor({
   /** hide the icon picker when the host surface already provides one */
   showIcon?: boolean;
 }) {
-  const { docs, updateDocument, subscribeExternalDocChange, openPanel, setAiDraft } = useStore();
+  const { docs, updateDocument, subscribeExternalDocChange } = useStore();
   const [title, setTitle] = useState(doc.title);
   /** suppresses the persist round-trip while applying an external change */
   const applyingExternalRef = useRef(false);
+  /** inline "Ask AI" popover state */
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiAnchor, setAiAnchor] = useState({ x: 0, y: 0 });
+  const rootRef = useRef<HTMLDivElement>(null);
+  const aiTriggerRef = useRef<HTMLButtonElement>(null);
 
   const editor = useCreateBlockNote(
     {
@@ -130,6 +178,15 @@ export function NoteEditor({
           group: 'Diegesis Codex',
           icon: <Table size={18} />,
           subtext: 'Embute uma tabela rolável do universo',
+        },
+        {
+          title: 'Callout',
+          onItemClick: () =>
+            insertOrUpdateBlockForSlashMenu(editor, { type: 'callout', props: { variant: 'lore' } } as never),
+          aliases: ['destaque', 'lore', 'segredo', 'regra', 'citação', 'callout', 'quote'],
+          group: 'Diegesis Codex',
+          icon: <BookMarked size={18} />,
+          subtext: 'Bloco de destaque (regra, lore, segredo, citação)',
         },
       ],
       query
@@ -192,13 +249,34 @@ export function NoteEditor({
     });
   }, [editor, doc.id, subscribeExternalDocChange]);
 
-  /* ---------- ask AI about the current selection ---------- */
-  const askAI = () => {
-    const selected = editor.getSelectedText().trim();
-    if (!selected) return;
-    setAiDraft(`Sobre este trecho das minhas notas:\n\n> ${selected}\n\n`);
-    openPanel('ai-chat');
+  /* ---------- inline AI: open the popover near the selection/trigger ---------- */
+  const openAi = (rect?: DOMRect) => {
+    let r = rect;
+    if (!r) {
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed && sel.rangeCount) {
+        const sr = sel.getRangeAt(0).getBoundingClientRect();
+        if (sr && (sr.width || sr.height)) r = sr;
+      }
+    }
+    if (!r) r = aiTriggerRef.current?.getBoundingClientRect();
+    if (!r) r = rootRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setAiAnchor({ x: r.left, y: r.bottom + 8 });
+    setAiOpen(true);
   };
+
+  /* ---------- keyboard shortcut (Cmd/Ctrl+J) ---------- */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        openAi();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   /* ---------- click below content appends a paragraph ---------- */
   const handlePageClick = (e: React.MouseEvent) => {
@@ -252,8 +330,11 @@ export function NoteEditor({
     minute: '2-digit',
   }).format(doc.updatedAt);
 
+  const wordCount = useMemo(() => countWords(doc.content), [doc.content]);
+
   return (
     <div
+      ref={rootRef}
       className="h-full w-full bg-app flex flex-col overflow-hidden"
       onDragOver={handleDragOver}
       onDrop={handleDropRef}
@@ -332,7 +413,18 @@ export function NoteEditor({
                   }}
                 />
               </div>
-              <div className="text-[12px] text-ink-3 mt-1 mb-6 select-none">Editado {updatedAt}</div>
+              <div className="mt-2 flex items-center gap-1.5 flex-wrap select-none">
+                <Badge variant="arcane">
+                  <Layers size={10} /> {DOC_TYPE_LABEL[doc.type] ?? 'Documento'}
+                </Badge>
+                <Badge variant="neutral">
+                  <FileText size={10} /> {wordCount} palavra{wordCount === 1 ? '' : 's'}
+                </Badge>
+                <Badge variant="neutral">
+                  <Clock size={10} /> Editado {updatedAt}
+                </Badge>
+              </div>
+              <div className="mt-3 mb-5 h-px bg-gradient-to-r from-cyan-500/25 via-cyan-500/10 to-transparent" />
             </div>
           )}
         </div>
@@ -358,18 +450,20 @@ export function NoteEditor({
                 <CreateLinkButton key="createLinkButton" />
                 <button
                   key="askAI"
+                  ref={aiTriggerRef}
                   title="Perguntar à IA sobre a seleção"
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={askAI}
-                  className="bn-ask-ai"
+                  onClick={(e) => openAi((e.currentTarget as HTMLElement).getBoundingClientRect())}
+                  className="bn-ak-button bn-ak-secondary bn-ask-ai"
                 >
-                  <Sparkles size={15} strokeWidth={1.75} />
+                  <Sparkles size={16} strokeWidth={1.75} />
                 </button>
               </FormattingToolbar>
             )}
           />
         </BlockNoteView>
       </div>
+      {aiOpen && <InlineAiPopover editor={editor} anchor={aiAnchor} onClose={() => setAiOpen(false)} />}
       <input
         ref={coverInputRef}
         type="file"
