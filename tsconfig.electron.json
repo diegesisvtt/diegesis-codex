@@ -13,5 +13,6 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.electron.tsbuildinfo",
     "types": ["node"]
   },
-  "include": ["electron", "shared"]
+  "include": ["electron", "shared"],
+  "exclude": ["**/*.test.ts"]
 }
