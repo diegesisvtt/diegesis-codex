@@ -76,11 +76,11 @@ function TitleBlock({ ctx }: { ctx: SheetBlockCtx }) {
         onChange={(e) => ctx.setIdentity('nome', e.target.value)}
         placeholder="Nome do personagem"
         spellCheck={false}
-        className="w-full bg-transparent text-center font-display text-[30px] leading-tight font-semibold tracking-[0.06em] text-sheet-strong outline-none placeholder:text-ink-3/60 placeholder:font-display drop-shadow-[0_2px_10px_rgba(201,168,106,0.15)]"
+        className="w-full bg-transparent text-center font-display text-[30px] leading-tight font-semibold tracking-[0.06em] text-sheet-strong outline-none placeholder:text-ink-3/60 placeholder:font-display drop-shadow-[0_2px_10px_rgba(56,189,248,0.18)]"
       />
-      <div className="text-center text-[10.5px] uppercase tracking-[0.28em] text-ink-3 select-none">
-        {tipo || `${osrPack.id}@${osrPack.version}`}
-      </div>
+      {tipo && (
+        <div className="text-center text-[10.5px] uppercase tracking-[0.28em] text-ink-3 select-none">{tipo}</div>
+      )}
     </div>
   );
 }
@@ -214,7 +214,7 @@ function RollsBlock({ block, ctx }: { block: SheetBlock & { type: 'rolls' }; ctx
           key={id}
           type="button"
           onClick={() => ctx.rollTemplate(id)}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-line bg-elevated/70 text-[12px] font-medium text-ink-1 hover:border-sheet/60 hover:text-sheet-strong hover:shadow-[0_0_14px_rgba(201,168,106,0.22)] active:scale-[0.97] transition-all"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-line bg-elevated/70 text-[12px] font-medium text-ink-1 hover:border-sheet/60 hover:text-sheet-strong hover:shadow-[0_0_14px_rgba(56,189,248,0.28)] active:scale-[0.97] transition-all"
         >
           <Dices size={13} className="text-sheet" />
           {ROLL_LABELS[id] ?? id}
