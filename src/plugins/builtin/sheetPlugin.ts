@@ -5,6 +5,7 @@
 import { UserSquare } from 'lucide-react';
 import { PLUGIN_API_VERSION, type Plugin } from '../api/types';
 import { SheetEditor } from '../../components/editors/sheet/SheetEditor';
+import { SheetSettingsPage } from './sheet/SheetSettingsPage';
 import { createDefaultSheet, serializeSheet, SHEET_DOC_TYPE } from '@shared/sheet';
 
 export const sheetPlugin: Plugin = {
@@ -15,7 +16,7 @@ export const sheetPlugin: Plugin = {
     apiVersion: PLUGIN_API_VERSION,
     description: 'Fichas de personagem com motor de efeitos: atributos, derived, roll templates e audit trail.',
     author: 'Diegesis Codex',
-    permissions: ['ui', 'docs:read'],
+    permissions: ['ui', 'docs:read', 'settings'],
   },
   activate(ctx) {
     ctx.editors.add({ docType: SHEET_DOC_TYPE, component: SheetEditor });
@@ -26,6 +27,13 @@ export const sheetPlugin: Plugin = {
       iconColor: 'text-sheet',
       defaultTitle: 'Nova Ficha',
       defaultContent: () => serializeSheet(createDefaultSheet()),
+    });
+    ctx.settingsPages.add({
+      id: 'diegesis/sheet:settings',
+      title: 'Fichas',
+      icon: UserSquare,
+      order: 30,
+      component: SheetSettingsPage,
     });
   },
 };

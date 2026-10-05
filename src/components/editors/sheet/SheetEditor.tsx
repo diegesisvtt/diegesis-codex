@@ -14,6 +14,7 @@ import {
   getPath,
   setPath,
   type ComputedSheet,
+  type EffectDefinition,
   type EffectInstance,
 } from '@diegesis/sheet';
 import { evaluateRoll } from '@diegesis/dice-core';
@@ -31,6 +32,7 @@ import {
   parseSheetTemplate,
   sheetTabs,
   SHEET_FIXED_TABS,
+  SHEET_TAB_GERAL,
   SHEET_TAB_EFEITOS,
   SHEET_TEMPLATE_PERSONAGEM,
   type SheetBlock,
@@ -39,6 +41,7 @@ import {
 } from '@shared/sheetLayout';
 import { useStore } from '../../../state/store';
 import { usePluginManager } from '../../../plugins/manager';
+import { usePlugins } from '../../../plugins';
 import { SheetCanvas } from './SheetCanvas';
 import { SheetBlockContent, EffectsBlock, ROLL_LABELS, type SheetBlockCtx } from './blocks';
 import { FloatingToolbar, toolItem } from './FloatingToolbar';
@@ -46,6 +49,7 @@ import { BlockConfig } from './BlockConfig';
 import { DockPanel, type Dock } from './DockPanel';
 import { SheetTemplateMenu } from './SheetTemplateMenu';
 import { SheetPageTabs } from './SheetPageTabs';
+import { EffectCreator } from './EffectCreator';
 import {
   exportSheet as downloadSheet,
   exportTemplate as downloadTemplate,
@@ -57,7 +61,29 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   const { updateDocument, flushDocument, subscribeExternalDocChange, uiState, saveUiState, activeRealmId, createDocument, openDocument } =
     useStore();
   const manager = usePluginManager();
+  const plugins = usePlugins();
   const engineRef = useRef<SheetEngine | null>(null);
+
+  // IA disponível? (plugin core/ai-chat ativo + provider de chat configurado)
+  const aiPluginActive = plugins.some((p) => p.manifest.id === 'core/ai-chat' && p.active);
+  const [aiConfigured, setAiConfigured] = useState(false);
+  useEffect(() => {
+    if (!aiPluginActive) {
+      setAiConfigured(false);
+      return;
+    }
+    let alive = true;
+    window.diegesis.ai
+      .getSettings()
+      .then((s) => {
+        if (alive) setAiConfigured(!!s.chat);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [aiPluginActive]);
+  const aiAvailable = aiPluginActive && aiConfigured;
   const [computed, setComputed] = useState<ComputedSheet | null>(null);
   const [nome, setNome] = useState('');
   const [auditPath, setAuditPath] = useState<string | null>(null);
@@ -120,6 +146,24 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   sheetPackRef.current = sheetPack;
   const knownEffectRefs = () => new Set(customDefsRef.current.map((d) => d.id));
 
+  /** criação simples de efeito (aba Efeitos): salva como definição global do
+   *  reino e já aplica à ficha atual (registro síncrono no motor) */
+  const createAndApplyEffect = (def: EffectDefinition) => {
+    if (activeRealmId) {
+      const raw = (uiState.realmSettings?.[activeRealmId]?.sheetEffects ?? {}) as Record<string, EffectDefinition>;
+      saveUiState({
+        realmSettings: {
+          ...(uiState.realmSettings ?? {}),
+          [activeRealmId]: { ...(uiState.realmSettings?.[activeRealmId] ?? {}), sheetEffects: { ...raw, [def.id]: def } },
+        },
+      });
+    }
+    const e = engine();
+    if (!e) return;
+    e.registerDefinition(def);
+    e.applyEffect(def.id, { source: { kind: 'manual' } });
+  };
+
   const [templateId, setTemplateId] = useState<string | undefined>(
     () => (parseSheet(doc.content) as SheetDocumentWithLayout).templateId,
   );
@@ -164,6 +208,26 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
       blocks: l.blocks.map((b) => (blockTab(b, sheetTabs(l)) === id ? { ...b, tab: first } : b)),
     }));
     if (activeTabId === id) setActiveTab(first);
+  };
+  /** reordena abas customizadas: insere `fromId` imediatamente antes de `toId`.
+   *  Geral permanece primeira e Efeitos, última (drop nelas = início/fim) */
+  const reorderTab = (fromId: string, toId: string) => {
+    if (fromId === toId || SHEET_FIXED_TABS.has(fromId)) return;
+    mutateLayout((l) => {
+      const all = sheetTabs(l);
+      const from = all.find((t) => t.id === fromId);
+      if (!from) return l;
+      const geral = all.filter((t) => t.id === SHEET_TAB_GERAL);
+      const efeitos = all.filter((t) => t.id === SHEET_TAB_EFEITOS);
+      const middle = all.filter((t) => t.id !== SHEET_TAB_GERAL && t.id !== SHEET_TAB_EFEITOS && t.id !== fromId);
+      if (toId === SHEET_TAB_EFEITOS) middle.push(from);
+      else if (toId === SHEET_TAB_GERAL) middle.unshift(from);
+      else {
+        const idx = middle.findIndex((t) => t.id === toId);
+        middle.splice(idx === -1 ? middle.length : idx, 0, from);
+      }
+      return { ...l, tabs: [...geral, ...middle, ...efeitos] };
+    });
   };
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -450,6 +514,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
       onAdd={addTab}
       onRename={renameTab}
       onRemove={removeTab}
+      onReorder={reorderTab}
       fixedIds={SHEET_FIXED_TABS}
     />
   );
@@ -612,7 +677,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
 
   // aba fixa "Efeitos": página de sistema com os efeitos ativos da ficha
   const effectsBody = (
-    <div className="rounded-2xl border border-sheet/20 bg-gradient-to-b from-elevated/60 to-app/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] p-4 flex flex-col gap-2 min-h-[480px]">
+    <div className="rounded-2xl border border-sheet/20 bg-gradient-to-b from-elevated/60 to-app/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] p-4 flex flex-col gap-3 min-h-[480px]">
       <div className="flex items-center gap-2 select-none">
         <Sparkles size={13} className="text-sheet" />
         <span className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-sheet/90">
@@ -620,6 +685,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
         </span>
         <span className="ml-auto text-[10.5px] text-ink-3">definições globais em Configurações → Fichas</span>
       </div>
+      <EffectCreator aiAvailable={aiAvailable} realmId={activeRealmId} onCreate={createAndApplyEffect} />
       <div className="flex-1 min-h-0">
         <EffectsBlock ctx={blockCtx} />
       </div>

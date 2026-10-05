@@ -1,8 +1,9 @@
 // Abas/páginas da ficha — componente específico do domínio de fichas
 // (separado do `ui/Tabs` genérico do app). Parte visual da própria ficha:
 // Cinzel small-caps sobre um filete gradiente; aba ativa com sublinhado
-// dourado brilhante. Abas fixas (Geral/Efeitos) não podem ser removidas
-// nem renomeadas; as demais, em modo edição, ganham "×" e duplo clique.
+// dourado brilhante. Abas fixas (Geral/Efeitos) não podem ser removidas,
+// renomeadas nem arrastadas; as demais, em modo edição, ganham "×",
+// duplo clique (renomear) e drag para reordenar.
 import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import type { SheetTab } from '@shared/sheetLayout';
@@ -15,6 +16,7 @@ export function SheetPageTabs({
   onAdd,
   onRename,
   onRemove,
+  onReorder,
   fixedIds,
 }: {
   tabs: SheetTab[];
@@ -24,11 +26,15 @@ export function SheetPageTabs({
   onAdd: () => void;
   onRename: (id: string, title: string) => void;
   onRemove: (id: string) => void;
-  /** abas de sistema (sempre presentes): sem remoção/renomeação */
+  /** reordena: insere a aba `fromId` imediatamente antes de `toId` */
+  onReorder: (fromId: string, toId: string) => void;
+  /** abas de sistema (sempre presentes): sem remoção/renomeação/drag */
   fixedIds?: ReadonlySet<string>;
 }) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropId, setDropId] = useState<string | null>(null);
 
   const commitRename = () => {
     if (renamingId && draft.trim()) onRename(renamingId, draft.trim());
@@ -63,7 +69,39 @@ export function SheetPageTabs({
         }
 
         return (
-          <div key={t.id} className="group relative">
+          <div
+            key={t.id}
+            className={`group relative ${dragId === t.id ? 'opacity-40' : ''}`}
+            draggable={editing && !fixed && renamingId === null}
+            onDragStart={(e) => {
+              setDragId(t.id);
+              e.dataTransfer.effectAllowed = 'move';
+              e.dataTransfer.setData('text/plain', t.id);
+            }}
+            onDragEnd={() => {
+              setDragId(null);
+              setDropId(null);
+            }}
+            onDragOver={(e) => {
+              if (!editing || !dragId || dragId === t.id) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              setDropId(t.id);
+            }}
+            onDragLeave={() => {
+              if (dropId === t.id) setDropId(null);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (dragId && dragId !== t.id) onReorder(dragId, t.id);
+              setDragId(null);
+              setDropId(null);
+            }}
+          >
+            {/* indicador de inserção (drop) */}
+            {dropId === t.id && dragId && (
+              <span className="absolute left-0 top-1 bottom-1 w-[2px] rounded-full bg-sheet shadow-[0_0_8px_rgba(212,175,55,0.7)]" aria-hidden />
+            )}
             <button
               type="button"
               onClick={() => onSelect(t.id)}
@@ -75,10 +113,10 @@ export function SheetPageTabs({
                     }
                   : undefined
               }
-              title={editing && !fixed ? 'Duplo clique para renomear' : undefined}
+              title={editing && !fixed ? 'Arraste para reordenar · duplo clique para renomear' : undefined}
               className={`relative flex items-center gap-1.5 px-4 py-2 font-display text-[11.5px] uppercase tracking-[0.18em] transition-all duration-150 ${
-                active ? 'text-sheet-strong' : 'text-ink-3 hover:text-ink-1'
-              }`}
+                editing && !fixed ? 'cursor-grab active:cursor-grabbing' : ''
+              } ${active ? 'text-sheet-strong' : 'text-ink-3 hover:text-ink-1'}`}
             >
               {t.title}
               {active && (

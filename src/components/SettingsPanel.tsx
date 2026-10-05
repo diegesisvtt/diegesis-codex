@@ -7,11 +7,7 @@ import {
   Puzzle,
   RefreshCw,
   Settings2,
-  Sparkles,
 } from 'lucide-react';
-import type { EffectDefinition } from '@diegesis/sheet';
-import { parseEffectDefinitions } from '@shared/sheetEffects';
-import { EffectsPanel } from './editors/sheet/EffectsPanel';
 import {
   useExternalPlugins,
   usePluginManager,
@@ -26,7 +22,7 @@ import {
 import { useStore } from '../state/store';
 import { Button, Toggle } from './ui';
 
-type BuiltinSectionId = 'general' | 'plugins' | 'sheets';
+type BuiltinSectionId = 'general' | 'plugins';
 
 /** section ids: builtin ids, settings page ids, `schema:<pluginId>` (páginas
  *  implícitas) ou `plugin:<pluginId>` (deep-link, resolvido na renderização) */
@@ -34,7 +30,6 @@ type SettingsSectionId = string;
 
 const SECTIONS: { id: BuiltinSectionId; name: string; icon: typeof Info }[] = [
   { id: 'general', name: 'Geral', icon: Info },
-  { id: 'sheets', name: 'Fichas', icon: Sparkles },
   { id: 'plugins', name: 'Plugins', icon: Plug },
 ];
 
@@ -409,45 +404,6 @@ function PluginsSection() {
   );
 }
 
-/** Efeitos globais do reino: definições disponíveis para todas as fichas
- *  (aplicadas na aba fixa "Efeitos" do editor de ficha). */
-function SheetsSection() {
-  const { uiState, saveUiState, activeRealmId } = useStore();
-  const rawRealmEffects = (activeRealmId ? uiState.realmSettings?.[activeRealmId]?.sheetEffects : undefined) ?? {};
-  const customDefs = useMemo(() => parseEffectDefinitions(rawRealmEffects), [rawRealmEffects]);
-
-  const writeRealmEffects = (map: Record<string, EffectDefinition>) => {
-    if (!activeRealmId) return;
-    saveUiState({
-      realmSettings: {
-        ...(uiState.realmSettings ?? {}),
-        [activeRealmId]: { ...(uiState.realmSettings?.[activeRealmId] ?? {}), sheetEffects: map },
-      },
-    });
-  };
-
-  return (
-    <section className="bg-elevated border border-line rounded-lg p-5">
-      <h3 className="text-[14px] font-semibold text-ink-1 flex items-center gap-2 mb-1">
-        <Sparkles size={15} className="text-accent-ink" />
-        Efeitos globais do reino
-      </h3>
-      <p className="text-[12px] text-ink-3 mb-4 leading-relaxed">
-        Definições de efeito disponíveis para qualquer ficha deste reino — aplique-as na aba Efeitos da ficha.
-      </p>
-      <EffectsPanel
-        custom={customDefs}
-        onSave={(def) => writeRealmEffects({ ...rawRealmEffects, [def.id]: def })}
-        onDelete={(id) => {
-          const map = { ...rawRealmEffects };
-          delete map[id];
-          writeRealmEffects(map);
-        }}
-      />
-    </section>
-  );
-}
-
 // ---------- panel ----------
 
 export function SettingsPanel() {
@@ -538,17 +494,6 @@ export function SettingsPanel() {
                 <p className="text-[13px] text-ink-3 mt-1">Informações do aplicativo.</p>
               </div>
               <GeneralSection />
-            </>
-          )}
-          {section === 'sheets' && (
-            <>
-              <div>
-                <h2 className="text-lg font-semibold text-ink-1 tracking-tight">Fichas</h2>
-                <p className="text-[13px] text-ink-3 mt-1 leading-relaxed">
-                  Configurações das fichas de personagem do reino ativo.
-                </p>
-              </div>
-              <SheetsSection />
             </>
           )}
           {section === 'plugins' && (
