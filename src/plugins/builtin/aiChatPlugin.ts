@@ -1,8 +1,10 @@
 import { Sparkles } from 'lucide-react';
 import { AIChatPanel } from '../../components/AIChatPanel';
 import { PLUGIN_API_VERSION, type Plugin } from '../api/types';
+import { AiSettingsPage } from './ai/AiSettingsPage';
 
-/** AI assistant: right-panel view, toggle command and ribbon button. */
+/** AI assistant: right-panel view, toggle command, ribbon button and its own
+ *  settings page (providers + semantic index). */
 export const aiChatPlugin: Plugin = {
   manifest: {
     id: 'core/ai-chat',
@@ -11,14 +13,24 @@ export const aiChatPlugin: Plugin = {
     apiVersion: PLUGIN_API_VERSION,
     description: 'Chat com IA contextualizado pelos documentos do universo.',
     author: 'Diegesis Codex',
-    permissions: ['ui', 'commands', 'ai'],
+    permissions: ['ui', 'commands', 'ai', 'settings'],
   },
   activate(ctx) {
+    ctx.settingsPages.add({
+      id: 'core/ai-chat:settings',
+      title: 'IA',
+      icon: Sparkles,
+      order: 20,
+      component: AiSettingsPage,
+    });
+
     ctx.views.add({
       id: 'ai-chat',
       title: 'Assistente IA',
       location: 'right-panel',
       component: AIChatPanel,
+      icon: Sparkles,
+      order: 1,
     });
 
     ctx.commands.add({
@@ -27,14 +39,5 @@ export const aiChatPlugin: Plugin = {
       run: () => ctx.app.setAiChatOpen(!ctx.app.aiChatOpen),
     });
 
-    ctx.views.addRibbonItem({
-      id: 'core/ai-chat:ribbon',
-      title: 'Assistente IA',
-      icon: Sparkles,
-      command: 'core/ai-chat:toggle',
-      label: 'IA',
-      isActive: () => ctx.app.aiChatOpen,
-      order: 10,
-    });
   },
 };

@@ -4,8 +4,8 @@ import { TableEditor } from '../../components/editors/table/TableEditor';
 import { createDefaultTable, serializeTable } from '@shared/table';
 
 /**
- * Tabela Interativa — documento próprio ('diegesis/table') estilo Foundry
- * RollTable: linhas com peso, fórmula de dado opcional (faixas derivadas dos
+ * Tabela Interativa — documento próprio ('diegesis/table'): linhas com peso,
+ * fórmula de dado opcional (faixas derivadas dos
  * pesos), link de resultados para outros documentos, colar de planilha e
  * rolagem simples. Pode ser embutida em notas via bloco "Tabela interativa".
  */
@@ -16,7 +16,7 @@ export const tablePlugin: Plugin = {
     version: '1.0.0',
     apiVersion: PLUGIN_API_VERSION,
     description:
-      'Tabelas roláveis estilo Foundry: linhas com peso, fórmula de dado, links para documentos, importação por colagem e rolagem simples.',
+      'Tabelas roláveis: linhas com peso, fórmula de dado, links para documentos, importação por colagem e rolagem simples.',
     author: 'Diegesis Codex',
     permissions: ['ui', 'docs:read'],
   },

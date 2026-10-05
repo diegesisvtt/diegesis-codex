@@ -1,4 +1,3 @@
-import { Search } from 'lucide-react';
 import { PLUGIN_API_VERSION, type Plugin } from '../api/types';
 
 /**
@@ -24,14 +23,5 @@ export const searchPlugin: Plugin = {
       run: () => ctx.events.emit('palette:toggle', { palette: 'search' }),
     });
 
-    ctx.views.addRibbonItem({
-      id: 'core/search:ribbon',
-      title: 'Buscar',
-      icon: Search,
-      command: 'core/search:open',
-      label: 'Buscar',
-      kbd: 'Ctrl K',
-      order: 20,
-    });
   },
 };
