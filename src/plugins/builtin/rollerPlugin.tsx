@@ -1,16 +1,25 @@
-// Rolagens — plugin separado das tabelas: ouve 'roller:rolled' (emitido pelo
-// TableEditor, pelo bloco de tabela nas notas e pela mesa de Dados 3D), mantém
-// o histórico da sessão e o expõe no painel direito (mesma região do painel de
-// IA), aberto pela ribbon ou pela faixa de painéis — nunca como tab.
-// Inspirado no log de rolagens do Foundry VTT: cards com chips de dados
-// (máximo/mínimo destacados, descartados riscados) e rolagem direta no
-// rodapé do painel — animada na mesa 3D quando ela está aberta.
-import { useState, useSyncExternalStore } from 'react';
-import { ArrowDown, ArrowUp, Check, Copy, Dices, RotateCcw, Trash2, X } from 'lucide-react';
+// Rolagens — plugin único de rolagens E dados 3D: ouve 'roller:rolled' (emitido
+// pelo TableEditor, bloco de tabela nas notas, fichas e pelo próprio painel),
+// mantém o histórico da sessão e o expõe no painel direito. Cards com chips de
+// dados (máximo/mínimo destacados, descartados
+// riscados) e rolagem direta no rodapé.
+// Os dados 3D (overlay em tela cheia, Dice So Nice) são uma configuração deste
+// plugin: "Exibir dados em 3D" e "Esperar os dados 3D" (revelar o resultado só
+// após os dados assentarem). Toda rolagem passa por `dice3dBridge.presentRoll`.
+import { useRef, useState, useSyncExternalStore } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Dices, Send, Terminal, Trash2 } from 'lucide-react';
+import { MATERIALTYPES, TEXTURELIST, THEMES } from '@diegesis/dice';
 import { evaluateRoll, type RollResult as DiceRollResult, type TermResult } from '@diegesis/dice-core';
 import { parseFormula } from '@shared/table';
 import { PLUGIN_API_VERSION, type Plugin } from '../api/types';
-import { dice3dBridge } from '../../components/dice3d/bridge';
+import type { SettingDeclaration } from '../api/settings';
+import { dice3dBridge, ENVIRONMENTS, SHADOWS, type RollPayload } from '../../components/dice3d/bridge';
+import { Badge } from '../../components/ui/Badge';
+import { CommandInput } from '../../components/ui/input';
+import { DiceBar } from '../../components/codex/DiceButton';
+import { DieIcon } from '../../components/codex/DieIcon';
+import { RollResultCard } from '../../components/codex/RollResultCard';
 
 interface RolledStep {
   title: string;
@@ -55,36 +64,44 @@ function clearLog() {
 }
 
 /**
- * Rola uma fórmula a partir do painel. Com o overlay 3D ativo, delega para ele
- * (anima em tela cheia e loga ao assentar); senão rola na hora via dice-core e
- * loga direto. Retorna false quando a fórmula é inválida.
+ * Rola uma fórmula e a exibe via `presentRoll` (anima em 3D e respeita a
+ * setting "esperar dados 3D"). `includeTotal` acrescenta "Total: N" ao passo.
  */
-/**
- * Rola uma fórmula com rótulo próprio (hook 'roller:roll'): delega para a
- * mesa 3D / overlay quando disponíveis; senão rola na hora e loga.
- * Retorna false quando a fórmula é inválida.
- */
-function rollLabeled(formula: string, label: string): boolean {
-  if (!parseFormula(formula)) return false;
-  if (dice3dBridge.overlayHandler) {
-    dice3dBridge.overlayHandler(formula, label);
-    return true;
-  }
-  const roll = evaluateRoll(parseFormula(formula)!);
-  appendEntry(label, [{ title: label, formula, roll, text: `Total: ${String(roll.value)}` }]);
+function rollFormula(formula: string, label: string, includeTotal: boolean): boolean {
+  const expr = parseFormula(formula);
+  if (!expr) return false;
+  const roll = evaluateRoll(expr);
+  const payload: RollPayload = {
+    tableTitle: label,
+    steps: [{ title: label, formula, roll, text: includeTotal ? `Total: ${String(roll.value)}` : '' }],
+  };
+  dice3dBridge.presentRoll(payload, () => appendEntry(label, payload.steps));
   return true;
 }
 
+/** rolagem com rótulo próprio (hook 'roller:roll'): fichas, IA, etc. */
+function rollLabeled(formula: string, label: string): boolean {
+  return rollFormula(formula, label, true);
+}
+
 function rollFromPanel(src: string): boolean {
-  const formula = src.trim();
-  if (!parseFormula(formula)) return false;
-  if (dice3dBridge.overlayHandler) {
-    dice3dBridge.overlayHandler(formula, 'Rolagem Rápida');
-    return true;
+  return rollFormula(src.trim(), 'Rolagem Rápida', false);
+}
+
+/**
+ * Insere um dado na fórmula da caixa de texto (não rola): incrementa a
+ * contagem quando a fórmula já termina com o mesmo dado, senão acrescenta
+ * " + 1dN". Ex.: "1d20" + d20 → "2d20"; "1d20" + d6 → "1d20 + 1d6".
+ */
+function addDieToFormula(current: string, die: string): string {
+  const f = current.trim();
+  if (!f) return `1${die}`;
+  const m = f.match(new RegExp(`(\\d*)\\s*${die}\\s*$`));
+  if (m) {
+    const count = m[1] ? parseInt(m[1], 10) : 1;
+    return `${f.slice(0, m.index)}${count + 1}${die}`;
   }
-  const roll = evaluateRoll(parseFormula(formula)!);
-  appendEntry('Rolagem Rápida', [{ title: 'Rolagem Rápida', formula, roll, text: '' }]);
-  return true;
+  return `${f} + 1${die}`;
 }
 
 /** re-rola uma entrada simples (um passo com fórmula de dados) e loga o resultado */
@@ -136,7 +153,36 @@ function collectDieTerms(roll: DiceRollResult): TermResult[] {
   return terms;
 }
 
-/** chips de dados estilo Foundry: natural máximo em verde, mínimo em vermelho,
+/** faces únicas de um passo (ex.: [20] → chip "d20") */
+function facesOf(step: RolledStep): number[] {
+  const expr = parseFormula(step.formula);
+  if (!expr || !step.roll) return [];
+  const faces: number[] = [];
+  collectDieFaces(expr, faces);
+  return [...new Set(faces)];
+}
+
+/** status tático de um passo: crítico (20 natural) ou falha crítica (1 natural) */
+function critStatus(step: RolledStep): 'crit' | 'fail' | null {
+  if (!step.roll) return null;
+  const faces: number[] = [];
+  const expr = parseFormula(step.formula);
+  if (expr) collectDieFaces(expr, faces);
+  const terms = collectDieTerms(step.roll);
+  const aligned = faces.length === terms.length;
+  for (let ti = 0; ti < terms.length; ti++) {
+    const sides = aligned ? faces[ti] : null;
+    if (sides !== 20) continue;
+    for (const d of terms[ti].dice) {
+      if (!d.kept) continue;
+      if (d.value === 20) return 'crit';
+      if (d.value === 1) return 'fail';
+    }
+  }
+  return null;
+}
+
+/** chips de dados: natural máximo em verde, mínimo em vermelho,
  *  descartados (kh/kl) riscados e apagados */
 function DiceChips({ step }: { step: RolledStep }) {
   const roll = step.roll;
@@ -148,26 +194,29 @@ function DiceChips({ step }: { step: RolledStep }) {
   const aligned = faces.length === terms.length;
 
   return (
-    <div className="flex items-center gap-1 flex-wrap">
+    <div className="flex flex-wrap items-center gap-1">
       {terms.map((term, ti) => {
         const sides = aligned ? faces[ti] : null;
         return term.dice.map((d, di) => {
           const isMax = d.kept && sides != null && sides > 2 && d.value === sides;
           const isMin = d.kept && sides != null && sides > 2 && d.value === 1;
           const cls = isMax
-            ? 'border-success/60 bg-success-soft text-success'
+            ? 'border-success/60 bg-gradient-to-b from-success/35 to-success/5 text-success shadow-[0_0_12px_rgba(52,211,153,0.35)]'
             : isMin
-              ? 'border-danger/60 bg-danger-soft text-danger'
-              : 'border-line bg-overlay text-ink-2';
+              ? 'border-danger/60 bg-gradient-to-b from-danger/35 to-danger/5 text-danger shadow-[0_0_12px_rgba(244,63,94,0.35)]'
+              : 'border-cyan-500/25 bg-gradient-to-b from-white/[0.09] to-white/[0.01] text-ink-1';
           return (
             <span
               key={`${ti}-${di}`}
               title={sides != null ? `d${sides}` : undefined}
-              className={`min-w-[22px] px-1 py-0.5 rounded border text-center font-mono text-[11px] font-semibold select-none ${cls} ${
-                d.kept ? '' : 'opacity-40 line-through'
-              } ${d.exploded ? 'ring-1 ring-accent/50' : ''}`}
+              className={`relative inline-flex h-[26px] min-w-[26px] items-center justify-center rounded-md border px-1 font-mono text-[12px] font-bold tabular-nums shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] select-none ${cls} ${
+                d.kept ? '' : 'opacity-35 line-through grayscale'
+              } ${d.exploded ? 'ring-1 ring-cyan-400/60' : ''}`}
             >
               {d.value}
+              {d.exploded && (
+                <span className="absolute -right-0.5 -top-0.5 h-1 w-1 rounded-full bg-cyan-300 shadow-[0_0_6px_rgba(0,242,254,0.9)]" />
+              )}
             </span>
           );
         });
@@ -176,30 +225,12 @@ function DiceChips({ step }: { step: RolledStep }) {
   );
 }
 
-function CopyButton({ entry }: { entry: RollLogEntry }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      title="Copiar resultado"
-      onClick={() => {
-        navigator.clipboard.writeText(entryToText(entry)).catch(console.error);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1200);
-      }}
-      className="p-1 rounded text-ink-3 hover:text-ink-1 hover:bg-elevated transition-colors"
-    >
-      {copied ? <Check size={12} className="text-accent" /> : <Copy size={12} />}
-    </button>
-  );
-}
-
-const QUICK_DICE = [4, 6, 8, 10, 12, 20, 100] as const;
-
-/** rodapé estilo chat do Foundry: dados rápidos + input de fórmula */
+/** rodapé de chat: dados rápidos (que montam a fórmula) + input */
 function RollInput() {
   const [value, setValue] = useState('');
   const [invalid, setInvalid] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const config = useSyncExternalStore(dice3dBridge.subscribe, () => dice3dBridge.config);
 
   const doRoll = (src: string) => {
     if (rollFromPanel(src)) {
@@ -210,63 +241,42 @@ function RollInput() {
     }
   };
 
+  // clique num dado: adiciona à fórmula da caixa de texto (não rola)
+  const addDie = (formula: string) => {
+    const die = formula.replace(/^\d+/, '');
+    setValue((cur) => addDieToFormula(cur, die));
+    setInvalid(false);
+    inputRef.current?.focus();
+  };
+
   return (
-    <div className="border-t border-line px-2.5 py-2 shrink-0">
-      <div className="flex items-center gap-0.5 mb-1.5 flex-wrap">
-        {QUICK_DICE.map((f) => (
+    <div className="shrink-0 border-t border-cyan-500/15 bg-gradient-to-b from-white/[0.025] to-transparent px-2.5 py-2.5">
+      <DiceBar dice={config.quickDice} onRoll={addDie} size="lg" className="mb-2 w-full" />
+      <CommandInput
+        inputRef={inputRef}
+        prompt={<Terminal size={12} className="shrink-0" />}
+        invalid={invalid}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setInvalid(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && value.trim()) doRoll(value);
+        }}
+        placeholder="1d20 + 5, 4d6kh3, 2d20kl1…"
+        action={
           <button
-            key={f}
             type="button"
-            title={`Rolar 1d${f}`}
-            onClick={() => doRoll(`1d${f}`)}
-            className="px-1.5 py-0.5 rounded text-[10.5px] font-mono text-ink-2 hover:text-ink-1 hover:bg-elevated transition-colors"
+            title="Rolar"
+            disabled={!value.trim()}
+            onClick={() => doRoll(value)}
+            className="p-1 rounded text-cyan-300 hover:text-neon hover:bg-cyan-500/10 disabled:opacity-40 transition-colors shrink-0"
           >
-            d{f}
+            <Send size={13} />
           </button>
-        ))}
-        <button
-          type="button"
-          title="Vantagem: 2d20, mantém o maior"
-          onClick={() => doRoll('2d20kh1')}
-          className="p-1 rounded text-ink-3 hover:text-success hover:bg-success-soft transition-colors"
-        >
-          <ArrowUp size={12} />
-        </button>
-        <button
-          type="button"
-          title="Desvantagem: 2d20, mantém o menor"
-          onClick={() => doRoll('2d20kl1')}
-          className="p-1 rounded text-ink-3 hover:text-danger hover:bg-danger-soft transition-colors"
-        >
-          <ArrowDown size={12} />
-        </button>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <input
-          value={value}
-          onChange={(e) => {
-            setValue(e.target.value);
-            setInvalid(false);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && value.trim()) doRoll(value);
-          }}
-          spellCheck={false}
-          placeholder="1d20 + 5, 4d6kh3, 2d20kl1…"
-          className={`flex-1 min-w-0 px-2 py-1.5 rounded bg-elevated/60 border text-[12px] font-mono text-ink-1 outline-none transition-colors ${
-            invalid ? 'border-danger' : 'border-line focus:border-accent'
-          }`}
-        />
-        <button
-          type="button"
-          title="Rolar"
-          disabled={!value.trim()}
-          onClick={() => doRoll(value)}
-          className="p-1.5 rounded bg-accent-soft text-accent-ink hover:bg-accent/30 disabled:opacity-40 transition-colors"
-        >
-          <Dices size={14} />
-        </button>
-      </div>
+        }
+      />
     </div>
   );
 }
@@ -277,16 +287,19 @@ function RollLogPanel() {
   const timeFmt = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
   return (
-    <div className="h-full flex flex-col bg-app">
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-line">
-        <Dices size={13} className="text-table" />
-        <span className="text-[11.5px] text-ink-3 select-none">{items.length} rolagem(ns)</span>
+    <div className="codex-veil flex h-full flex-col">
+      <div className="flex items-center gap-2 border-b border-cyan-500/15 bg-gradient-to-b from-white/[0.035] to-transparent px-3 py-2">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg border border-cyan-500/25 bg-gradient-to-b from-white/[0.09] to-transparent text-cyan-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+          <Dices size={13} />
+        </span>
+        <span className="select-none font-display text-[11.5px] uppercase tracking-[0.16em] text-ink-1">Histórico</span>
+        {items.length > 0 && <Badge variant="tactical">{items.length}</Badge>}
         {items.length > 0 && (
           <button
             type="button"
             onClick={clearLog}
             title="Limpar histórico"
-            className="ml-auto flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded text-ink-3 hover:text-danger hover:bg-danger-soft transition-colors"
+            className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-ink-3 transition-colors hover:bg-danger-soft hover:text-danger"
           >
             <Trash2 size={11} /> Limpar
           </button>
@@ -294,69 +307,67 @@ function RollLogPanel() {
       </div>
       <div className="flex-1 overflow-y-auto custom-scrollbar px-2.5 py-2">
         {items.length === 0 && (
-          <div className="py-14 px-4 text-center text-[12.5px] text-ink-3 leading-relaxed">
-            Nenhuma rolagem ainda.
-            <br />
-            Role abaixo, numa Tabela Interativa ou na mesa de Dados 3D.
+          <div className="flex flex-col items-center px-6 py-16 text-center">
+            <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl border border-cyan-500/20 bg-gradient-to-b from-white/[0.06] to-transparent text-cyan-300/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <DieIcon type="d20" size={30} />
+            </div>
+            <div className="font-display text-[13px] tracking-wide text-ink-2">Nenhuma rolagem</div>
+            <p className="mt-1 max-w-[230px] text-[11.5px] leading-relaxed text-ink-3">
+              Role abaixo, numa tabela interativa ou na ficha.
+            </p>
           </div>
         )}
         <div className="flex flex-col gap-1.5">
-          {items.map((entry) => {
-            const rerollable = entry.steps.length === 1 && entry.steps[0].roll != null && !!parseFormula(entry.steps[0].formula);
-            return (
-              <div key={entry.id} className="group rounded-md border border-line bg-elevated/60 px-2.5 py-1.5">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span className="text-[11.5px] font-medium text-ink-2 truncate">{entry.tableTitle}</span>
-                  <span className="text-[10px] text-ink-3 select-none shrink-0">{timeFmt.format(entry.at)}</span>
-                  <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {rerollable && (
-                      <button
-                        type="button"
-                        title="Rolar novamente"
-                        onClick={() => rerollEntry(entry)}
-                        className="p-1 rounded text-ink-3 hover:text-accent-ink hover:bg-accent-soft transition-colors"
+          <AnimatePresence initial={false}>
+            {items.map((entry) => {
+              const rerollable = entry.steps.length === 1 && entry.steps[0].roll != null && !!parseFormula(entry.steps[0].formula);
+              return (
+                <motion.div
+                  key={entry.id}
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  className="flex flex-col gap-1"
+                >
+                  {entry.steps.map((step, i) => {
+                    const total = step.roll && typeof step.roll.value === 'number' ? step.roll.value : undefined;
+                    const hasChips = (step.roll?.rolls.length ?? 0) > 0;
+                    const status = critStatus(step);
+                    const faces = facesOf(step);
+                    return (
+                      <RollResultCard
+                        key={i}
+                        author={entry.steps.length > 1 ? step.title : entry.tableTitle}
+                        formula={step.formula}
+                        result={total}
+                        isCritSuccess={status === 'crit'}
+                        isCritFail={status === 'fail'}
+                        timestamp={i === 0 ? timeFmt.format(entry.at) : undefined}
+                        onCopy={i === 0 ? () => navigator.clipboard.writeText(entryToText(entry)).catch(console.error) : undefined}
+                        onReroll={i === 0 && rerollable ? () => rerollEntry(entry) : undefined}
+                        onRemove={i === 0 ? () => removeEntry(entry.id) : undefined}
                       >
-                        <RotateCcw size={12} />
-                      </button>
-                    )}
-                    <CopyButton entry={entry} />
-                    <button
-                      type="button"
-                      title="Remover entrada"
-                      onClick={() => removeEntry(entry.id)}
-                      className="p-1 rounded text-ink-3 hover:text-danger hover:bg-danger-soft transition-colors"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                </div>
-                {entry.steps.map((step, i) => {
-                  const total = step.roll && typeof step.roll.value === 'number' ? step.roll.value : null;
-                  const hasChips = (step.roll?.rolls.length ?? 0) > 0;
-                  return (
-                    <div key={i} className={i > 0 ? 'mt-1.5 pt-1.5 border-t border-line/50' : ''}>
-                      <div className="flex items-baseline gap-1.5 min-w-0">
-                        {i > 0 && <span className="text-ink-3 select-none text-[11px]">→</span>}
-                        <span className="text-[10.5px] font-mono text-ink-3 truncate select-none">{step.formula}</span>
-                        {entry.steps.length > 1 && <span className="text-ink-3 text-[10.5px] shrink-0">[{step.title}]</span>}
-                      </div>
-                      {hasChips && (
-                        <div className="mt-1">
-                          <DiceChips step={step} />
-                        </div>
-                      )}
-                      <div className="mt-1 flex items-baseline gap-2 min-w-0">
-                        {total != null && (
-                          <span className="font-mono font-bold text-[16px] text-ink-1 leading-none select-none">{total}</span>
+                        {faces.length > 0 && (
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {faces.map((f) => (
+                              <Badge key={f} variant="tactical">d{f}</Badge>
+                            ))}
+                          </div>
                         )}
-                        {step.text && <span className="text-[12px] text-ink-1 break-words min-w-0">{step.text}</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
+                        {hasChips && (
+                          <div className="mt-1">
+                            <DiceChips step={step} />
+                          </div>
+                        )}
+                        {step.text && <div className="mt-1 text-[12px] text-ink-2 break-words min-w-0">{step.text}</div>}
+                      </RollResultCard>
+                    );
+                  })}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
         </div>
       </div>
       <RollInput />
@@ -364,23 +375,96 @@ function RollLogPanel() {
   );
 }
 
+// ---------- settings do plugin (inclui os dados 3D) ----------
+
+const THEME_CHOICES = Object.entries(THEMES).map(([value, theme]) => ({ value, label: theme.name }));
+const MATERIAL_CHOICES = [
+  { value: '', label: 'Padrão do tema' },
+  ...Object.entries(MATERIALTYPES).map(([value, material]) => ({ value, label: material.name })),
+];
+const TEXTURE_CHOICES = [
+  { value: '', label: 'Padrão do tema' },
+  ...Object.entries(TEXTURELIST).map(([value, texture]) => ({ value, label: texture.name })),
+];
+
+const DECLARATIONS: SettingDeclaration[] = [
+  {
+    key: 'show3d',
+    type: 'boolean',
+    label: 'Exibir dados em 3D',
+    description: 'Rola os dados em tela cheia (estilo Dice So Nice) em vez de só mostrar o resultado.',
+    default: true,
+  },
+  {
+    key: 'wait3d',
+    type: 'boolean',
+    label: 'Esperar os dados 3D',
+    description:
+      'Revela o resultado (histórico, tabela, ficha) só depois que os dados 3D assentam. Desligado, o resultado aparece na hora e os dados animam em paralelo.',
+    default: true,
+  },
+  {
+    key: 'quickDice',
+    type: 'text',
+    label: 'Dados rápidos',
+    description:
+      'Botões exibidos no rodapé do histórico, separados por vírgula (d4, d6, d8, d10, d12, d20, d100). Clicar num dado o adiciona à fórmula — não rola direto.',
+    default: 'd4, d6, d8, d10, d12, d20, d100',
+  },
+  { key: 'theme', type: 'select', label: 'Tema dos dados', default: 'default', choices: THEME_CHOICES },
+  { key: 'material', type: 'select', label: 'Material', default: '', choices: MATERIAL_CHOICES },
+  { key: 'texture', type: 'select', label: 'Textura', default: '', choices: TEXTURE_CHOICES },
+  {
+    key: 'environment',
+    type: 'select',
+    label: 'Ambiente',
+    default: 'none',
+    choices: ENVIRONMENTS.map((e) => ({ value: e.id, label: e.label })),
+  },
+  {
+    key: 'shadows',
+    type: 'select',
+    label: 'Sombras',
+    default: 'medium',
+    choices: SHADOWS.map((s) => ({ value: s.id, label: s.label })),
+  },
+  { key: 'bloom', type: 'boolean', label: 'Bloom', default: false },
+  { key: 'outline', type: 'boolean', label: 'Contorno dos dados', default: false },
+  { key: 'strength', type: 'number', label: 'Força do arremesso', default: 1, min: 0.5, max: 2, step: 0.1 },
+  { key: 'sounds', type: 'boolean', label: 'Sons de impacto', default: false },
+  { key: 'volume', type: 'number', label: 'Volume', default: 80, min: 0, max: 100, step: 5 },
+];
+
 export const rollerPlugin: Plugin = {
   manifest: {
     id: 'diegesis/roller',
     name: 'Rolagens',
-    version: '1.2.0',
+    version: '2.0.0',
     apiVersion: PLUGIN_API_VERSION,
-    description: 'Histórico de rolagens estilo Foundry no painel lateral direito, com rolagem direta.',
+    description:
+      'Histórico de rolagens no painel lateral direito, com rolagem direta e dados 3D em tela cheia configuráveis.',
     author: 'Diegesis Codex',
-    permissions: ['ui'],
+    permissions: ['ui', 'events', 'settings'],
   },
   activate(ctx) {
+    // dados 3D (overlay) são uma configuração deste plugin
+    dice3dBridge.setSettings(ctx.settings);
+    ctx.settings.subscribe(() => dice3dBridge.refreshConfig());
+    ctx.settings.registerAll(DECLARATIONS);
+    ctx.settingsPages.add({ id: 'diegesis/roller:settings', title: 'Rolagens', icon: Dices, order: 30 });
+    ctx.register({
+      dispose: () => {
+        dice3dBridge.setSettings(null);
+      },
+    });
+
+    // observa as rolagens emitidas por tabelas/notas/fichas para alimentar o log
     ctx.events.on('roller:rolled', (payload) => {
       appendEntry(payload.tableTitle, payload.steps);
     });
 
-    // serviço de rolagem para outros plugins/host (fichas, IA, etc.): mesa 3D
-    // ou overlay quando abertos, log garantido caso contrário
+    // serviço de rolagem para outros plugins/host (fichas, IA, etc.): 3D/overlay
+    // quando ativos, log garantido caso contrário
     ctx.hooks.register('roller:roll', ({ formula, label }) => rollLabeled(formula, label));
 
     ctx.views.add({
@@ -398,13 +482,5 @@ export const rollerPlugin: Plugin = {
       run: () => ctx.app.setRightPanelView(ctx.app.rightPanelView === 'roller:log' ? null : 'roller:log'),
     });
 
-    ctx.views.addRibbonItem({
-      id: 'diegesis/roller:ribbon',
-      title: 'Rolagens',
-      icon: Dices,
-      command: 'diegesis/roller:toggle',
-      isActive: () => ctx.app.rightPanelView === 'roller:log',
-      order: 20,
-    });
   },
 };
