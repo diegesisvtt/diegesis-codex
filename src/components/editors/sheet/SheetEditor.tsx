@@ -6,7 +6,7 @@
 // modelos nomeados por reino (Personagem, Monstro/NPC, ...): a ficha herda
 // o layout do modelo e pode sobrescrevê-lo individualmente.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Check, Download, LayoutGrid, Pencil, RotateCcw, SlidersHorizontal, Sparkles, Upload } from 'lucide-react';
+import { Check, Download, Gem, LayoutGrid, Pencil, RotateCcw, SlidersHorizontal, Sparkles, Upload } from 'lucide-react';
 import {
   SheetEngine,
   createSheetBus,
@@ -474,9 +474,24 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     />
   ) : undefined;
 
+  // estilo compartilhado dos botões do cabeçalho (ativo = dourado suave)
+  const hdrBtn = (active = false) =>
+    `flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] transition-all duration-150 ${
+      active
+        ? 'border-sheet/60 bg-sheet-soft text-sheet-strong shadow-[0_0_14px_rgba(212,175,55,0.12)]'
+        : 'border-line bg-elevated/50 text-ink-2 hover:text-ink-1 hover:border-sheet/40 hover:bg-elevated'
+    }`;
+
   const topbar = (
-    <>
-      <div className="flex items-center gap-2">
+    <header className="rounded-2xl border border-sheet/25 bg-gradient-to-b from-elevated/90 via-elevated/70 to-app/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_6px_28px_rgba(0,0,0,0.4)] px-4 pt-3 pb-2.5 flex flex-col gap-2">
+      <div className="flex items-center gap-3">
+        <span className="flex items-center gap-2 select-none shrink-0" title={doc.title}>
+          <Gem size={13} className="text-sheet/80" />
+          <span className="font-display text-[15px] font-semibold tracking-[0.06em] text-ink-1 truncate max-w-48">
+            {doc.title}
+          </span>
+        </span>
+        <div className="h-px w-10 bg-gradient-to-r from-sheet/40 to-transparent" />
         <SheetTemplateMenu
           templates={templates}
           activeId={templateId}
@@ -487,12 +502,12 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
           onExport={downloadTemplate}
           onImport={handleImportTemplate}
         />
-        <span className="ml-auto flex items-center gap-2">
+        <span className="ml-auto flex items-center gap-1.5">
         <button
           type="button"
           onClick={handleExportSheet}
           title="Exportar ficha (.diegesis-sheet.json)"
-          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-line bg-elevated/60 text-[12px] text-ink-2 hover:text-ink-1 hover:border-sheet/40 transition-colors"
+          className={hdrBtn()}
         >
           <Download size={13} />
         </button>
@@ -500,12 +515,12 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
           type="button"
           onClick={handleImportSheet}
           title="Importar ficha (.diegesis-sheet.json)"
-          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-line bg-elevated/60 text-[12px] text-ink-2 hover:text-ink-1 hover:border-sheet/40 transition-colors"
+          className={hdrBtn()}
         >
           <Upload size={13} />
         </button>
         {editing && (
-          <span className="text-[11px] text-ink-3 select-none">
+          <span className="text-[10.5px] text-ink-3 select-none px-1">
             {layoutOverride ? 'layout próprio desta ficha' : 'herdando o modelo'}
           </span>
         )}
@@ -514,7 +529,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
             type="button"
             onClick={resetToTemplate}
             title="Descartar o layout próprio e voltar a herdar o modelo"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-line bg-elevated/60 text-[12px] text-ink-2 hover:text-ink-1 hover:border-sheet/40 transition-colors"
+            className={hdrBtn()}
           >
             <RotateCcw size={13} />
             Herdar modelo
@@ -525,11 +540,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
             type="button"
             onClick={() => togglePanel('blocos')}
             title="Paleta de blocos (arraste para a ficha)"
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] transition-colors ${
-              panels.blocos.open
-                ? 'border-sheet/60 bg-sheet-soft text-sheet-strong'
-                : 'border-line bg-elevated/60 text-ink-2 hover:text-ink-1 hover:border-sheet/40'
-            }`}
+            className={hdrBtn(panels.blocos.open)}
           >
             <LayoutGrid size={13} />
             Blocos
@@ -539,11 +550,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
           type="button"
           onClick={() => togglePanel('efeitos')}
           title="Gerenciar efeitos globais do reino"
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] transition-colors ${
-            panels.efeitos.open
-              ? 'border-sheet/60 bg-sheet-soft text-sheet-strong'
-              : 'border-line bg-elevated/60 text-ink-2 hover:text-ink-1 hover:border-sheet/40'
-          }`}
+          className={hdrBtn(panels.efeitos.open)}
         >
           <Sparkles size={13} />
           Efeitos
@@ -556,11 +563,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
             setArmedTool(null);
           }}
           title={editing ? 'Concluir edição do layout' : 'Customizar layout'}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] transition-colors ${
-            editing
-              ? 'border-sheet/60 bg-sheet-soft text-sheet-strong'
-              : 'border-line bg-elevated/60 text-ink-2 hover:text-ink-1 hover:border-sheet/40'
-          }`}
+          className={hdrBtn(editing)}
         >
           {editing ? <Check size={13} /> : <Pencil size={13} />}
           {editing ? 'Concluir' : 'Customizar'}
@@ -568,7 +571,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
       </span>
     </div>
     {tabStrip}
-  </>
+  </header>
   );
 
   const footer = auditPath ? (

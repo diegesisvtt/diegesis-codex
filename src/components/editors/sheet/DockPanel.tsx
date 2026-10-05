@@ -66,10 +66,9 @@ export function DockPanel({
 
   const floating = dock === 'float';
   const base = 'flex flex-col min-h-0 bg-sidebar';
-  const dockedCls = dock === 'left' ? 'border-r border-line' : dock === 'right' ? 'border-l border-line' : '';
-  const floatCls = floating
-    ? 'absolute z-40 rounded-xl border border-line bg-overlay/95 backdrop-blur-md shadow-[0_16px_48px_rgba(0,0,0,0.6)] overflow-hidden'
-    : 'w-full flex-1';
+  const dockedCls = `w-full flex-1 ${dock === 'left' ? 'border-r border-line' : 'border-l border-line'}`;
+  const floatCls =
+    'absolute z-40 rounded-xl border border-line bg-overlay/95 backdrop-blur-md shadow-[0_16px_48px_rgba(0,0,0,0.6)] overflow-hidden';
 
   return (
     <div className={`${base} ${floating ? floatCls : dockedCls}`} style={floating ? { left: x ?? 0, top: y ?? 0, width } : undefined}>

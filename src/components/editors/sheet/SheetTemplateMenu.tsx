@@ -65,15 +65,17 @@ export function SheetTemplateMenu({
         type="button"
         onClick={() => setOpen(!open)}
         title="Modelo da ficha"
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-line bg-elevated/60 text-[12px] text-ink-2 hover:text-ink-1 hover:border-sheet/40 transition-colors"
+        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-ink-1 transition-all duration-150 bg-gradient-to-b from-elevated to-overlay shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${
+          open ? 'border-sheet/60 shadow-[0_0_0_2px_rgba(212,175,55,0.12)]' : 'border-sheet/30 hover:border-sheet/60'
+        }`}
       >
         <Layers size={13} className="text-sheet" />
-        {active ? active.name : 'Modelo…'}
-        <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className="font-display text-[13px] font-semibold tracking-[0.04em]">{active ? active.name : 'Modelo…'}</span>
+        <ChevronDown size={12} className={`text-ink-3 transition-transform duration-150 ${open ? 'rotate-180 text-sheet' : ''}`} />
       </button>
 
       {open && (
-        <div className="absolute top-full mt-1 left-0 z-50 w-64 rounded-xl border border-line bg-overlay/95 backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.55)] py-1 flex flex-col">
+        <div className="absolute top-full mt-1.5 left-0 z-50 w-64 rounded-xl border border-sheet/25 bg-overlay/95 backdrop-blur-md shadow-[0_14px_40px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.05)] py-1 flex flex-col">
           <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-[0.16em] text-ink-3 select-none">Modelos</div>
           {templates.map((t) => (
             <div key={t.id} className="group flex items-center gap-2 px-3 py-1.5 hover:bg-hover">
