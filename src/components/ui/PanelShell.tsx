@@ -2,6 +2,8 @@
 // (padrão do hexmap: borda esquerda, cabeçalho uppercase, fechar, corpo
 // rolável). Suporta abas internas opcionais. O host controla dock/resize.
 import { X } from 'lucide-react';
+import { Surface } from './Surface';
+import { Tabs, type TabItemData } from './Tabs';
 
 export interface PanelTab {
   id: string;
@@ -25,33 +27,29 @@ export function PanelShell({
   onTabChange?: (id: string) => void;
   children: React.ReactNode;
 }) {
+  const tabItems: TabItemData[] = (tabs ?? []).map((t) => ({ id: t.id, label: t.title }));
+
   return (
-    <div className="shrink-0 border-l border-line bg-sidebar flex flex-col min-h-0" style={width ? { width } : undefined}>
+    <Surface
+      variant="panel"
+      className="shrink-0 border-l border-line flex flex-col min-h-0"
+      style={width ? { width } : undefined}
+    >
       <div className="h-9 px-3 border-b border-line flex items-center justify-between shrink-0">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-3">{title}</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/80 shadow-[0_0_6px_rgba(56,189,248,0.6)]" />
+          {title}
+        </span>
         {onClose && (
-          <button onClick={onClose} className="text-ink-3 hover:text-ink-1 p-1 rounded hover:bg-hover">
+          <button onClick={onClose} className="text-ink-3 hover:text-ink-1 p-1 rounded hover:bg-hover transition-colors">
             <X size={14} />
           </button>
         )}
       </div>
-      {tabs && tab && onTabChange && (
-        <div className="flex gap-1 px-3 py-1.5 border-b border-line shrink-0">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => onTabChange(t.id)}
-              className={`px-2 py-1 rounded-md text-[11px] transition-colors ${
-                t.id === tab ? 'bg-active text-ink-1' : 'text-ink-3 hover:text-ink-1 hover:bg-hover'
-              }`}
-            >
-              {t.title}
-            </button>
-          ))}
-        </div>
+      {tabs && tab && onTabChange && tabItems.length > 0 && (
+        <Tabs items={tabItems} activeId={tab} onSelect={onTabChange} className="!border-b-0 border-b border-line" />
       )}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-3">{children}</div>
-    </div>
+    </Surface>
   );
 }
