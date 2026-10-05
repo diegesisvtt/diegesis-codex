@@ -14,6 +14,15 @@ export type { AppEvents, EventBus, TypedEventBus } from './api/events';
 export type { Command, CommandRegistry } from './api/commands';
 export type { RibbonItem, ViewContribution, ViewLocation, ViewRegistry } from './api/views';
 export type { EditorComponent, EditorContribution, EditorProps, EditorRegistry } from './api/editors';
+export type {
+  RegisteredSettingsPage,
+  SettingDeclaration,
+  SettingsNavEntry,
+  SettingsPageContribution,
+  SettingsPageProps,
+  SettingsRegistry,
+  SettingType,
+} from './api/settings';
 export {
   PluginManager,
   PluginProvider,
@@ -23,7 +32,9 @@ export {
   usePluginEvent,
   usePluginManager,
   usePlugins,
+  usePluginSettings,
   useRibbonItems,
+  useSettingsPages,
   useViews,
   type ExternalPluginsHandle,
   type PluginInfo,

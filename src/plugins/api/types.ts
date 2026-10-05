@@ -82,8 +82,8 @@ export interface PluginSettings {
   get<T>(key: string, fallback: T): T;
   set(key: string, value: unknown): void;
   all(): Record<string, unknown>;
-  /** declares typed fields so the host can auto-generate a settings form
-   *  (Foundry-style). Disposed automatically on deactivation. */
+  /** declares typed fields so the host can auto-generate a settings form.
+   *  Disposed automatically on deactivation. */
   registerAll(declarations: SettingDeclaration[]): Disposable;
   /** notified whenever this plugin's settings blob changes (including own
    *  writes) — the reactive alternative to polling `get` */

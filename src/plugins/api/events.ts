@@ -15,10 +15,10 @@ const diceRollSchema = v.custom<DiceRollResult>((x) => x !== null && typeof x ==
  *  - `realm:changed` — the active realm (universe) changed
  *  - `command:executed` — a command was executed through the registry
  *  - `plugins:changed` — a plugin was activated or deactivated
- *  - `secondwindow:showNote` / `showMap` — show content in the second window
- *  - `secondwindow:setViewport` — set the second window map viewport
- *  - `secondwindow:clear` — clear the second window (back to idle screen)
- *  - `secondwindow:status` — second window was opened/closed
+ *  - `playerview:showNote` / `showMap` / `showImage` — show content in the player view
+ *  - `playerview:setViewport` — set the player view map viewport
+ *  - `playerview:clear` — clear the player view (back to idle screen)
+ *  - `playerview:status` — player view window was opened/closed
  *  - `hexcrawl:camera` — hexcrawl map editor camera moved (hex-space center + zoom)
  *  - `roller:rolled` — a table roll happened (table editor or note block); feeds the roll log
  */
@@ -27,11 +27,12 @@ const appEvents = {
   'realm:changed': v.object({ realmId: v.nullable(v.string()) }),
   'command:executed': v.object({ commandId: v.string() }),
   'plugins:changed': v.object({ pluginId: v.string(), enabled: v.boolean() }),
-  'secondwindow:showNote': v.object({ docId: v.string() }),
-  'secondwindow:showMap': v.object({ docId: v.string() }),
-  'secondwindow:setViewport': v.object({ x: v.number(), y: v.number(), zoom: v.number() }),
-  'secondwindow:clear': v.undefined(),
-  'secondwindow:status': v.object({ open: v.boolean() }),
+  'playerview:showNote': v.object({ docId: v.string() }),
+  'playerview:showMap': v.object({ docId: v.string() }),
+  'playerview:showImage': v.object({ docId: v.string(), src: v.string(), name: v.string() }),
+  'playerview:setViewport': v.object({ x: v.number(), y: v.number(), zoom: v.number() }),
+  'playerview:clear': v.undefined(),
+  'playerview:status': v.object({ open: v.boolean() }),
   'hexcrawl:camera': v.object({ docId: v.string(), x: v.number(), y: v.number(), zoom: v.number() }),
   'roller:rolled': v.object({
     tableTitle: v.string(),

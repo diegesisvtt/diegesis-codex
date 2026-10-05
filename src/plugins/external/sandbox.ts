@@ -106,7 +106,7 @@ export function gateContext(ctx: PluginContext, perms: Set<PluginPermission>, is
 
   if (!perms.has('ui')) {
     // navegação/manipulação de UI exige a permissão 'ui'
-    for (const method of ['openDocument', 'openPanel', 'openView', 'setAiChatOpen', 'setRightPanelView'] as const) {
+    for (const method of ['openDocument', 'openPanel', 'openSettings', 'openView', 'setAiChatOpen', 'setRightPanelView'] as const) {
       app[method] = () => {
         throw new PermissionError('ui', pluginId);
       };

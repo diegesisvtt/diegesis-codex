@@ -17,6 +17,8 @@ export interface ViewContribution {
   component: ViewComponent;
   /** border-left only: fixed tab id and whether it ships in the default layout */
   tab?: { id: string; name: string; default?: boolean };
+  /** right-panel only: icon for the panel switcher strip (falls back to a generic panel icon) */
+  icon?: ComponentType<{ size?: number | string; className?: string }>;
   /** lower sorts first within a location */
   order?: number;
 }
@@ -24,7 +26,8 @@ export interface ViewContribution {
 /** A button contributed to the title bar (Diegesis Codex's ribbon). */
 export interface RibbonItem {
   id: string;
-  title: string;
+  /** tooltip; optional so an icon component can supply a dynamic one instead */
+  title?: string;
   icon: ComponentType<{ size?: number | string; className?: string }>;
   /** command to execute on click */
   command: string;
