@@ -68,7 +68,6 @@ export function defaultSheetLayout(): SheetLayout {
     tabs: [
       { id: 'geral', title: 'Geral' },
       { id: 'combate', title: 'Combate' },
-      { id: 'efeitos', title: 'Efeitos' },
     ],
     blocks: [
       { id: newBlockId(), type: 'title', x: 0, y: 0, w: 12, h: 2, tab: 'geral' },
@@ -87,8 +86,6 @@ export function defaultSheetLayout(): SheetLayout {
       { id: newBlockId(), type: 'derived', path: 'desl.m', label: 'desl.m', x: 9, y: 7, w: 3, h: 2, tab: 'geral' },
       section('Rolagens', 0, 9, 'combate'),
       { id: newBlockId(), type: 'rolls', templates: ['ataque', 'dano', 'moral', 'save'], x: 0, y: 10, w: 12, h: 2, tab: 'combate' },
-      section('Efeitos', 0, 12, 'efeitos'),
-      { id: newBlockId(), type: 'effects', x: 0, y: 13, w: 12, h: 4, tab: 'efeitos' },
     ],
   };
 }
@@ -133,9 +130,19 @@ export function parseSheetLayout(raw: unknown): SheetLayout | null {
   return { version: 1, grid: g, blocks, ...(tabs && tabs.length > 0 ? { tabs } : {}) };
 }
 
-/** abas efetivas (ausência = uma única "Geral" implícita) */
+/** abas fixas da ficha: sempre presentes, não podem ser removidas nem renomeadas.
+ *  'geral' abriga o grid de blocos; 'efeitos' é uma aba de sistema (lista de
+ *  efeitos ativos da ficha, renderizada pelo editor — blocos nela são ignorados) */
+export const SHEET_TAB_GERAL = 'geral';
+export const SHEET_TAB_EFEITOS = 'efeitos';
+export const SHEET_FIXED_TABS: ReadonlySet<string> = new Set([SHEET_TAB_GERAL, SHEET_TAB_EFEITOS]);
+
+/** abas efetivas — 'geral' (primeira) e 'efeitos' (última) são garantidas */
 export function sheetTabs(layout: SheetLayout): SheetTab[] {
-  return layout.tabs && layout.tabs.length > 0 ? layout.tabs : [{ id: 'geral', title: 'Geral' }];
+  const base = layout.tabs && layout.tabs.length > 0 ? [...layout.tabs] : [];
+  if (!base.some((t) => t.id === SHEET_TAB_GERAL)) base.unshift({ id: SHEET_TAB_GERAL, title: 'Geral' });
+  if (!base.some((t) => t.id === SHEET_TAB_EFEITOS)) base.push({ id: SHEET_TAB_EFEITOS, title: 'Efeitos' });
+  return base;
 }
 
 /** aba à qual um bloco pertence (default: primeira aba) */

@@ -6,7 +6,7 @@
 // modelos nomeados por reino (Personagem, Monstro/NPC, ...): a ficha herda
 // o layout do modelo e pode sobrescrevê-lo individualmente.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Check, Download, Gem, LayoutGrid, Pencil, RotateCcw, SlidersHorizontal, Sparkles, Upload } from 'lucide-react';
+import { Check, Download, Gem, Pencil, RotateCcw, SlidersHorizontal, Sparkles, Upload } from 'lucide-react';
 import {
   SheetEngine,
   createSheetBus,
@@ -14,7 +14,6 @@ import {
   getPath,
   setPath,
   type ComputedSheet,
-  type EffectDefinition,
   type EffectInstance,
 } from '@diegesis/sheet';
 import { evaluateRoll } from '@diegesis/dice-core';
@@ -31,6 +30,8 @@ import {
   parseSheetLayout,
   parseSheetTemplate,
   sheetTabs,
+  SHEET_FIXED_TABS,
+  SHEET_TAB_EFEITOS,
   SHEET_TEMPLATE_PERSONAGEM,
   type SheetBlock,
   type SheetLayout,
@@ -39,11 +40,9 @@ import {
 import { useStore } from '../../../state/store';
 import { usePluginManager } from '../../../plugins/manager';
 import { SheetCanvas } from './SheetCanvas';
-import { SheetBlockContent, ROLL_LABELS, type SheetBlockCtx } from './blocks';
+import { SheetBlockContent, EffectsBlock, ROLL_LABELS, type SheetBlockCtx } from './blocks';
 import { FloatingToolbar, toolItem } from './FloatingToolbar';
 import { BlockConfig } from './BlockConfig';
-import { BlocksPanel } from './BlocksPanel';
-import { EffectsPanel } from './EffectsPanel';
 import { DockPanel, type Dock } from './DockPanel';
 import { SheetTemplateMenu } from './SheetTemplateMenu';
 import { SheetPageTabs } from './SheetPageTabs';
@@ -70,7 +69,9 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   const contentRef = useRef<HTMLDivElement>(null);
 
   // ---------- painéis dockáveis (estilo VS Code) ----------
-  type PanelId = 'bloco' | 'efeitos' | 'blocos';
+  // Apenas o painel de propriedades do bloco: efeitos globais vivem nas
+  // Configurações → Fichas; a paleta de blocos é a floating toolbar.
+  type PanelId = 'bloco';
   interface PanelState {
     open: boolean;
     dock: Dock;
@@ -79,10 +80,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   }
   const [panels, setPanels] = useState<Record<PanelId, PanelState>>({
     bloco: { open: false, dock: 'right' },
-    efeitos: { open: false, dock: 'right' },
-    blocos: { open: false, dock: 'left' },
   });
-  const togglePanel = (id: PanelId) => setPanels((p) => ({ ...p, [id]: { ...p[id], open: !p[id].open } }));
   const closePanel = (id: PanelId) => setPanels((p) => ({ ...p, [id]: { ...p[id], open: false } }));
   const movePanel = (id: PanelId, dock: Dock, x?: number, y?: number) =>
     setPanels((p) => ({ ...p, [id]: { ...p[id], dock, ...(dock === 'float' ? { x, y } : {}) } }));
@@ -155,6 +153,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     mutateLayout((l) => ({ ...l, tabs: sheetTabs(l).map((t) => (t.id === id ? { ...t, title } : t)) }));
   };
   const removeTab = (id: string) => {
+    if (SHEET_FIXED_TABS.has(id)) return; // abas fixas (Geral/Efeitos) não são removíveis
     const cur = sheetTabs(layout);
     if (cur.length <= 1) return;
     const first = cur[0].id;
@@ -382,27 +381,6 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     if (templateRef.current === id) applyTemplate(SHEET_TEMPLATE_PERSONAGEM);
   };
 
-  // ---------- efeitos globais do reino ----------
-
-  const rawRealmEffects = (activeRealmId ? uiState.realmSettings?.[activeRealmId]?.sheetEffects : undefined) ?? {};
-
-  const writeRealmEffects = (map: Record<string, EffectDefinition>) => {
-    if (!activeRealmId) return;
-    const realmSettings = {
-      ...(uiState.realmSettings ?? {}),
-      [activeRealmId]: { ...(uiState.realmSettings?.[activeRealmId] ?? {}), sheetEffects: map },
-    };
-    saveUiState({ realmSettings });
-  };
-
-  const saveEffectDef = (def: EffectDefinition) => writeRealmEffects({ ...rawRealmEffects, [def.id]: def });
-
-  const deleteEffectDef = (id: string) => {
-    const map = { ...rawRealmEffects };
-    delete map[id];
-    writeRealmEffects(map);
-  };
-
   // ---------- import/export ----------
 
   const handleImportTemplate = async () => {
@@ -462,7 +440,8 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     if (id && editing) setPanels((p) => ({ ...p, bloco: { ...p.bloco, open: true } }));
   };
 
-  const tabStrip = tabs.length > 1 || editing ? (
+  // abas premium — parte da ficha (sempre visíveis: Geral/Efeitos são fixas)
+  const tabStrip = (
     <SheetPageTabs
       tabs={tabs}
       activeId={activeTabId}
@@ -471,8 +450,9 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
       onAdd={addTab}
       onRename={renameTab}
       onRemove={removeTab}
+      fixedIds={SHEET_FIXED_TABS}
     />
-  ) : undefined;
+  );
 
   // estilo compartilhado dos botões do cabeçalho (ativo = dourado suave)
   const hdrBtn = (active = false) =>
@@ -535,26 +515,6 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
             Herdar modelo
           </button>
         )}
-        {editing && (
-          <button
-            type="button"
-            onClick={() => togglePanel('blocos')}
-            title="Paleta de blocos (arraste para a ficha)"
-            className={hdrBtn(panels.blocos.open)}
-          >
-            <LayoutGrid size={13} />
-            Blocos
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => togglePanel('efeitos')}
-          title="Gerenciar efeitos globais do reino"
-          className={hdrBtn(panels.efeitos.open)}
-        >
-          <Sparkles size={13} />
-          Efeitos
-        </button>
         <button
           type="button"
           onClick={() => {
@@ -570,7 +530,6 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
         </button>
       </span>
     </div>
-    {tabStrip}
   </header>
   );
 
@@ -601,8 +560,6 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
 
   const PANEL_META: { id: PanelId; title: string; icon: ReactNode }[] = [
     { id: 'bloco', title: selectedBlock ? `Bloco · ${selectedBlock.type}` : 'Bloco', icon: <SlidersHorizontal size={13} /> },
-    { id: 'efeitos', title: 'Efeitos', icon: <Sparkles size={13} /> },
-    { id: 'blocos', title: 'Blocos', icon: <LayoutGrid size={13} /> },
   ];
 
   const panelContent = (id: PanelId) => {
@@ -611,15 +568,14 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
         <BlockConfig
           block={selectedBlock}
           onChange={(patch) => updateBlock(selectedBlock.id, patch)}
-          tabOptions={tabs}
+          tabOptions={tabs.filter((t) => t.id !== SHEET_TAB_EFEITOS)}
           onAssignTab={(tabId) => updateBlock(selectedBlock.id, { tab: tabId })}
         />
       ) : (
         <div className="text-[12px] text-ink-3 leading-snug">Selecione um bloco no canvas para editar suas propriedades.</div>
       );
     }
-    if (id === 'efeitos') return <EffectsPanel custom={customDefs} onSave={saveEffectDef} onDelete={deleteEffectDef} />;
-    return <BlocksPanel />;
+    return null;
   };
 
   const renderPanels = (dock: Dock) =>
@@ -654,6 +610,22 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     </>
   );
 
+  // aba fixa "Efeitos": página de sistema com os efeitos ativos da ficha
+  const effectsBody = (
+    <div className="rounded-2xl border border-sheet/20 bg-gradient-to-b from-elevated/60 to-app/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] p-4 flex flex-col gap-2 min-h-[480px]">
+      <div className="flex items-center gap-2 select-none">
+        <Sparkles size={13} className="text-sheet" />
+        <span className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-sheet/90">
+          Efeitos ativos
+        </span>
+        <span className="ml-auto text-[10.5px] text-ink-3">definições globais em Configurações → Fichas</span>
+      </div>
+      <div className="flex-1 min-h-0">
+        <EffectsBlock ctx={blockCtx} />
+      </div>
+    </div>
+  );
+
   return (
     <SheetCanvas
       layout={visibleLayout}
@@ -671,6 +643,8 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
       }}
       renderContent={(b) => <SheetBlockContent block={b} ctx={blockCtx} />}
       topbar={topbar}
+      tabs={tabStrip}
+      body={activeTabId === SHEET_TAB_EFEITOS ? effectsBody : undefined}
       footer={footer}
       floating={floating}
       contentRef={contentRef}

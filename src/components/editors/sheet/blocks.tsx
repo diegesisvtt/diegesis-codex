@@ -224,13 +224,15 @@ function RollsBlock({ block, ctx }: { block: SheetBlock & { type: 'rolls' }; ctx
   );
 }
 
-function EffectsBlock({ ctx }: { ctx: SheetBlockCtx }) {
+export function EffectsBlock({ ctx }: { ctx: SheetBlockCtx }) {
   const computed = ctx.computed;
   return (
     <div className="h-full overflow-y-auto custom-scrollbar flex flex-col gap-1.5 py-0.5">
       <div className="flex gap-1.5 flex-wrap">
         {ctx.effectDefs.length === 0 && (
-          <div className="text-[12px] text-ink-3">Nenhum efeito definido — crie efeitos globais no painel Efeitos.</div>
+          <div className="text-[12px] text-ink-3">
+            Nenhum efeito definido — crie efeitos globais em Configurações → Fichas.
+          </div>
         )}
         {ctx.effectDefs.map((def) => (
           <button

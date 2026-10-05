@@ -1,247 +1,230 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Database, FolderOpen, Info, Loader2, Plug, RefreshCw, Sparkles, XCircle } from 'lucide-react';
-import type { AIIndexStatus, AIProviderConfig, AISettings, ProviderInfo, ProviderTestResult } from '@shared/types';
-import { useExternalPlugins, usePluginManager, usePlugins, type PluginInfo } from '../plugins';
-import { Button } from './ui';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  FolderOpen,
+  Info,
+  Loader2,
+  Plug,
+  Puzzle,
+  RefreshCw,
+  Settings2,
+  Sparkles,
+} from 'lucide-react';
+import type { EffectDefinition } from '@diegesis/sheet';
+import { parseEffectDefinitions } from '@shared/sheetEffects';
+import { EffectsPanel } from './editors/sheet/EffectsPanel';
+import {
+  useExternalPlugins,
+  usePluginManager,
+  usePlugins,
+  usePluginSettings,
+  useSettingsPages,
+  type PluginInfo,
+  type PluginSettings,
+  type SettingDeclaration,
+  type SettingsNavEntry,
+} from '../plugins';
+import { useStore } from '../state/store';
+import { Button, Toggle } from './ui';
 
-type SettingsSectionId = 'general' | 'ai' | 'plugins';
+type BuiltinSectionId = 'general' | 'plugins' | 'sheets';
 
-const SECTIONS: { id: SettingsSectionId; name: string; icon: typeof Info }[] = [
+/** section ids: builtin ids, settings page ids, `schema:<pluginId>` (páginas
+ *  implícitas) ou `plugin:<pluginId>` (deep-link, resolvido na renderização) */
+type SettingsSectionId = string;
+
+const SECTIONS: { id: BuiltinSectionId; name: string; icon: typeof Info }[] = [
   { id: 'general', name: 'Geral', icon: Info },
-  { id: 'ai', name: 'IA', icon: Sparkles },
+  { id: 'sheets', name: 'Fichas', icon: Sparkles },
   { id: 'plugins', name: 'Plugins', icon: Plug },
 ];
 
-// ---------- shared provider form (chat & web search) ----------
+// ---------- plugin settings pages ----------
 
-function ProviderSection({
-  title,
-  description,
-  emptyLabel,
-  providers,
-  saved,
-  onSave,
-  onTest,
-}: {
-  title: string;
-  description: string;
-  /** label for the "no provider selected" option */
-  emptyLabel: string;
-  providers: ProviderInfo[];
-  saved: AIProviderConfig | null;
-  onSave(cfg: AIProviderConfig | null): Promise<void>;
-  onTest(providerId: string, config: Record<string, string>): Promise<ProviderTestResult>;
-}) {
-  const [providerId, setProviderId] = useState(saved?.providerId ?? '');
-  const [values, setValues] = useState<Record<string, string>>(saved?.config ?? {});
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<ProviderTestResult | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [savedFlash, setSavedFlash] = useState(false);
+const inputCls =
+  'bg-sidebar border border-line rounded-md px-3 py-1.5 text-[13px] text-ink-1 placeholder-ink-3 outline-none focus:border-accent transition-colors';
 
-  const provider = useMemo(() => providers.find((p) => p.id === providerId) ?? null, [providers, providerId]);
+/** Um campo do formulário auto-gerado a partir do schema declarativo. */
+function SettingField({ decl, settings }: { decl: SettingDeclaration; settings: PluginSettings }) {
+  const value = settings.get(decl.key, decl.default);
+  let control: ReactNode;
 
-  // providers with required API keys are only selectable once a key exists
-  // (stored — SECRET_MASK counts — or entered in the form for the selected provider)
-  const hasRequiredKey = useCallback(
-    (p: ProviderInfo) => {
-      const requiredSecrets = p.fields.filter((f) => f.secret && f.required);
-      if (requiredSecrets.length === 0) return true;
-      if (p.id === providerId) {
-        return requiredSecrets.every((f) => !!(values[f.key] ?? '').trim());
-      }
-      if (saved?.providerId !== p.id) return false;
-      return requiredSecrets.every((f) => !!saved.config[f.key]);
-    },
-    [providerId, values, saved]
+  switch (decl.type) {
+    case 'boolean':
+      control = <Toggle checked={!!value} onChange={(v) => settings.set(decl.key, v)} />;
+      break;
+    case 'select':
+      control = (
+        <select
+          value={String(value ?? '')}
+          onChange={(e) => settings.set(decl.key, e.target.value)}
+          className={`${inputCls} max-w-[220px]`}
+        >
+          {(decl.choices ?? []).map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+      );
+      break;
+    case 'number': {
+      const num = typeof value === 'number' ? value : Number(decl.default) || 0;
+      control =
+        decl.min !== undefined && decl.max !== undefined ? (
+          <span className="flex items-center gap-2">
+            <input
+              type="range"
+              min={decl.min}
+              max={decl.max}
+              step={decl.step ?? 1}
+              value={num}
+              onChange={(e) => settings.set(decl.key, Number(e.target.value))}
+              className="w-32 accent-accent"
+            />
+            <span className="font-mono text-[11px] text-ink-3 w-8 text-right">{num}</span>
+          </span>
+        ) : (
+          <input
+            type="number"
+            value={num}
+            min={decl.min}
+            max={decl.max}
+            step={decl.step}
+            onChange={(e) => settings.set(decl.key, Number(e.target.value))}
+            className={`${inputCls} w-28`}
+          />
+        );
+      break;
+    }
+    case 'color':
+      control = (
+        <input
+          type="color"
+          value={typeof value === 'string' ? value : '#ffffff'}
+          onChange={(e) => settings.set(decl.key, e.target.value)}
+          className="w-9 h-7 rounded border border-line bg-sidebar cursor-pointer"
+        />
+      );
+      break;
+    case 'text':
+      control = (
+        <textarea
+          value={String(value ?? '')}
+          placeholder={decl.placeholder}
+          rows={3}
+          onChange={(e) => settings.set(decl.key, e.target.value)}
+          className={`${inputCls} w-full max-w-sm resize-y`}
+        />
+      );
+      break;
+    default: // 'string'
+      control = (
+        <input
+          type="text"
+          value={String(value ?? '')}
+          placeholder={decl.placeholder}
+          onChange={(e) => settings.set(decl.key, e.target.value)}
+          className={`${inputCls} w-full max-w-sm`}
+        />
+      );
+  }
+
+  // campos largos (text/string) empilham; os demais ficam em linha
+  const wide = decl.type === 'text' || decl.type === 'string';
+  return (
+    <div className={`py-4 first:pt-0 last:pb-0 ${wide ? 'flex flex-col gap-2' : 'flex items-center justify-between gap-4'}`}>
+      <div className="min-w-0">
+        <div className="text-[13px] text-ink-1">{decl.label}</div>
+        {decl.description && <div className="text-[12px] text-ink-3 mt-0.5 leading-snug">{decl.description}</div>}
+      </div>
+      <div className={wide ? '' : 'shrink-0'}>{control}</div>
+    </div>
   );
+}
 
-  // reset fields when switching providers (never carry values — especially the
-  // SECRET_MASK placeholder — across different providers)
-  useEffect(() => {
-    if (!provider) return;
-    if (provider.id === saved?.providerId) {
-      setValues(saved.config);
-    } else {
-      const next: Record<string, string> = {};
-      for (const f of provider.fields) next[f.key] = f.default ?? '';
-      setValues(next);
-    }
-    setTestResult(null);
-  }, [providerId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const test = async () => {
-    if (!provider) return;
-    setTesting(true);
-    setTestResult(null);
-    try {
-      setTestResult(await onTest(provider.id, values));
-    } catch (err) {
-      setTestResult({ ok: false, error: err instanceof Error ? err.message : String(err) });
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      await onSave(provider ? { providerId: provider.id, config: values } : null);
-      setSavedFlash(true);
-      setTimeout(() => setSavedFlash(false), 2000);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const missingRequired = provider?.fields.some((f) => f.required && !(values[f.key] ?? '').trim()) ?? false;
-
+/** Formulário auto-gerado a partir do schema declarado pelo plugin. */
+function PluginSettingsForm({ schema, settings }: { schema: SettingDeclaration[]; settings: PluginSettings }) {
+  if (schema.length === 0) {
+    return (
+      <p className="text-[12px] text-ink-3/80 border border-dashed border-line rounded-md px-3 py-4 leading-relaxed">
+        Este plugin não declara configurações.
+      </p>
+    );
+  }
   return (
     <section className="bg-elevated border border-line rounded-lg p-5">
-      <div className="mb-4">
-        <h3 className="text-[14px] font-semibold text-ink-1 flex items-center gap-2">
-          <Plug size={15} className="text-accent-ink" />
-          {title}
-        </h3>
-        <p className="text-[12px] text-ink-3 mt-1 leading-relaxed">{description}</p>
+      <div className="flex flex-col divide-y divide-line">
+        {schema.map((decl) => (
+          <SettingField key={decl.key} decl={decl} settings={settings} />
+        ))}
       </div>
-
-      <label className="block text-[11px] font-semibold uppercase tracking-widest text-ink-3 mb-1.5">Provider</label>
-      <select
-        value={providerId}
-        onChange={(e) => setProviderId(e.target.value)}
-        className="w-full bg-sidebar border border-line rounded-md px-3 py-2 text-[13px] text-ink-1 outline-none focus:border-accent transition-colors mb-4"
-      >
-        <option value="">{emptyLabel}</option>
-        {providers.map((p) => {
-          const keyed = hasRequiredKey(p);
-          return (
-            <option key={p.id} value={p.id} disabled={!keyed && p.id !== providerId}>
-              {p.name}
-              {!keyed ? ' (requer chave de API)' : ''}
-            </option>
-          );
-        })}
-      </select>
-
-      {provider && (
-        <>
-          <p className="text-[12px] text-ink-3 mb-4 leading-relaxed">{provider.description}</p>
-          {provider.fields.length > 0 && (
-            <div className="flex flex-col gap-3 mb-4">
-              {provider.fields.map((f) => (
-                <div key={f.key}>
-                  <label className="block text-[12px] text-ink-2 mb-1">
-                    {f.label}
-                    {f.required && <span className="text-danger"> *</span>}
-                  </label>
-                  <input
-                    type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
-                    value={values[f.key] ?? ''}
-                    placeholder={f.placeholder}
-                    onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                    className="w-full bg-sidebar border border-line rounded-md px-3 py-2 text-[13px] text-ink-1 placeholder-ink-3 outline-none focus:border-accent transition-colors"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {testResult && (
-            <div
-              className={`flex items-start gap-2 text-[12px] rounded-md px-3 py-2 mb-4 ${
-                testResult.ok ? 'bg-accent-soft text-accent-ink' : 'bg-danger-soft text-danger'
-              }`}
-            >
-              {testResult.ok ? (
-                <CheckCircle2 size={14} className="shrink-0 mt-px" />
-              ) : (
-                <XCircle size={14} className="shrink-0 mt-px" />
-              )}
-              <span className="break-all">{testResult.ok ? 'Conexão OK' : (testResult.error ?? 'Falhou')}</span>
-            </div>
-          )}
-
-          <div className="flex items-center gap-2">
-            {provider.fields.length > 0 && (
-              <Button variant="secondary" onClick={test} disabled={testing}>
-                {testing ? <Loader2 size={14} className="animate-spin" /> : null}
-                Testar conexão
-              </Button>
-            )}
-            <Button onClick={save} disabled={saving || missingRequired}>
-              {savedFlash ? 'Salvo ✓' : 'Salvar'}
-            </Button>
-          </div>
-        </>
-      )}
-
-      {!provider && saved && (
-        <div className="mt-1">
-          <Button variant="ghost" onClick={save}>
-            Confirmar remoção
-          </Button>
-        </div>
-      )}
     </section>
   );
 }
 
-// ---------- IA: semantic index ----------
+/** Página de configurações de um plugin: componente custom (se houver) ou
+ *  formulário auto-gerado do schema. */
+function PluginPageSection({ entry, plugins }: { entry: SettingsNavEntry; plugins: PluginInfo[] }) {
+  const manager = usePluginManager();
+  const settings = usePluginSettings(entry.pluginId);
+  const info = plugins.find((p) => p.manifest.id === entry.pluginId);
+  const Custom = entry.component;
 
-function IndexCard({ status, onRebuild }: { status: AIIndexStatus; onRebuild(): void }) {
-  const pct = status.chunkCount > 0 ? Math.round((status.embeddedCount / status.chunkCount) * 100) : 100;
-  const downloading = status.modelState === 'downloading';
   return (
-    <section className="bg-elevated border border-line rounded-lg p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[14px] font-semibold text-ink-1 flex items-center gap-2">
-          <Database size={15} className="text-accent-ink" />
-          Busca semântica (sqlite-vec)
-        </h3>
-        <Button variant="secondary" onClick={onRebuild} disabled={downloading}>
-          <RefreshCw size={13} className={status.processing ? 'animate-spin' : ''} />
-          Reindexar tudo
-        </Button>
+    <>
+      <div>
+        <h2 className="text-lg font-semibold text-ink-1 tracking-tight">{entry.title}</h2>
+        <p className="text-[13px] text-ink-3 mt-1">
+          {info ? `${info.manifest.name} v${info.manifest.version}` : entry.pluginId}
+          {info?.manifest.external ? ' · plugin de comunidade' : ''}
+        </p>
       </div>
-
-      <p className="text-[12px] text-ink-3 leading-relaxed mb-3">
-        Os embeddings são gerados <strong className="text-ink-2">localmente</strong> (multilingual-e5-small),
-        otimizados para textos em português. Nenhum dado sai da sua máquina.
-      </p>
-
-      {downloading && (
-        <div className="mb-3">
-          <div className="flex items-center gap-2 text-[12px] text-ink-2 mb-1.5">
-            <Loader2 size={12} className="animate-spin" />
-            Baixando modelo de embeddings (primeira execução)… {status.modelProgress}%
-          </div>
-          <div className="h-1.5 rounded-full bg-sidebar overflow-hidden">
-            <div className="h-full bg-accent transition-all duration-500" style={{ width: `${status.modelProgress}%` }} />
-          </div>
-        </div>
+      {Custom ? (
+        <Custom settings={settings} />
+      ) : (
+        <PluginSettingsForm schema={manager.settingsPages.getSchema(entry.pluginId)} settings={settings} />
       )}
+    </>
+  );
+}
 
-      <div className="flex items-center gap-4 text-[12px] text-ink-2 mb-2">
-        <span>
-          <strong className="text-ink-1">{status.embeddedCount}</strong> / {status.chunkCount} trechos indexados
-        </span>
-        {status.pendingJobs > 0 && (
-          <span className="text-ink-3 flex items-center gap-1.5">
-            <Loader2 size={12} className="animate-spin" /> {status.pendingJobs} pendentes
-          </span>
+/** Destino de deep-link sem página ativa: plugin desativado (oferece ativar)
+ *  ou plugin sem página de configurações. */
+function PluginPagePlaceholder({ pluginId, plugins }: { pluginId: string; plugins: PluginInfo[] }) {
+  const manager = usePluginManager();
+  const [busy, setBusy] = useState(false);
+  const info = plugins.find((p) => p.manifest.id === pluginId);
+
+  const activate = async () => {
+    setBusy(true);
+    try {
+      await manager.setEnabled(pluginId, true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div>
+        <h2 className="text-lg font-semibold text-ink-1 tracking-tight">{info?.manifest.name ?? pluginId}</h2>
+      </div>
+      <section className="bg-elevated border border-line rounded-lg p-5">
+        {info && !info.active ? (
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-[13px] text-ink-3 leading-relaxed">
+              Este plugin está desativado. Ative-o para ver e alterar suas configurações.
+            </p>
+            <Button onClick={activate} disabled={busy}>
+              {busy ? <Loader2 size={14} className="animate-spin" /> : null}
+              Ativar plugin
+            </Button>
+          </div>
+        ) : (
+          <p className="text-[13px] text-ink-3 leading-relaxed">Este plugin não possui uma página de configurações.</p>
         )}
-      </div>
-      <div className="h-1.5 rounded-full bg-sidebar overflow-hidden">
-        <div className="h-full bg-accent transition-all duration-500" style={{ width: `${pct}%` }} />
-      </div>
-      {status.lastError && (
-        <div className="flex items-start gap-2 text-[12px] rounded-md px-3 py-2 mt-3 bg-danger-soft text-danger">
-          <XCircle size={14} className="shrink-0 mt-px" />
-          <span className="break-all">Erro ao indexar: {status.lastError}</span>
-        </div>
-      )}
-    </section>
+      </section>
+    </>
   );
 }
 
@@ -274,75 +257,16 @@ function GeneralSection() {
   );
 }
 
-function AISection() {
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [searchProviders, setSearchProviders] = useState<ProviderInfo[]>([]);
-  const [settings, setSettings] = useState<AISettings | null>(null);
-  const [status, setStatus] = useState<AIIndexStatus | null>(null);
-
-  const reload = useCallback(async () => {
-    const [p, sp, s, st] = await Promise.all([
-      window.diegesis.ai.providers(),
-      window.diegesis.ai.searchProviders(),
-      window.diegesis.ai.getSettings(),
-      window.diegesis.ai.indexStatus(),
-    ]);
-    setProviders(p);
-    setSearchProviders(sp);
-    setSettings(s);
-    setStatus(st);
-  }, []);
-
-  useEffect(() => {
-    reload();
-    return window.diegesis.ai.onIndexStatus(setStatus);
-  }, [reload]);
-
-  if (!settings) return null;
-
-  return (
-    <>
-      <ProviderSection
-        key={`chat-${settings.chat?.providerId ?? 'none'}`}
-        title="Provider de chat"
-        description="Usado nas conversas do Assistente IA e nos comandos do editor. Chaves de API são criptografadas localmente quando o sistema operacional oferece keyring."
-        emptyLabel="— Desativado —"
-        providers={providers}
-        saved={settings.chat}
-        onSave={async (cfg) => {
-          await window.diegesis.ai.setChatProvider(cfg);
-          await reload();
-        }}
-        onTest={(id, cfg) => window.diegesis.ai.testProvider(id, cfg)}
-      />
-
-      <ProviderSection
-        key={`search-${settings.search?.providerId ?? 'default'}`}
-        title="Provider de busca na web"
-        description="Usado quando a opção “Busca na web” está ativa no chat. DuckDuckGo é o padrão e não requer chave; Brave e Tavily precisam de API key."
-        emptyLabel="— DuckDuckGo (padrão) —"
-        providers={searchProviders.filter((p) => p.id !== 'duckduckgo')}
-        saved={settings.search}
-        onSave={async (cfg) => {
-          await window.diegesis.ai.setSearchProvider(cfg);
-          await reload();
-        }}
-        onTest={(id, cfg) => window.diegesis.ai.testSearchProvider(id, cfg)}
-      />
-
-      {status && <IndexCard status={status} onRebuild={() => window.diegesis.ai.rebuildIndex()} />}
-    </>
-  );
-}
-
 function PluginRow({
   plugin: p,
   busy,
   onToggle,
+  onOpenSettings,
 }: {
   plugin: PluginInfo;
   busy: boolean;
   onToggle(id: string, enabled: boolean): void;
+  onOpenSettings(id: string): void;
 }) {
   return (
     <li className="flex items-center gap-3 py-3">
@@ -370,27 +294,24 @@ function PluginRow({
           )}
         </div>
       </div>
+      <button
+        onClick={() => onOpenSettings(p.manifest.id)}
+        title="Abrir configurações do plugin"
+        className="p-1.5 rounded text-ink-3 hover:text-ink-1 hover:bg-hover transition-colors shrink-0"
+      >
+        <Settings2 size={14} />
+      </button>
       {p.manifest.required ? (
         <span className="text-[10px] text-ink-3 bg-overlay rounded px-1.5 py-1 shrink-0" title="Plugin essencial do aplicativo">
           sempre ativo
         </span>
       ) : (
-        <button
-          role="switch"
-          aria-checked={p.active}
+        <Toggle
+          checked={p.active}
           disabled={busy}
-          onClick={() => onToggle(p.manifest.id, !p.active)}
-          className={`relative w-9 h-5 rounded-full transition-colors shrink-0 disabled:opacity-40 ${
-            p.active ? 'bg-accent' : 'bg-line-strong'
-          }`}
+          onChange={(enabled) => onToggle(p.manifest.id, enabled)}
           title={p.active ? 'Desativar plugin' : 'Ativar plugin'}
-        >
-          <span
-            className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-              p.active ? 'translate-x-4.5 left-0' : 'translate-x-0.5 left-0'
-            }`}
-          />
-        </button>
+        />
       )}
     </li>
   );
@@ -400,6 +321,7 @@ function PluginsSection() {
   const plugins = usePlugins();
   const manager = usePluginManager();
   const external = useExternalPlugins();
+  const { openSettings } = useStore();
   const [busy, setBusy] = useState<string | null>(null);
 
   const core = plugins.filter((p) => !p.manifest.external);
@@ -413,6 +335,9 @@ function PluginsSection() {
       setBusy(null);
     }
   };
+
+  // deep-link (estilo Obsidian): abre a página de configurações do plugin
+  const openPluginSettings = (id: string) => openSettings(`plugin:${id}`);
 
   return (
     <section className="bg-elevated border border-line rounded-lg p-5">
@@ -429,7 +354,13 @@ function PluginsSection() {
       <h4 className="text-[11px] font-semibold uppercase tracking-widest text-ink-3 mb-1">Core</h4>
       <ul className="flex flex-col divide-y divide-line">
         {core.map((p) => (
-          <PluginRow key={p.manifest.id} plugin={p} busy={busy === p.manifest.id} onToggle={toggle} />
+          <PluginRow
+            key={p.manifest.id}
+            plugin={p}
+            busy={busy === p.manifest.id}
+            onToggle={toggle}
+            onOpenSettings={openPluginSettings}
+          />
         ))}
       </ul>
 
@@ -459,7 +390,13 @@ function PluginsSection() {
       {community.length > 0 ? (
         <ul className="flex flex-col divide-y divide-line">
           {community.map((p) => (
-            <PluginRow key={p.manifest.id} plugin={p} busy={busy === p.manifest.id} onToggle={toggle} />
+            <PluginRow
+              key={p.manifest.id}
+              plugin={p}
+              busy={busy === p.manifest.id}
+              onToggle={toggle}
+              onOpenSettings={openPluginSettings}
+            />
           ))}
         </ul>
       ) : (
@@ -472,15 +409,86 @@ function PluginsSection() {
   );
 }
 
+/** Efeitos globais do reino: definições disponíveis para todas as fichas
+ *  (aplicadas na aba fixa "Efeitos" do editor de ficha). */
+function SheetsSection() {
+  const { uiState, saveUiState, activeRealmId } = useStore();
+  const rawRealmEffects = (activeRealmId ? uiState.realmSettings?.[activeRealmId]?.sheetEffects : undefined) ?? {};
+  const customDefs = useMemo(() => parseEffectDefinitions(rawRealmEffects), [rawRealmEffects]);
+
+  const writeRealmEffects = (map: Record<string, EffectDefinition>) => {
+    if (!activeRealmId) return;
+    saveUiState({
+      realmSettings: {
+        ...(uiState.realmSettings ?? {}),
+        [activeRealmId]: { ...(uiState.realmSettings?.[activeRealmId] ?? {}), sheetEffects: map },
+      },
+    });
+  };
+
+  return (
+    <section className="bg-elevated border border-line rounded-lg p-5">
+      <h3 className="text-[14px] font-semibold text-ink-1 flex items-center gap-2 mb-1">
+        <Sparkles size={15} className="text-accent-ink" />
+        Efeitos globais do reino
+      </h3>
+      <p className="text-[12px] text-ink-3 mb-4 leading-relaxed">
+        Definições de efeito disponíveis para qualquer ficha deste reino — aplique-as na aba Efeitos da ficha.
+      </p>
+      <EffectsPanel
+        custom={customDefs}
+        onSave={(def) => writeRealmEffects({ ...rawRealmEffects, [def.id]: def })}
+        onDelete={(id) => {
+          const map = { ...rawRealmEffects };
+          delete map[id];
+          writeRealmEffects(map);
+        }}
+      />
+    </section>
+  );
+}
+
 // ---------- panel ----------
 
 export function SettingsPanel() {
   const [section, setSection] = useState<SettingsSectionId>('general');
+  const plugins = usePlugins();
+  const pageEntries = useSettingsPages();
+  const { settingsSection, clearSettingsSection } = useStore();
+
+  // deep-link consumível (Configurações → Plugins → ⚙️, app.openSettings, …)
+  useEffect(() => {
+    if (settingsSection) {
+      setSection(settingsSection);
+      clearSettingsSection();
+    }
+  }, [settingsSection, clearSettingsSection]);
+
+  // páginas implícitas (schema-only) usam o nome do manifest como título
+  const entries = useMemo(
+    () =>
+      pageEntries.map((e) =>
+        e.id.startsWith('schema:')
+          ? { ...e, title: plugins.find((p) => p.manifest.id === e.pluginId)?.manifest.name ?? e.title }
+          : e
+      ),
+    [pageEntries, plugins]
+  );
+
+  const isBuiltin = SECTIONS.some((s) => s.id === section);
+  // resolve a seção para uma página de plugin: id exato da página, ou
+  // deep-link `plugin:<pluginId>` → primeira página daquele plugin
+  const pluginTarget = section.startsWith('plugin:') ? section.slice('plugin:'.length) : null;
+  const activeEntry = !isBuiltin
+    ? entries.find((e) => e.id === section) ?? (pluginTarget ? entries.find((e) => e.pluginId === pluginTarget) : undefined)
+    : undefined;
+
+  const entryActive = (e: SettingsNavEntry) => section === e.id || pluginTarget === e.pluginId;
 
   return (
     <div className="h-full flex bg-app">
       {/* sections nav */}
-      <div className="w-44 shrink-0 border-r border-line bg-sidebar py-3">
+      <div className="w-44 shrink-0 border-r border-line bg-sidebar py-3 overflow-y-auto custom-scrollbar">
         <div className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-widest text-ink-3">Configurações</div>
         {SECTIONS.map((s) => (
           <button
@@ -494,6 +502,30 @@ export function SettingsPanel() {
             {s.name}
           </button>
         ))}
+
+        {/* plugin settings pages (grupo estilo Obsidian) */}
+        {entries.length > 0 && (
+          <>
+            <div className="mx-4 my-2 border-t border-line" />
+            <div className="px-4 pb-1 text-[11px] font-semibold uppercase tracking-widest text-ink-3">Plugins</div>
+            {entries.map((e) => {
+              const Icon = e.icon ?? Puzzle;
+              const active = entryActive(e);
+              return (
+                <button
+                  key={e.id}
+                  onClick={() => setSection(e.id)}
+                  className={`w-full flex items-center gap-2.5 px-4 py-2 text-[13px] transition-colors ${
+                    active ? 'bg-active text-ink-1' : 'text-ink-2 hover:bg-hover'
+                  }`}
+                >
+                  <Icon size={14} className={active ? 'text-accent-ink' : 'text-ink-3'} />
+                  <span className="truncate">{e.title}</span>
+                </button>
+              );
+            })}
+          </>
+        )}
       </div>
 
       {/* content */}
@@ -508,16 +540,15 @@ export function SettingsPanel() {
               <GeneralSection />
             </>
           )}
-          {section === 'ai' && (
+          {section === 'sheets' && (
             <>
               <div>
-                <h2 className="text-lg font-semibold text-ink-1 tracking-tight">IA</h2>
+                <h2 className="text-lg font-semibold text-ink-1 tracking-tight">Fichas</h2>
                 <p className="text-[13px] text-ink-3 mt-1 leading-relaxed">
-                  Providers de chat e busca na web são plug-and-play. A busca semântica usa um modelo de embeddings
-                  local, sem configuração.
+                  Configurações das fichas de personagem do reino ativo.
                 </p>
               </div>
-              <AISection />
+              <SheetsSection />
             </>
           )}
           {section === 'plugins' && (
@@ -531,6 +562,8 @@ export function SettingsPanel() {
               <PluginsSection />
             </>
           )}
+          {!isBuiltin && activeEntry && <PluginPageSection entry={activeEntry} plugins={plugins} />}
+          {!isBuiltin && !activeEntry && pluginTarget && <PluginPagePlaceholder pluginId={pluginTarget} plugins={plugins} />}
         </div>
       </div>
     </div>

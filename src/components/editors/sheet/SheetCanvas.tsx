@@ -34,6 +34,10 @@ export interface SheetCanvasProps {
   renderContent: (block: SheetBlock) => React.ReactNode;
   /** barra superior (menu de modelos, ações) */
   topbar?: React.ReactNode;
+  /** faixa de abas da ficha (parte visual da ficha, acima do grid) */
+  tabs?: React.ReactNode;
+  /** corpo alternativo que substitui o grid de blocos (ex.: aba fixa de efeitos) */
+  body?: React.ReactNode;
   /** conteúdo abaixo do canvas (audit trail) */
   footer?: React.ReactNode;
   /** overlays flutuantes (toolbar) — dentro do DndContext */
@@ -126,18 +130,21 @@ export function SheetCanvas(props: SheetCanvasProps) {
           <div className="h-full overflow-y-auto custom-scrollbar" onClick={() => props.onSelect(null)}>
             <div className="max-w-[860px] mx-auto px-6 pt-4 pb-24 flex flex-col gap-3">
               {props.topbar}
-              <CanvasDropZone
-                innerRef={canvasRef}
-                editing={editing}
-                height={rows * stepY}
-                crosshair={editing && props.armedTool !== null}
-                onClick={onCanvasClick}
-              >
-                {width > 0 &&
-                  layout.blocks.map((b) => (
-                    <BlockShell key={b.id} block={b} metrics={metrics} canvasProps={props} />
-                  ))}
-              </CanvasDropZone>
+              {props.tabs}
+              {props.body ?? (
+                <CanvasDropZone
+                  innerRef={canvasRef}
+                  editing={editing}
+                  height={rows * stepY}
+                  crosshair={editing && props.armedTool !== null}
+                  onClick={onCanvasClick}
+                >
+                  {width > 0 &&
+                    layout.blocks.map((b) => (
+                      <BlockShell key={b.id} block={b} metrics={metrics} canvasProps={props} />
+                    ))}
+                </CanvasDropZone>
+              )}
               {props.footer}
             </div>
           </div>

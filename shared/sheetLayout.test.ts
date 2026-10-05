@@ -6,6 +6,7 @@ import {
   parseSheetTemplate,
   layoutRows,
   clampBlock,
+  sheetTabs,
   SHEET_GRID,
 } from './sheetLayout';
 
@@ -21,7 +22,12 @@ console.assert(
   parseSheetLayout({ version: 1, blocks: [{ id: 'a', type: 'wat', x: 0, y: 0, w: 1, h: 1 }] })!.blocks.length === 0,
   'tipo desconhecido descartado',
 );
-console.assert(layoutRows(def) >= 17, 'layout padrao cobre efeitos');
+console.assert(layoutRows(def) >= 13, 'layout padrao cobre rolagens');
+console.assert(
+  sheetTabs({ version: 1, grid: SHEET_GRID, blocks: [] }).map((t) => t.id).join(',') === 'geral,efeitos',
+  'abas fixas geral+efeitos sempre presentes',
+);
+console.assert(sheetTabs(def).some((t) => t.id === 'efeitos'), 'template padrao inclui aba fixa efeitos');
 const clamped = clampBlock(def, { id: 'x', type: 'text', text: '', x: 10, y: 0, w: 8, h: 1 });
 console.assert(clamped.x + clamped.w <= SHEET_GRID.cols, 'clamp dentro das colunas');
 
