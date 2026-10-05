@@ -5,56 +5,71 @@
 @import "@fontsource/cinzel/400.css";
 @import "@fontsource/cinzel/600.css";
 @import "@fontsource/cinzel/700.css";
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/500.css";
+@import "@fontsource/plus-jakarta-sans/600.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/700.css";
 
 /* ============================================================
-   DIEGESIS CODEX — Design tokens (Notion-inspired dark)
+   DIEGESIS CODEX — Design tokens (Modern Tactical VTT)
    ============================================================ */
 @theme {
-  --color-app: #191919;
-  --color-sidebar: #202020;
-  --color-elevated: #252525;
-  --color-overlay: #2c2c2c;
-  --color-hover: rgba(255, 255, 255, 0.055);
-  --color-active: rgba(255, 255, 255, 0.09);
-  --color-line: rgba(255, 255, 255, 0.08);
-  --color-line-strong: rgba(255, 255, 255, 0.14);
-  --color-ink-1: rgba(255, 255, 255, 0.88);
-  --color-ink-2: rgba(255, 255, 255, 0.55);
-  --color-ink-3: rgba(255, 255, 255, 0.36);
-  --color-accent: #2383e2;
-  --color-accent-hover: #1a6fc4;
-  --color-accent-soft: rgba(35, 131, 226, 0.16);
-  --color-accent-ink: #529cca;
-  --color-danger: #eb5757;
-  --color-danger-soft: rgba(235, 87, 87, 0.14);
-  --color-success: #4dab6a;
-  --color-success-soft: rgba(77, 171, 106, 0.14);
+  --color-app: #090c12;
+  --color-sidebar: #0e131f;
+  --color-elevated: #121826;
+  --color-overlay: #161d2e;
+  --color-card: rgba(18, 24, 38, 0.7);
+  --color-hover: rgba(148, 163, 184, 0.08);
+  --color-active: rgba(56, 189, 248, 0.1);
+  --color-line: rgba(125, 160, 190, 0.13);
+  --color-line-strong: rgba(125, 160, 190, 0.22);
+  --color-ink-1: #e6edf5;
+  --color-ink-2: #94a3b8;
+  --color-ink-3: #5b6b82;
+  --color-accent: #38bdf8;
+  --color-accent-hover: #0ea5e9;
+  --color-accent-soft: rgba(56, 189, 248, 0.14);
+  --color-accent-ink: #7dd3fc;
+  --color-neon: #00f2fe;
+  --color-violet: #818cf8;
+  --color-crimson: #f43f5e;
+  --color-danger: #f43f5e;
+  --color-danger-soft: rgba(244, 63, 94, 0.14);
+  --color-success: #34d399;
+  --color-success-soft: rgba(52, 211, 153, 0.14);
   --color-note: #529cca;
   --color-board: #4dab9a;
   --color-pdf: #d96a5f;
   --color-map: #d9a45f;
   --color-timeline: #b48ad9;
-  --color-table: #d987b5;
+  --color-table: #818cf8;
   --color-sheet: #a3be8c;
   --color-sheet-soft: rgba(163, 190, 140, 0.14);
   --color-sheet-strong: #c2d8af;
 
-  --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica,
-    "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+  --shadow-glow-cyan: 0 0 15px rgba(56, 189, 248, 0.3);
+  --shadow-glow-crit: 0 0 20px rgba(0, 242, 254, 0.5);
+
+  --font-ui: "Plus Jakarta Sans", Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji",
+    "Segoe UI Symbol";
   --font-serif: Lyon-Text, Georgia, ui-serif, serif;
-  --font-mono: iawriter-mono, Nitti, Menlo, Courier, monospace;
+  --font-mono: "JetBrains Mono", "Fira Code", iawriter-mono, Menlo, Consolas, monospace;
   --font-display: "Cinzel", "Times New Roman", ui-serif, serif;
 }
 
 /* ============================================================
-   SHEET THEME — dark fantasy premium (ouro envelhecido)
+   SHEET THEME — tactical cyan (VTT)
    Escopada ao editor de ficha: sobrescreve os tokens --color-sheet*
    apenas dentro da árvore .sheet-theme.
    ============================================================ */
 .sheet-theme {
-  --color-sheet: #c9a86a;
-  --color-sheet-soft: rgba(201, 168, 106, 0.12);
-  --color-sheet-strong: #e6cfa0;
+  --color-sheet: #38bdf8;
+  --color-sheet-soft: rgba(56, 189, 248, 0.14);
+  --color-sheet-strong: #7dd3fc;
 }
 
 :root {
@@ -74,7 +89,7 @@ body,
 }
 
 ::selection {
-  background: rgba(35, 131, 226, 0.32);
+  background: rgba(56, 189, 248, 0.32);
 }
 
 /* Thin, quiet scrollbars */
@@ -110,8 +125,8 @@ body,
   --color-1: var(--color-app);
   --color-2: var(--color-elevated);
   --color-3: var(--color-overlay);
-  --color-drag1: rgba(35, 131, 226, 0.45);
-  --color-drag2: rgba(35, 131, 226, 0.3);
+  --color-drag1: rgba(56, 189, 248, 0.45);
+  --color-drag2: rgba(56, 189, 248, 0.3);
   font-family: var(--font-ui);
   font-size: 13px;
 }
@@ -128,15 +143,16 @@ body,
   padding-left: 4px;
 }
 .flexlayout__tab_button {
-  color: var(--color-ink-2);
+  color: var(--color-ink-3);
   background-color: transparent;
   border: none;
-  border-radius: 6px 6px 0 0;
+  border-radius: 0;
   margin: 4px 1px 0 1px;
-  padding: 0 10px;
+  padding: 0 11px;
   height: 30px;
   font-size: 12.5px;
   border-top: 2px solid transparent;
+  transition: color 120ms ease, background-color 120ms ease;
 }
 .flexlayout__tab_button:hover {
   background-color: var(--color-hover);
@@ -144,8 +160,10 @@ body,
 }
 .flexlayout__tab_button--selected {
   background-color: var(--color-app);
+  background-image: linear-gradient(to bottom, rgba(56, 189, 248, 0.06), transparent 46%);
   color: var(--color-ink-1);
-  border-top: 2px solid var(--color-accent);
+  border-top-color: var(--color-accent);
+  box-shadow: inset 0 1px 0 rgba(125, 211, 252, 0.14);
 }
 .flexlayout__tab_button:hover .flexlayout__tab_button_trailing,
 .flexlayout__tab_button--selected .flexlayout__tab_button_trailing {
@@ -175,9 +193,10 @@ body,
   color: var(--color-ink-1);
 }
 .flexlayout__border_button {
-  color: var(--color-ink-2);
-  border-radius: 6px;
+  color: var(--color-ink-3);
+  border-radius: 0;
   margin: 2px 4px;
+  transition: color 120ms ease, background-color 120ms ease;
 }
 .flexlayout__border_button:hover {
   background-color: var(--color-hover);
@@ -185,7 +204,8 @@ body,
 }
 .flexlayout__border_button--selected {
   background-color: var(--color-active);
-  color: var(--color-ink-1);
+  color: var(--color-accent-ink);
+  box-shadow: inset 2px 0 0 var(--color-accent);
 }
 .flexlayout__tabset-selected {
   background-image: none;
@@ -202,24 +222,38 @@ body,
 }
 
 /* ============================================================
-   BlockNote — Diegesis Codex dark theme (Notion-inspired)
+   BlockNote — tactical theme.
+   Escopado a :root + .bn-root[data-color-scheme=dark] + [data-color-scheme=dark]
+   para cobrir tanto o editor quanto os menus flutuantes (slash, toolbar, side
+   menu) que o BlockNote renderiza via portal fora da árvore .diegesis-bn.
    ============================================================ */
+:root,
+.bn-root,
+.bn-root[data-color-scheme='dark'],
+[data-color-scheme='dark'],
 .diegesis-bn {
   --bn-colors-editor-text: var(--color-ink-1);
   --bn-colors-editor-background: transparent;
-  --bn-colors-side-menu: var(--color-ink-3);
-  --bn-colors-menu-text: var(--color-ink-2);
+  --bn-colors-menu-text: var(--color-ink-1);
   --bn-colors-menu-background: var(--color-elevated);
   --bn-colors-tooltip-text: var(--color-ink-1);
-  --bn-colors-tooltip-background: var(--color-elevated);
+  --bn-colors-tooltip-background: var(--color-overlay);
   --bn-colors-hovered-text: var(--color-ink-1);
   --bn-colors-hovered-background: var(--color-hover);
   --bn-colors-selected-text: var(--color-ink-1);
   --bn-colors-selected-background: var(--color-active);
+  --bn-colors-disabled-text: var(--color-ink-3);
+  --bn-colors-disabled-background: var(--color-hover);
+  --bn-colors-shadow: rgba(0, 0, 0, 0.55);
   --bn-colors-border: var(--color-line-strong);
+  --bn-colors-side-menu: var(--color-ink-3);
   --bn-border: 1px solid var(--color-line);
   --bn-shadow-medium: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --bn-shadow-light: 0 2px 6px rgba(0, 0, 0, 0.4);
   --bn-font-family: var(--font-ui);
+}
+
+.diegesis-bn {
   background: transparent;
 }
 
@@ -235,7 +269,7 @@ body,
   padding-bottom: 40vh;
 }
 .diegesis-bn .bn-editor ::selection {
-  background: rgba(35, 131, 226, 0.32);
+  background: rgba(56, 189, 248, 0.32);
 }
 
 /* Placeholder */
@@ -325,12 +359,16 @@ body,
   background: var(--color-accent-soft);
 }
 
-/* AI button inside the formatting toolbar */
+/* Remove the always-visible scrollbars BlockNote (ariakit) puts on the
+   floating toolbar (`overflow: scroll` shows both axes even when they fit). */
+.bn-ak-toolbar {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* AI button inside the formatting toolbar — reuses bn-ak-button layout
+   (height, padding, radius) so it matches the default toolbar buttons */
 .bn-ask-ai {
-  display: flex;
-  align-items: center;
-  padding: 6px;
-  border-radius: 6px;
   color: var(--color-ink-2);
   transition: background 120ms ease, color 120ms ease;
 }
@@ -469,6 +507,78 @@ body,
 }
 
 /* ============================================================
+   Tactical micro-interactions (VTT)
+   ============================================================ */
+
+/* varredura de sorteio na tabela: flash intermitente de 120ms */
+@keyframes rowSweep {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: rgba(56, 189, 248, 0.18);
+  }
+}
+.animate-row-sweep {
+  animation: rowSweep 120ms ease-in-out;
+}
+
+/* falha crítica (1 natural): flash de borda carmesim que desvanece */
+@keyframes critFailFlash {
+  0% {
+    box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.8), 0 0 18px rgba(244, 63, 94, 0.35);
+  }
+  100% {
+    box-shadow: 0 0 0 1px transparent, 0 0 0 rgba(244, 63, 94, 0);
+  }
+}
+.animate-crit-fail {
+  animation: critFailFlash 300ms ease-out both;
+}
+
+/* pulso ciano vibrante (crítico natural) */
+@keyframes critPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(0, 242, 254, 0);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(0, 242, 254, 0.6);
+  }
+}
+.animate-crit-pulse {
+  animation: critPulse 320ms ease-out 2;
+}
+
+/* micro-shake horizontal (2 quadros) */
+@keyframes microShake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  33% {
+    transform: translateX(-1.5px);
+  }
+  66% {
+    transform: translateX(1.5px);
+  }
+}
+.animate-micro-shake {
+  animation: microShake 160ms ease-out;
+}
+
+/* rotação de 180° do ícone de dado no disparo */
+@keyframes diceSpin {
+  to {
+    transform: rotate(180deg);
+  }
+}
+.animate-dice-spin {
+  animation: diceSpin 250ms ease-out both;
+}
+
+/* ============================================================
    PDF reader
    ============================================================ */
 .pdf-scroll {
@@ -492,7 +602,7 @@ body,
   color: transparent;
 }
 .pdf-page .textLayer ::selection {
-  background: rgba(35, 131, 226, 0.35);
+  background: rgba(56, 189, 248, 0.35);
   color: transparent;
 }
 /* page color filters */
@@ -710,7 +820,7 @@ textarea {
   height: 620px;
   top: -220px;
   right: -140px;
-  background: radial-gradient(circle, rgba(35, 131, 226, 0.32), transparent 66%);
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.32), transparent 66%);
 }
 .boot-glow--b {
   width: 520px;
@@ -776,7 +886,7 @@ textarea {
 .boot-emblem-core {
   width: 64px;
   height: 64px;
-  filter: drop-shadow(0 0 14px rgba(35, 131, 226, 0.4));
+  filter: drop-shadow(0 0 14px rgba(56, 189, 248, 0.4));
 }
 .boot-emblem-ring {
   position: absolute;
@@ -785,8 +895,8 @@ textarea {
 }
 .boot-emblem-ring--outer {
   inset: 0;
-  border-top-color: rgba(82, 156, 202, 0.7);
-  border-right-color: rgba(35, 131, 226, 0.25);
+  border-top-color: rgba(125, 211, 252, 0.7);
+  border-right-color: rgba(56, 189, 248, 0.25);
   animation: boot-spin 4.6s linear infinite;
 }
 .boot-emblem-ring--inner {
@@ -809,8 +919,8 @@ textarea {
   height: 5px;
   margin-left: -2.5px;
   border-radius: 999px;
-  background: #529cca;
-  box-shadow: 0 0 10px 2px rgba(82, 156, 202, 0.8);
+  background: #7dd3fc;
+  box-shadow: 0 0 10px 2px rgba(56, 189, 248, 0.8);
 }
 .boot-pulse {
   transform-origin: 32px 33px;
@@ -841,7 +951,7 @@ textarea {
   color: var(--color-ink-1);
 }
 .boot-title span {
-  background: linear-gradient(120deg, #529cca, #b48ad9);
+  background: linear-gradient(120deg, #7dd3fc, #818cf8);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -868,7 +978,7 @@ textarea {
   height: 100%;
   min-width: 6px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #2383e2, #529cca 60%, #b48ad9);
+  background: linear-gradient(90deg, #38bdf8, #7dd3fc 60%, #818cf8);
   transition: width 420ms cubic-bezier(0.22, 0.9, 0.3, 1);
   overflow: hidden;
 }
@@ -943,5 +1053,378 @@ textarea {
   .boot-bar--indeterminate {
     width: 100%;
     opacity: 0.6;
+  }
+}
+
+/* ============================================================
+   Premium dice — varredura de luz, brilhos e véu do painel
+   ============================================================ */
+
+/* varredura de luz que cruza o botão de dado no clique */
+@keyframes sheen {
+  0% {
+    transform: translateX(-140%) skewX(-12deg);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.65;
+  }
+  100% {
+    transform: translateX(340%) skewX(-12deg);
+    opacity: 0;
+  }
+}
+.animate-sheen {
+  animation: sheen 620ms cubic-bezier(0.22, 0.8, 0.2, 1) both;
+}
+
+/* brilho de texto (total das rolagens) */
+.text-glow-cyan {
+  text-shadow: 0 0 12px rgba(56, 189, 248, 0.45), 0 0 3px rgba(56, 189, 248, 0.5);
+}
+.text-glow-crit {
+  text-shadow: 0 0 18px rgba(0, 242, 254, 0.7), 0 0 5px rgba(0, 242, 254, 0.85);
+}
+.text-glow-fail {
+  text-shadow: 0 0 18px rgba(244, 63, 94, 0.6), 0 0 5px rgba(244, 63, 94, 0.8);
+}
+
+/* véu radial sutil (histórico de rolagens) */
+.codex-veil {
+  background:
+    radial-gradient(120% 55% at 50% -12%, rgba(56, 189, 248, 0.09), transparent 62%),
+    var(--color-app);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-sheen {
+    animation: none !important;
+  }
+}
+
+/* ============================================================
+   Premium header — brand mark, atmosphere, ribbon, realm pill
+   ============================================================ */
+.hd-root {
+  position: relative;
+  background: var(--color-sidebar);
+}
+
+/* atmosphere: aurora glows + faint dot grid (echoes boot/timeline) */
+.hd-atmosphere {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.hd-glow {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(30px);
+}
+.hd-glow--a {
+  width: 360px;
+  height: 150px;
+  top: -110px;
+  right: 4%;
+  background: radial-gradient(closest-side, rgba(56, 189, 248, 0.16), transparent);
+}
+.hd-glow--b {
+  width: 280px;
+  height: 130px;
+  top: -82px;
+  left: 20%;
+  background: radial-gradient(closest-side, rgba(129, 140, 248, 0.11), transparent);
+}
+.hd-grid {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.9), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.9), transparent);
+  opacity: 0.55;
+}
+
+/* signature hairline: cyan → violet → cyan */
+.hd-hairline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(56, 189, 248, 0.45) 16%,
+    rgba(129, 140, 248, 0.4) 50%,
+    rgba(56, 189, 248, 0.45) 84%,
+    transparent
+  );
+}
+
+/* brand */
+.hd-brand {
+  position: relative;
+}
+.hd-gem {
+  width: 22px;
+  height: 22px;
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.35));
+}
+.hd-wordmark {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-ink-1);
+  white-space: nowrap;
+}
+.hd-wordmark span {
+  background: linear-gradient(120deg, #7dd3fc, #818cf8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* vertical divider between regions */
+.hd-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 8px 2px;
+  background: linear-gradient(to bottom, transparent, var(--color-line-strong), transparent);
+}
+
+/* ribbon button */
+.hd-btn {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  color: var(--color-ink-3);
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+.hd-btn:hover {
+  color: var(--color-ink-1);
+  background: var(--color-hover);
+  border-color: var(--color-line);
+}
+.hd-btn--active {
+  color: var(--color-accent-ink);
+  background: var(--color-accent-soft);
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: inset 0 0 12px rgba(56, 189, 248, 0.1);
+}
+.hd-btn--active:hover {
+  color: var(--color-accent-ink);
+  background: var(--color-accent-soft);
+}
+.hd-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.06) 50%, transparent 80%);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+.hd-btn:hover::after {
+  transform: translateX(120%);
+  transition: transform 480ms cubic-bezier(0.22, 0.8, 0.2, 1);
+}
+.hd-btn kbd {
+  color: var(--color-ink-3);
+  background: var(--color-overlay);
+  border: 1px solid var(--color-line);
+}
+
+/* realm selector pill */
+.hd-realm {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  height: 28px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--color-elevated), var(--color-elevated)) padding-box,
+    linear-gradient(120deg, rgba(56, 189, 248, 0.4), rgba(129, 140, 248, 0.26)) border-box;
+  color: var(--color-ink-2);
+  font-size: 12px;
+  transition: box-shadow 140ms ease, color 140ms ease;
+}
+.hd-realm:hover {
+  color: var(--color-ink-1);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.12);
+}
+.hd-realm-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7dd3fc, #818cf8);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.7);
+}
+.hd-realm-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hd-realm-chevron {
+  transition: transform 160ms ease;
+}
+.hd-realm--open .hd-realm-chevron {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hd-btn::after,
+  .hd-realm-chevron {
+    transition: none !important;
+  }
+}
+
+/* centered header search bar */
+.hd-search-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+}
+.hd-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  width: 300px;
+  max-width: 34vw;
+  padding: 0 6px 0 12px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--color-overlay), var(--color-overlay)) padding-box,
+    linear-gradient(120deg, rgba(56, 189, 248, 0.45), rgba(129, 140, 248, 0.28)) border-box;
+  color: var(--color-ink-3);
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 140ms cubic-bezier(0.22, 0.9, 0.3, 1), box-shadow 140ms ease;
+}
+.hd-search:hover {
+  transform: scale(1.03);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.16);
+}
+.hd-search:active {
+  transform: scale(0.975);
+}
+.hd-search-icon {
+  color: var(--color-ink-3);
+  flex-shrink: 0;
+}
+.hd-search-hint {
+  flex: 1;
+  text-align: left;
+  color: var(--color-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hd-search-kbd {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-ink-3);
+  background: var(--color-overlay);
+  border: 1px solid var(--color-line);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+
+/* premium sync status indicator */
+.hd-sync {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.hd-sync-cloud {
+  color: var(--color-ink-3);
+  transition: color 160ms ease;
+}
+.hd-sync[data-state='syncing'] .hd-sync-cloud {
+  color: var(--color-accent-ink);
+}
+.hd-sync[data-state='idle'] .hd-sync-cloud {
+  color: var(--color-success);
+}
+.hd-sync[data-state='error'] .hd-sync-cloud,
+.hd-sync[data-state='auth-required'] .hd-sync-cloud {
+  color: var(--color-danger);
+}
+.hd-sync-dot {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-ink-3);
+  border: 1.5px solid var(--color-sidebar);
+}
+.hd-sync[data-state='syncing'] .hd-sync-dot {
+  background: var(--color-accent);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
+}
+.hd-sync[data-state='idle'] .hd-sync-dot {
+  background: var(--color-success);
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.6);
+}
+.hd-sync[data-state='error'] .hd-sync-dot,
+.hd-sync[data-state='auth-required'] .hd-sync-dot {
+  background: var(--color-danger);
+  box-shadow: 0 0 8px rgba(244, 63, 94, 0.7);
+}
+.hd-sync[data-state='offline'] .hd-sync-dot {
+  background: var(--color-board);
+}
+.hd-sync-arc {
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  border-top-color: var(--color-accent);
+  border-right-color: rgba(56, 189, 248, 0.3);
+  animation: hd-sync-spin 1.1s linear infinite;
+}
+@keyframes hd-sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* grow-in (search palette opens "growing" into place) */
+@keyframes growIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-grow {
+  animation: growIn 220ms cubic-bezier(0.22, 0.9, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hd-search,
+  .hd-sync-arc,
+  .animate-grow {
+    transition: none !important;
+    animation: none !important;
   }
 }
