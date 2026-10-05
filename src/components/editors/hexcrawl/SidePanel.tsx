@@ -509,7 +509,7 @@ function RegionsTab({ map, setMap, activeRegionId, setActiveRegionId, setTool }:
   return (
     <div>
       <p className="text-[11px] text-ink-3 mb-2">
-        Regiões agrupam hexes com modificadores próprios (como as Regions do Foundry): custo de viagem, encontros, clima e notas.
+        Regiões agrupam hexes com modificadores próprios: custo de viagem, encontros, clima e notas.
       </p>
       {map.regions.map((r) => (
         <div key={r.id} className={`border rounded-lg p-2 mb-2 ${activeRegionId === r.id ? 'border-accent' : 'border-line'}`}>
@@ -890,7 +890,7 @@ function ConfigTab({ map, setMap }: PanelProps) {
                 step={0.05}
                 value={bg.opacity}
                 onChange={(e) => setMap((m) => ({ ...m, background: { ...bg, opacity: Number(e.target.value) } }))}
-                className="w-24 accent-[#2383e2]"
+                className="w-24 accent-[#38bdf8]"
               />
             </Field>
             <Field label="Escala">

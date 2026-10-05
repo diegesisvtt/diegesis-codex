@@ -64,11 +64,11 @@ const PANEL_DEFAULT = 288;
 
 /** literal values used to resolve the CSS vars above in standalone SVG/PNG exports */
 const EXPORT_VARS: Record<string, string> = {
-  'var(--color-overlay)': '#2c2c2c',
-  'var(--color-app)': '#191919',
-  'var(--color-line-strong)': 'rgba(255,255,255,0.14)',
-  'var(--color-accent)': '#2383e2',
-  'var(--color-danger)': '#eb5757',
+  'var(--color-overlay)': '#161d2e',
+  'var(--color-app)': '#090c12',
+  'var(--color-line-strong)': 'rgba(148,163,184,0.18)',
+  'var(--color-accent)': '#38bdf8',
+  'var(--color-danger)': '#f43f5e',
 };
 
 export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraChange?: (viewport: MapViewport) => void }) {
@@ -320,7 +320,7 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
 
   /* ---------- camera change notifications (throttled ~15/s) ----------
      Reports the viewport as a hex-space world CENTER + zoom (independent of
-     window size) so the second-window plugin can mirror the GM viewport. */
+     window size) so the player-view plugin can mirror the GM viewport. */
   const cameraNotifyLast = useRef(0);
   const cameraNotifyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onCameraChangeRef = useRef(onCameraChange);
@@ -388,7 +388,7 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
     };
   }, []);
 
-  /** Foundry-style: Alt temporarily disables snap while held */
+  /** Alt temporarily disables snap while held */
   const effectiveSnap = snap && !altDown;
 
   /* ---------- gestures ---------- */
@@ -1392,7 +1392,7 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
                       type="checkbox"
                       checked={s.halo}
                       onChange={(e) => updateLabelOverride(editingLabel.id, { halo: e.target.checked })}
-                      className="accent-[#2383e2]"
+                      className="accent-[#38bdf8]"
                     />
                     Sombra
                   </label>
