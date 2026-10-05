@@ -6,7 +6,7 @@
 // modelos nomeados por reino (Personagem, Monstro/NPC, ...): a ficha herda
 // o layout do modelo e pode sobrescrevê-lo individualmente.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Pencil, RotateCcw, Sparkles } from 'lucide-react';
+import { Check, Pencil, Plus, RotateCcw, Sparkles, Trash2 } from 'lucide-react';
 import {
   SheetEngine,
   createSheetBus,
@@ -23,15 +23,18 @@ import type { DocNode } from '@shared/types';
 import { osrPack, parseSheet, serializeSheet, stripUnknownEffects, type SheetDocumentWithLayout } from '@shared/sheet';
 import { parseEffectDefinitions } from '@shared/sheetEffects';
 import {
+  blockTab,
   builtinSheetTemplates,
   clampBlock,
   defaultSheetLayout,
   newTemplateId,
   parseSheetLayout,
   parseSheetTemplate,
+  sheetTabs,
   SHEET_TEMPLATE_PERSONAGEM,
   type SheetBlock,
   type SheetLayout,
+  type SheetTab,
   type SheetTemplate,
 } from '@shared/sheetLayout';
 import { useStore } from '../../../state/store';
@@ -43,6 +46,7 @@ import { BlockConfig } from './BlockConfig';
 import { EffectsPanel } from './EffectsPanel';
 import { SheetTemplateMenu } from './SheetTemplateMenu';
 import { PanelShell } from '../../ui/PanelShell';
+import { Tabs } from '../../ui/Tabs';
 
 export function SheetEditor({ doc }: { doc: DocNode }) {
   const { updateDocument, flushDocument, subscribeExternalDocChange, uiState, saveUiState, activeRealmId } = useStore();
@@ -56,6 +60,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   const [armedTool, setArmedTool] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelTab, setPanelTab] = useState<'bloco' | 'efeitos'>('bloco');
+  const [activeTab, setActiveTab] = useState<string>('geral');
   const dragGuardRef = useRef(false);
 
   // ---------- modelos (templates) ----------
@@ -107,6 +112,36 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   const layout = layoutOverride ?? activeTemplate?.layout ?? legacyDefault ?? defaultSheetLayout();
   const layoutRef = useRef<SheetLayout | null>(layoutOverride);
   layoutRef.current = layoutOverride;
+
+  // ---------- abas da ficha ----------
+  const tabs = useMemo(() => sheetTabs(layout), [layout]);
+  const activeTabId = tabs.some((t) => t.id === activeTab) ? activeTab : (tabs[0]?.id ?? 'geral');
+  const visibleLayout: SheetLayout = useMemo(
+    () => ({ ...layout, blocks: layout.blocks.filter((b) => blockTab(b, tabs) === activeTabId) }),
+    [layout, tabs, activeTabId],
+  );
+
+  const newTabId = () => `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const addTab = () => {
+    const id = newTabId();
+    mutateLayout((l) => ({ ...l, tabs: [...sheetTabs(l), { id, title: 'Nova aba' }] }));
+    setActiveTab(id);
+  };
+  const renameTab = (id: string, title: string) => {
+    mutateLayout((l) => ({ ...l, tabs: sheetTabs(l).map((t) => (t.id === id ? { ...t, title } : t)) }));
+  };
+  const removeTab = (id: string) => {
+    const cur = sheetTabs(layout);
+    if (cur.length <= 1) return;
+    const first = cur[0].id;
+    mutateLayout((l) => ({
+      ...l,
+      tabs: sheetTabs(l).filter((t) => t.id !== id),
+      // blocos da aba removida vão para a primeira aba
+      blocks: l.blocks.map((b) => (blockTab(b, sheetTabs(l)) === id ? { ...b, tab: first } : b)),
+    }));
+    if (activeTabId === id) setActiveTab(first);
+  };
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dirty = useRef(false);
@@ -268,7 +303,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   const onDropTool = (kind: string, x: number, y: number) => {
     const item = toolItem(kind);
     if (!item) return;
-    const block = item.make(x, y);
+    const block = { ...item.make(x, y), tab: activeTabId };
     mutateLayout((l) => ({ ...l, blocks: [...l.blocks, clampBlock(l, block)] }));
     setSelectedId(block.id);
     setArmedTool(null);
@@ -388,9 +423,32 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     if (id && editing) openPanel('bloco');
   };
 
-  const topbar = (
+  const tabStrip = tabs.length > 1 ? (
     <div className="flex items-center gap-2">
-      <SheetTemplateMenu
+      <div className="flex-1 min-w-0">
+        <Tabs
+          items={tabs.map((t) => ({ id: t.id, label: t.title }))}
+          activeId={activeTabId}
+          onSelect={setActiveTab}
+        />
+      </div>
+      {editing && (
+        <button
+          type="button"
+          onClick={addTab}
+          title="Nova aba"
+          className="p-1.5 rounded-md border border-line bg-elevated/60 text-ink-3 hover:text-ink-1 hover:border-sheet/40 transition-colors shrink-0"
+        >
+          <Plus size={13} />
+        </button>
+      )}
+    </div>
+  ) : undefined;
+
+  const topbar = (
+    <>
+      <div className="flex items-center gap-2">
+        <SheetTemplateMenu
         templates={templates}
         activeId={templateId}
         onApply={applyTemplate}
@@ -447,6 +505,8 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
         </button>
       </span>
     </div>
+    {tabStrip}
+  </>
   );
 
   const footer = auditPath ? (
@@ -490,11 +550,20 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     >
       {panelTab === 'bloco' ? (
         selectedBlock ? (
-          <BlockConfig block={selectedBlock} onChange={(patch) => updateBlock(selectedBlock.id, patch)} />
+          <BlockConfig
+            block={selectedBlock}
+            onChange={(patch) => updateBlock(selectedBlock.id, patch)}
+            tabOptions={tabs}
+            onAssignTab={(tabId) => updateBlock(selectedBlock.id, { tab: tabId })}
+          />
         ) : (
-          <div className="text-[12px] text-ink-3 leading-snug">
-            Selecione um bloco no canvas para editar suas propriedades.
-          </div>
+          <PagesManager
+            tabs={tabs}
+            onRename={renameTab}
+            onRemove={removeTab}
+            onAdd={addTab}
+            canRemove={tabs.length > 1}
+          />
         )
       ) : (
         <EffectsPanel custom={customDefs} onSave={saveEffectDef} onDelete={deleteEffectDef} />
@@ -504,7 +573,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
 
   return (
     <SheetCanvas
-      layout={layout}
+      layout={visibleLayout}
       editing={editing}
       selectedId={selectedId}
       armedTool={armedTool}
@@ -522,5 +591,49 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
       floating={floating}
       sidePanel={sidePanel}
     />
+  );
+}
+
+/** gerenciador de abas/páginas da ficha (modo edição, painel Bloco sem seleção) */
+function PagesManager({
+  tabs,
+  onRename,
+  onRemove,
+  onAdd,
+  canRemove,
+}: {
+  tabs: SheetTab[];
+  onRename: (id: string, title: string) => void;
+  onRemove: (id: string) => void;
+  onAdd: () => void;
+  canRemove: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-3 mb-1">Páginas da ficha</div>
+      {tabs.map((t) => (
+        <div key={t.id} className="flex items-center gap-1">
+          <input
+            value={t.title}
+            onChange={(e) => onRename(t.id, e.target.value)}
+            spellCheck={false}
+            className="flex-1 min-w-0 bg-overlay border border-line rounded px-1.5 py-1 text-[12px] text-ink-1 outline-none focus:border-accent"
+          />
+          {canRemove && (
+            <button
+              type="button"
+              onClick={() => onRemove(t.id)}
+              title="Remover aba"
+              className="p-1 rounded text-ink-3 hover:text-danger hover:bg-danger-soft transition-colors"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
+        </div>
+      ))}
+      <button type="button" onClick={onAdd} className="flex items-center gap-1 text-[12px] text-ink-3 hover:text-accent mt-1">
+        <Plus size={12} /> Nova aba
+      </button>
+    </div>
   );
 }

@@ -9,10 +9,18 @@ export interface SheetGrid {
   gap: number;
 }
 
+/** aba/página da ficha (blocos são distribuídos entre abas) */
+export interface SheetTab {
+  id: string;
+  title: string;
+}
+
 export interface SheetLayout {
   version: 1;
   grid: SheetGrid;
   blocks: SheetBlock[];
+  /** páginas da ficha; ausente = uma única aba implícita "Geral" */
+  tabs?: SheetTab[];
 }
 
 export type BlockInput = 'number' | 'die' | 'text' | 'checkbox';
@@ -23,6 +31,8 @@ interface BlockBase {
   y: number;
   w: number;
   h: number;
+  /** id da aba à qual o bloco pertence (padrão: primeira aba) */
+  tab?: string;
 }
 
 export type SheetBlock =
@@ -46,15 +56,23 @@ export function newBlockId(): string {
 /** layout padrão reproduzindo a ficha OSR atual (nome, atributos, derivados, rolagens, efeitos) */
 export function defaultSheetLayout(): SheetLayout {
   const g = SHEET_GRID;
-  const field = (path: string, label: string, input: BlockInput, x: number, y: number, w = 3): SheetBlock => ({
-    id: newBlockId(), type: 'field', path, label, input, x, y, w, h: 2,
+  const field = (path: string, label: string, input: BlockInput, x: number, y: number, w = 3, tab = 'geral'): SheetBlock => ({
+    id: newBlockId(), type: 'field', path, label, input, x, y, w, h: 2, tab,
+  });
+  const section = (title: string, x: number, y: number, tab = 'geral'): SheetBlock => ({
+    id: newBlockId(), type: 'section', title, x, y, w: 12, h: 1, tab,
   });
   return {
     version: 1,
     grid: g,
+    tabs: [
+      { id: 'geral', title: 'Geral' },
+      { id: 'combate', title: 'Combate' },
+      { id: 'efeitos', title: 'Efeitos' },
+    ],
     blocks: [
-      { id: newBlockId(), type: 'title', x: 0, y: 0, w: 12, h: 2 },
-      { id: newBlockId(), type: 'section', title: 'Atributos', x: 0, y: 2, w: 12, h: 1 },
+      { id: newBlockId(), type: 'title', x: 0, y: 0, w: 12, h: 2, tab: 'geral' },
+      section('Atributos', 0, 2),
       field('dv', 'DV', 'number', 0, 3),
       field('dadoVida', 'Dado de Vida', 'die', 3, 3),
       field('pv.atual', 'PV', 'number', 6, 3),
@@ -64,13 +82,13 @@ export function defaultSheetLayout(): SheetLayout {
       field('moral', 'Moral', 'number', 6, 5),
       field('desl.quad', 'Desl.', 'number', 9, 5),
       field('save', 'Save', 'number', 0, 7),
-      { id: newBlockId(), type: 'derived', path: 'pv.metade', label: 'pv.metade', x: 3, y: 7, w: 3, h: 2 },
-      { id: newBlockId(), type: 'derived', path: 'desl.pes', label: 'desl.pes', x: 6, y: 7, w: 3, h: 2 },
-      { id: newBlockId(), type: 'derived', path: 'desl.m', label: 'desl.m', x: 9, y: 7, w: 3, h: 2 },
-      { id: newBlockId(), type: 'section', title: 'Rolagens', x: 0, y: 9, w: 12, h: 1 },
-      { id: newBlockId(), type: 'rolls', templates: ['ataque', 'dano', 'moral', 'save'], x: 0, y: 10, w: 12, h: 2 },
-      { id: newBlockId(), type: 'section', title: 'Efeitos', x: 0, y: 12, w: 12, h: 1 },
-      { id: newBlockId(), type: 'effects', x: 0, y: 13, w: 12, h: 4 },
+      { id: newBlockId(), type: 'derived', path: 'pv.metade', label: 'pv.metade', x: 3, y: 7, w: 3, h: 2, tab: 'geral' },
+      { id: newBlockId(), type: 'derived', path: 'desl.pes', label: 'desl.pes', x: 6, y: 7, w: 3, h: 2, tab: 'geral' },
+      { id: newBlockId(), type: 'derived', path: 'desl.m', label: 'desl.m', x: 9, y: 7, w: 3, h: 2, tab: 'geral' },
+      section('Rolagens', 0, 9, 'combate'),
+      { id: newBlockId(), type: 'rolls', templates: ['ataque', 'dano', 'moral', 'save'], x: 0, y: 10, w: 12, h: 2, tab: 'combate' },
+      section('Efeitos', 0, 12, 'efeitos'),
+      { id: newBlockId(), type: 'effects', x: 0, y: 13, w: 12, h: 4, tab: 'efeitos' },
     ],
   };
 }
@@ -101,13 +119,28 @@ export function parseSheetLayout(raw: unknown): SheetLayout | null {
     if (![blk.x, blk.y, blk.w, blk.h].every(isNum)) continue;
     blocks.push({
       ...blk,
+      tab: typeof blk.tab === 'string' ? blk.tab : undefined,
       x: Math.max(0, Math.round(blk.x as number)),
       y: Math.max(0, Math.round(blk.y as number)),
       w: Math.max(1, Math.round(blk.w as number)),
       h: Math.max(1, Math.round(blk.h as number)),
     } as unknown as SheetBlock);
   }
-  return { version: 1, grid: g, blocks };
+  const tabs = Array.isArray(r.tabs)
+    ? (r.tabs as unknown[]).filter((t) => t && typeof t === 'object' && typeof (t as Record<string, unknown>).id === 'string' && typeof (t as Record<string, unknown>).title === 'string')
+        .map((t) => ({ id: (t as Record<string, unknown>).id as string, title: (t as Record<string, unknown>).title as string }))
+    : undefined;
+  return { version: 1, grid: g, blocks, ...(tabs && tabs.length > 0 ? { tabs } : {}) };
+}
+
+/** abas efetivas (ausência = uma única "Geral" implícita) */
+export function sheetTabs(layout: SheetLayout): SheetTab[] {
+  return layout.tabs && layout.tabs.length > 0 ? layout.tabs : [{ id: 'geral', title: 'Geral' }];
+}
+
+/** aba à qual um bloco pertence (default: primeira aba) */
+export function blockTab(block: SheetBlock, tabs: SheetTab[]): string {
+  return block.tab && tabs.some((t) => t.id === block.tab) ? block.tab : (tabs[0]?.id ?? 'geral');
 }
 
 /** altura total do canvas em unidades de grid (última linha ocupada + margem) */

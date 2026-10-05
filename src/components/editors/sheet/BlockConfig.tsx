@@ -7,13 +7,27 @@ import { Field, Section, Select, TextInput } from '../../ui/fields';
 export function BlockConfig({
   block,
   onChange,
+  tabOptions,
+  onAssignTab,
 }: {
   block: SheetBlock;
   onChange: (patch: Record<string, unknown>) => void;
+  /** abas disponíveis para mover o bloco (nulo = esconder seletor) */
+  tabOptions?: { id: string; title: string }[];
+  onAssignTab?: (id: string) => void;
 }) {
   return (
     <div>
       <Section title={`Bloco · ${block.type}`}>
+        {tabOptions && onAssignTab && (
+          <Field label="aba">
+            <Select
+              value={block.tab ?? (tabOptions[0]?.id ?? '')}
+              onChange={onAssignTab}
+              options={tabOptions.map((t) => [t.id, t.title])}
+            />
+          </Field>
+        )}
         {(block.type === 'field' || block.type === 'derived' || block.type === 'identity') && (
           <Field label="label">
             <TextInput value={block.label} onChange={(v) => onChange({ label: v })} />

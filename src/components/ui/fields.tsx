@@ -2,15 +2,18 @@
 // hexmap): Field (rótulo + controle), Section (cabeçalho), Num, Color, Check,
 // TextInput, Select e inputCls. Componentes controlados: { value, onChange }.
 
+import { useEffect, useRef, useState } from 'react';
+import { Check as CheckIcon, ChevronDown } from 'lucide-react';
+
 export const inputCls =
   'w-full min-w-0 bg-overlay border border-line rounded px-1.5 py-1 text-[12px] text-ink-1 outline-none focus:border-accent';
 
 export function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="flex items-center justify-between gap-2 py-1 text-[12px] text-ink-2">
+    <div className="flex items-center justify-between gap-2 py-1 text-[12px] text-ink-2">
       <span className="shrink-0">{label}</span>
       {children}
-    </label>
+    </div>
   );
 }
 
@@ -93,12 +96,13 @@ export function Color({ value, onChange }: { value: string; onChange: (v: string
 export function Check({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <label className="flex items-center gap-1.5 text-[12px] text-ink-2 cursor-pointer select-none">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-[#2383e2]" />
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-[#38bdf8]" />
       {label}
     </label>
   );
 }
 
+/** Dropdown custom (não-nativo): trigger + menu estilizado com estado ativo */
 export function Select({
   value,
   onChange,
@@ -110,13 +114,49 @@ export function Select({
   options: [string, string][];
   className?: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const current = options.find(([v]) => v === value)?.[1] ?? value;
+
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={`${inputCls} ${className ?? ''}`}>
-      {options.map(([v, l]) => (
-        <option key={v} value={v} className="bg-elevated">
-          {l}
-        </option>
-      ))}
-    </select>
+    <div ref={ref} className={`relative ${className ?? 'w-40'}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center justify-between gap-1.5 w-full bg-overlay border border-line rounded-md px-2 py-1 text-[12px] text-ink-1 outline-none hover:border-accent/50 focus:border-accent transition-colors"
+      >
+        <span className="truncate text-left">{current}</span>
+        <ChevronDown size={12} className={`shrink-0 text-ink-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full min-w-[132px] rounded-lg border border-line bg-overlay shadow-[0_10px_32px_rgba(0,0,0,0.55)] py-1 max-h-64 overflow-y-auto custom-scrollbar">
+          {options.map(([v, l]) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => {
+                onChange(v);
+                setOpen(false);
+              }}
+              className={`w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left text-[12px] transition-colors ${
+                v === value ? 'bg-sheet-soft text-sheet-strong' : 'text-ink-2 hover:text-ink-1 hover:bg-hover'
+              }`}
+            >
+              <span className="w-3 shrink-0">{v === value && <CheckIcon size={12} className="text-sheet" />}</span>
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
