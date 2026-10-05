@@ -27,6 +27,8 @@ export interface SheetCanvasProps {
   onResizeBlock: (id: string, w: number, h: number) => void;
   onRemoveBlock: (id: string) => void;
   onDropTool: (kind: string, x: number, y: number) => void;
+  /** drop de efeito (arrastado do painel Efeitos) — aplica ao personagem */
+  onDropEffect?: (id: string) => void;
   /** chamado após qualquer drag de ferramenta da toolbar (suprime clique pós-drag) */
   onToolDragEnd?: () => void;
   renderContent: (block: SheetBlock) => React.ReactNode;
@@ -36,7 +38,11 @@ export interface SheetCanvasProps {
   footer?: React.ReactNode;
   /** overlays flutuantes (toolbar) — dentro do DndContext */
   floating?: React.ReactNode;
-  /** painel lateral docked de propriedades (PanelShell) */
+  /** ref do contêiner do canvas (para dock de painéis flutuantes) */
+  contentRef?: React.RefObject<HTMLDivElement>;
+  /** painel lateral docked à esquerda */
+  leftPanel?: React.ReactNode;
+  /** painel lateral docked à direita */
   sidePanel?: React.ReactNode;
 }
 
@@ -84,11 +90,17 @@ export function SheetCanvas(props: SheetCanvasProps) {
     if (id.startsWith('palette:')) {
       props.onToolDragEnd?.();
       if (e.over?.id !== 'canvas' || !canvasRef.current || stepX <= gap) return;
+      if (!editing) return; // blocos só são adicionados em modo edição
       const start = e.activatorEvent as PointerEvent;
       const rect = canvasRef.current.getBoundingClientRect();
       const px = start.clientX + e.delta.x - rect.left;
       const py = start.clientY + e.delta.y - rect.top;
       onDropTool(id.slice('palette:'.length), Math.max(0, Math.round(px / stepX)), Math.max(0, Math.round(py / stepY)));
+      return;
+    }
+    if (id.startsWith('effect:')) {
+      if (e.over?.id !== 'canvas') return;
+      props.onDropEffect?.(id.slice('effect:'.length));
       return;
     }
     if (stepX <= gap) return;
@@ -109,7 +121,8 @@ export function SheetCanvas(props: SheetCanvasProps) {
   return (
     <DndContext sensors={sensors} modifiers={editing ? [snapToGrid] : []} onDragEnd={onDragEnd}>
       <div className="sheet-theme h-full bg-app flex min-h-0">
-        <div className="relative flex-1 min-w-0">
+        {props.leftPanel}
+        <div ref={props.contentRef} className="relative flex-1 min-w-0">
           <div className="h-full overflow-y-auto custom-scrollbar" onClick={() => props.onSelect(null)}>
             <div className="max-w-[860px] mx-auto px-6 pt-4 pb-24 flex flex-col gap-3">
               {props.topbar}
@@ -151,7 +164,7 @@ function CanvasDropZone({
   onClick: (e: React.MouseEvent<HTMLDivElement>) => void;
   children: React.ReactNode;
 }) {
-  const { setNodeRef } = useDroppable({ id: 'canvas', disabled: !editing });
+  const { setNodeRef } = useDroppable({ id: 'canvas' });
   return (
     <div
       ref={(el) => {

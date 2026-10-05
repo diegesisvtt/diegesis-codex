@@ -4,6 +4,7 @@
 // aplicáveis em qualquer ficha.
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { useDraggable } from '@dnd-kit/core';
 import type { Change, EffectDefinition, ValueOp } from '@diegesis/sheet';
 import { newEffectId, summarizeChange } from '@shared/sheetEffects';
 import { Field, Section, Select, TextInput } from '../../ui/fields';
@@ -64,17 +65,7 @@ export function EffectsPanel({ custom, onSave, onDelete }: EffectsPanelProps) {
       <Section title="Efeitos do reino">
         {custom.length === 0 && <div className="text-[12px] text-ink-3 mb-1">Nenhum efeito customizado ainda.</div>}
         {custom.map((d) => (
-          <button
-            key={d.id}
-            type="button"
-            onClick={() => setSelectedId(d.id)}
-            className={`w-full text-left rounded-md px-2 py-1 text-[12px] transition-colors ${
-              d.id === selectedId ? 'bg-active text-ink-1' : 'text-ink-2 hover:bg-hover'
-            }`}
-          >
-            {d.label}
-            <span className="block text-[10.5px] text-ink-3 font-mono truncate">{d.changes.map(summarizeChange).join(' · ')}</span>
-          </button>
+          <DraggableEffectRow key={d.id} def={d} selected={d.id === selectedId} onSelect={() => setSelectedId(d.id)} />
         ))}
         <button
           type="button"
@@ -184,6 +175,26 @@ export function EffectsPanel({ custom, onSave, onDelete }: EffectsPanelProps) {
           </button>
         </Section>
       )}
+    </div>
+  );
+}
+
+/** linha de efeito arrastável (drop na ficha aplica o efeito) + clique p/ editar */
+function DraggableEffectRow({ def, selected, onSelect }: { def: EffectDefinition; selected: boolean; onSelect: () => void }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `effect:${def.id}` });
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      onClick={onSelect}
+      title="Clique para editar · arraste para a ficha para aplicar"
+      className={`w-full text-left rounded-md px-2 py-1 text-[12px] transition-colors cursor-grab active:cursor-grabbing touch-none select-none ${
+        selected ? 'bg-active text-ink-1' : 'text-ink-2 hover:bg-hover'
+      } ${isDragging ? 'opacity-40' : ''}`}
+    >
+      {def.label}
+      <span className="block text-[10.5px] text-ink-3 font-mono truncate">{def.changes.map(summarizeChange).join(' · ')}</span>
     </div>
   );
 }
