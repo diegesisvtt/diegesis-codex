@@ -1,5 +1,5 @@
 // Modelo da "Tabela Interativa" (diegesis/table): linhas com peso, fórmula de
-// dado opcional, faixas derivadas cumulativamente dos pesos (estilo Foundry)
+// dado opcional, faixas derivadas cumulativamente dos pesos
 // e rolagem simples (botão rolar). TS puro — usado pelo renderer e pelo main.
 // A rolagem e a notação são delegadas ao diegesis-sdk (dice-core/dice-notation).
 
@@ -147,7 +147,7 @@ export const formulaMax = (expr: RollExpr) => boundsOf(expr)?.max ?? null;
 
 /**
  * Faixas de rolagem por linha, derivadas cumulativamente dos pesos sobre o
- * intervalo da fórmula (Foundry-style). Linhas com peso proporcionalmente
+ * intervalo da fórmula. Linhas com peso proporcionalmente
  * ínfimo podem ficar com faixa vazia (não roláveis via dado).
  * Retorna null na posição quando a linha tem peso 0 ou sem faixa, e todas null
  * quando a fórmula não tem limites estáticos.
@@ -303,7 +303,7 @@ export interface ChainStart {
 }
 
 /**
- * Rolagem encadeada (estilo Foundry "roll on table"): rola na tabela inicial;
+ * Rolagem encadeada (roll on table): rola na tabela inicial;
  * se a linha sorteada vincula um documento que resolve para outra tabela,
  * rola nela também, recursivamente. Proteção contra ciclos por docId
  * visitado + limite de profundidade.

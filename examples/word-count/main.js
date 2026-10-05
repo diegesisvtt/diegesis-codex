@@ -41,6 +41,13 @@ function countInBlocks(value) {
 
 function StatsView() {
   const [stats, setStats] = useState(null);
+  const [, bump] = useState(0);
+
+  // re-renderiza quando as settings mudam na página de Configurações do plugin
+  useEffect(() => {
+    const sub = host.settings.subscribe(() => bump((c) => c + 1));
+    return () => sub.dispose();
+  }, []);
 
   const reload = useCallback(async () => {
     const realmId = host.app.activeRealmId;
@@ -72,18 +79,23 @@ function StatsView() {
     return e('div', { className: 'h-full flex items-center justify-center text-ink-3 text-sm' }, 'Calculando…');
   }
 
+  // settings declaradas no activate (editáveis em Configurações → Plugins → Contagem de palavras)
+  const heading = host.settings.get('heading', 'Estatísticas do universo');
+  const formatNumbers = host.settings.get('formatNumbers', true);
+  const fmt = (n) => (formatNumbers ? n.toLocaleString('pt-BR') : String(n));
+
   const card = (label, value) =>
     e(
       'div',
       { className: 'bg-elevated border border-line rounded-lg p-5 flex flex-col gap-1' },
       e('span', { className: 'text-[11px] uppercase tracking-widest text-ink-3' }, label),
-      e('span', { className: 'text-2xl font-semibold text-ink-1 tabular-nums' }, value.toLocaleString('pt-BR'))
+      e('span', { className: 'text-2xl font-semibold text-ink-1 tabular-nums' }, fmt(value))
     );
 
   return e(
     'div',
     { className: 'h-full overflow-y-auto p-8' },
-    e('h2', { className: 'text-lg font-semibold text-ink-1 tracking-tight mb-1' }, 'Estatísticas do universo'),
+    e('h2', { className: 'text-lg font-semibold text-ink-1 tracking-tight mb-1' }, heading),
     e(
       'p',
       { className: 'text-[13px] text-ink-3 mb-6' },
@@ -105,6 +117,25 @@ function StatsView() {
 module.exports = {
   activate(ctx) {
     host = ctx;
+
+    // Schema declarativo: o host gera automaticamente uma
+    // página de configurações do plugin em Configurações → seção "Plugins".
+    // Os valores são lidos com ctx.settings.get(key, fallback).
+    ctx.settings.registerAll([
+      {
+        key: 'heading',
+        type: 'string',
+        label: 'Título do painel',
+        default: 'Estatísticas do universo',
+      },
+      {
+        key: 'formatNumbers',
+        type: 'boolean',
+        label: 'Formatar números',
+        description: 'Exibe os totais com separador de milhar (pt-BR).',
+        default: true,
+      },
+    ]);
 
     ctx.views.add({
       id: 'word-count:stats',

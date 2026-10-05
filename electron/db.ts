@@ -4,7 +4,7 @@ import { app } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import type { ChatRole, Conversation, DocChanges, DocInput, DocNode, Realm, RetrievedChunk, SearchResult, SemanticSearchResult, StoredChatMessage, UiState } from '../shared/types';
+import type { ChatRole, Conversation, DocChanges, DocInput, DocNode, DocumentType, Realm, RetrievedChunk, SearchResult, SemanticSearchResult, StoredChatMessage, UiState } from '../shared/types';
 import { blocksToPlainText, isTiptapDoc, tiptapToBlocks } from '../shared/blockContent';
 import { extractTimelineText } from '../shared/timeline';
 import { extractTableText } from '../shared/table';
@@ -682,6 +682,13 @@ export function deleteRealm(id: string): void {
   db.prepare('DELETE FROM realms WHERE id = ?').run(id);
 }
 
+/** Creates a realm with a caller-provided id (cloud sync restore). */
+export function createRealmWithId(id: string, name: string, createdAt?: number): Realm {
+  const realm: Realm = { id, name, createdAt: createdAt ?? Date.now() };
+  db.prepare('INSERT INTO realms (id, name, created_at) VALUES (?, ?, ?)').run(realm.id, realm.name, realm.createdAt);
+  return realm;
+}
+
 /** Contents of every document in every realm (asset reference counting / GC). */
 export function listAllDocContents(): (string | null)[] {
   return (db.prepare('SELECT content FROM documents').all() as { content: string | null }[]).map((r) => r.content);
@@ -813,6 +820,58 @@ export function moveDoc(id: string, parentId: string | null, position: number): 
     );
   });
   tx();
+}
+
+/** Doc row as stored, used by the sync engine for upserts that preserve ids. */
+export interface SyncedDocRow {
+  id: string;
+  realmId: string;
+  parentId: string | null;
+  type: DocumentType;
+  title: string;
+  icon: string | null;
+  cover: string | null;
+  content: string | null;
+  position: number;
+  updatedAt: number;
+}
+
+/**
+ * Inserts or replaces a document coming from cloud sync, preserving id and
+ * updated_at (unlike createDoc/updateDoc, which stamp Date.now()). Re-indexes
+ * FTS and re-enqueues embeddings like a local edit would.
+ */
+export function upsertSyncedDoc(doc: SyncedDocRow): void {
+  const exists = db.prepare('SELECT 1 AS x FROM documents WHERE id = ?').get(doc.id);
+  if (exists) {
+    db.prepare(
+      'UPDATE documents SET parent_id = ?, type = ?, title = ?, icon = ?, cover = ?, content = ?, position = ?, updated_at = ? WHERE id = ?'
+    ).run(doc.parentId, doc.type, doc.title, doc.icon, doc.cover, doc.content, doc.position, doc.updatedAt, doc.id);
+  } else {
+    db.prepare(
+      'INSERT INTO documents (id, realm_id, parent_id, type, title, icon, cover, content, position, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(doc.id, doc.realmId, doc.parentId, doc.type, doc.title, doc.icon, doc.cover, doc.content, doc.position, doc.updatedAt);
+  }
+  ftsUpsert({ id: doc.id, realmId: doc.realmId, type: doc.type, title: doc.title, content: doc.content });
+  if (doc.type !== 'core/folder') enqueueEmbedJob(doc.id);
+}
+
+/** Copies a document (new id, title suffix) — sync conflict "keep both". */
+export function duplicateDoc(id: string, titleSuffix: string): DocNode | null {
+  const row = db.prepare('SELECT * FROM documents WHERE id = ?').get(id) as any;
+  if (!row) return null;
+  const copy: DocInput = {
+    id: generateId(),
+    realmId: row.realm_id,
+    parentId: row.parent_id,
+    type: row.type,
+    title: `${row.title}${titleSuffix}`.slice(0, 500),
+    icon: row.icon,
+    cover: row.cover,
+    content: row.content,
+    position: row.position + 1,
+  };
+  return createDoc(copy);
 }
 
 // ---------- UI settings ----------

@@ -5,6 +5,6 @@
   "apiVersion": 2,
   "description": "Estatísticas de palavras das notas do universo ativo, em uma aba do workspace.",
   "author": "Diegesis Codex (exemplo)",
-  "permissions": ["ui", "commands", "events", "docs:read"],
+  "permissions": ["ui", "commands", "events", "settings", "docs:read"],
   "main": "main.js"
 }
