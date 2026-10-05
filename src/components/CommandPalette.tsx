@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Terminal } from 'lucide-react';
 import { useCommands, usePluginManager, type Command } from '../plugins';
+import { Surface } from './ui/Surface';
 
 /**
  * Subsequence match scoring: higher is better, -1 means no match.
@@ -89,7 +90,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose(): vo
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-xl bg-elevated border border-line rounded-xl shadow-2xl overflow-hidden animate-fade-up">
+      <Surface variant="elevated" className="w-full max-w-xl rounded-xl overflow-hidden animate-fade-up">
         <div className="flex items-center gap-2.5 px-4 border-b border-line">
           <Terminal size={16} className="text-ink-3 shrink-0" />
           <input
@@ -142,7 +143,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose(): vo
             <kbd className="bg-overlay rounded px-1 py-px">esc</kbd> fechar
           </span>
         </div>
-      </div>
+      </Surface>
     </div>
   );
 }

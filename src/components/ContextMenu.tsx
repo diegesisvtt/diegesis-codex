@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { Surface } from './ui/Surface';
 
 export type CtxMenuEntry =
   | 'divider'
@@ -63,9 +64,10 @@ export function ContextMenu({
   }, [onClose]);
 
   return (
-    <div
+    <Surface
       ref={ref}
-      className="fixed z-[100] min-w-[200px] py-1 rounded-lg bg-elevated border border-line shadow-2xl animate-fade-in"
+      variant="elevated"
+      className="fixed z-[100] min-w-[200px] py-1 rounded-lg animate-fade-in"
       style={{ left: pos.x, top: pos.y }}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -95,6 +97,6 @@ export function ContextMenu({
           </button>
         )
       )}
-    </div>
+    </Surface>
   );
 }

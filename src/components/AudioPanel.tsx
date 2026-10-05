@@ -19,6 +19,7 @@ import {
 import { useStore } from '../state/store';
 import { audioPlayer, useAudioInstance, useAudioInstanceIds, useMasterVolume } from '../state/audioPlayer';
 import { formatTime } from './audio/AudioPlayerCard';
+import { Surface } from './ui/Surface';
 
 /* ============================================================
    Small shared bits
@@ -82,9 +83,10 @@ function FadePopover({
 
   const rect = anchor.getBoundingClientRect();
   return (
-    <div
+    <Surface
       ref={ref}
-      className="fixed z-50 w-44 bg-elevated border border-line rounded-lg shadow-2xl p-2.5 space-y-2 animate-fade-up"
+      variant="elevated"
+      className="fixed z-50 w-44 p-2.5 space-y-2 animate-fade-up"
       style={{ left: Math.min(rect.left, window.innerWidth - 190), top: rect.bottom + 4 }}
       onMouseDown={(e) => e.stopPropagation()}
     >
@@ -110,7 +112,7 @@ function FadePopover({
           />
         </label>
       ))}
-    </div>
+    </Surface>
   );
 }
 

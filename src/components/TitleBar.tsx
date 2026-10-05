@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
-import { BookOpen, Plus, ChevronDown, Pencil, Trash2, FileDown, FileUp, Settings2, Type, Upload } from 'lucide-react';
+import { Plus, ChevronDown, Pencil, Trash2, FileDown, FileUp, Settings2, Search, Type, Upload } from 'lucide-react';
 import { useStore } from '../state/store';
 import { usePluginManager, useRibbonItems } from '../plugins';
-import { Modal, Button } from './ui';
+import { Modal, Button, Surface } from './ui';
 import type { CustomFont, Realm } from '@shared/types';
 import { newId } from '@diegesis/core';
 
@@ -67,54 +67,102 @@ export function TitleBar() {
   };
 
   return (
-    <div className="h-11 border-b border-line bg-app flex items-center px-3 shrink-0 justify-between z-20 select-none">
-      <div className="flex items-center gap-2.5">
-        <div className="w-6 h-6 rounded-md bg-accent-soft flex items-center justify-center">
-          <BookOpen size={13} className="text-accent-ink" />
-        </div>
-        <span className="font-semibold text-[13px] tracking-tight text-ink-1">Diegesis Codex</span>
+    <div className="hd-root h-11 flex items-center px-3 shrink-0 justify-between z-20 select-none">
+      {/* atmosphere + signature hairline (aria-hidden: decorative) */}
+      <div className="hd-atmosphere" aria-hidden="true">
+        <div className="hd-glow hd-glow--a" />
+        <div className="hd-glow hd-glow--b" />
+        <div className="hd-grid" />
+      </div>
+      <div className="hd-hairline" aria-hidden="true" />
+
+      <div className="hd-brand relative flex items-center gap-2.5">
+        <svg viewBox="0 0 64 64" className="hd-gem" aria-hidden="true">
+          <defs>
+            <linearGradient id="hd-gem-grad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#7dd3fc" />
+              <stop offset="100%" stopColor="#38bdf8" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M32 7 L52 19 V45 L32 57 L12 45 V19 Z"
+            fill="none"
+            stroke="url(#hd-gem-grad)"
+            strokeWidth="4"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M32 20 L42.5 26 V38 L32 44 L21.5 38 V26 Z"
+            fill="none"
+            stroke="#7dd3fc"
+            strokeOpacity="0.55"
+            strokeWidth="2.5"
+            strokeLinejoin="round"
+          />
+          <circle cx="32" cy="32" r="4.5" fill="url(#hd-gem-grad)" />
+        </svg>
+        <span className="hd-wordmark">
+          Diegesis <span>Codex</span>
+        </span>
       </div>
 
-      <div className="flex items-center gap-1.5">
-        {/* ribbon actions contributed by plugins */}
-        {ribbonItems.map((item) => {
-          const Icon = item.icon;
-          const active = item.isActive?.() ?? false;
-          return (
-            <button
-              key={item.id}
-              onClick={() => manager.commands.run(item.command)}
-              title={item.title}
-              className={`flex items-center gap-2 rounded-md transition-colors border ${
-                item.label ? 'text-[12px] px-2.5 py-1.5' : 'p-2'
-              } ${
-                active
-                  ? 'text-accent-ink bg-accent-soft border-accent/40'
-                  : 'text-ink-3 hover:text-ink-2 hover:bg-hover border-line bg-sidebar'
-              }`}
-            >
-              <Icon size={13} />
-              {item.label && <span>{item.label}</span>}
-              {item.kbd && (
-                <kbd className="text-[10px] text-ink-3 bg-overlay rounded px-1 py-px font-sans">{item.kbd}</kbd>
-              )}
-            </button>
-          );
-        })}
+      {/* centered search — opens the global search palette (core/search:open) */}
+      <div className="hd-search-center">
+        <button
+          type="button"
+          onClick={() => manager.commands.run('core/search:open')}
+          title="Buscar em tudo (Ctrl K)"
+          className="hd-search"
+        >
+          <Search size={13} strokeWidth={2} className="hd-search-icon" />
+          <span className="hd-search-hint">Buscar em tudo…</span>
+          <kbd className="hd-search-kbd">Ctrl K</kbd>
+        </button>
+      </div>
 
-        <div className="relative">
+      <div className="relative flex items-center gap-1.5 min-w-0">
+        {/* ribbon actions contributed by plugins */}
+        <div className="hd-ribbon relative flex items-center gap-1 min-w-0 overflow-hidden">
+          {ribbonItems.map((item) => {
+            const Icon = item.icon;
+            const active = item.isActive?.() ?? false;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => manager.commands.run(item.command)}
+                title={item.title}
+                aria-pressed={item.isActive ? active : undefined}
+                className={`hd-btn shrink-0 ${active ? 'hd-btn--active' : ''} ${
+                  item.label ? 'px-2.5 h-[28px] text-[12px]' : 'h-[28px] w-[28px] justify-center'
+                }`}
+              >
+                <Icon size={14} />
+                {item.label && <span className="font-medium">{item.label}</span>}
+                {item.kbd && <kbd className="text-[10px] rounded px-1 py-px font-mono">{item.kbd}</kbd>}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="hd-divider shrink-0" aria-hidden="true" />
+
+        <div className="relative shrink-0">
           <button
+            type="button"
             onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-1.5 text-[12px] text-ink-2 hover:text-ink-1 px-2.5 py-1.5 rounded-md hover:bg-hover transition-colors"
+            title="Alternar universo"
+            className={`hd-realm${menuOpen ? ' hd-realm--open' : ''}`}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-board" />
-            {active?.name ?? 'Sem universo'}
-            <ChevronDown size={12} className="text-ink-3" />
+            <span className="hd-realm-dot" aria-hidden="true" />
+            <span className="hd-realm-name font-medium">{active?.name ?? 'Sem universo'}</span>
+            <ChevronDown size={13} className="hd-realm-chevron text-ink-3" />
           </button>
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-full mt-1 z-40 w-72 bg-elevated border border-line rounded-lg shadow-2xl py-1 overflow-hidden animate-fade-up">
+              <Surface variant="elevated" className="absolute right-0 top-full mt-1 z-40 w-72 py-1 overflow-hidden animate-fade-up">
+                <div className="h-px bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent" aria-hidden="true" />
                 <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-ink-3">
                   Universos
                 </div>
@@ -205,7 +253,7 @@ export function TitleBar() {
                     <FileUp size={13} /> Importar universo…
                   </button>
                 </div>
-              </div>
+              </Surface>
             </>
           )}
         </div>

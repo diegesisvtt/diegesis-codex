@@ -27,11 +27,12 @@ import {
 } from '@shared/table';
 import { useStore } from '../../../state/store';
 import { usePluginManager } from '../../../plugins/manager';
+import { dice3dBridge, type RollPayload } from '../../dice3d/bridge';
 import { DocLinkPicker } from './DocLinkPicker';
 
 /**
  * Editor de Tabela Interativa (diegesis/table) — linhas com peso, fórmula de
- * dado opcional (faixas derivadas dos pesos, estilo Foundry), edição fluida
+ * dado opcional (faixas derivadas dos pesos), edição fluida
  * (Enter nova linha, colar de planilha/markdown, drag-and-drop p/ reordenar)
  * e rolagem encadeada (resultado que vincula outra tabela rola nela também).
  */
@@ -45,6 +46,9 @@ export function TableEditor({ doc }: { doc: DocNode }) {
   const [steps, setSteps] = useState<ChainStep[] | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  /** id da linha sob varredura durante o efeito de sorteio */
+  const [sweepId, setSweepId] = useState<string | null>(null);
+  const sweepTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   /** inputs de resultado por linha, p/ foco após Enter */
   const textInputs = useRef(new Map<string, HTMLInputElement>());
   /** drag-and-drop de reordenação */
@@ -73,6 +77,7 @@ export function TableEditor({ doc }: { doc: DocNode }) {
   useEffect(() => {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (sweepTimer.current) clearInterval(sweepTimer.current);
       if (dirty.current) {
         dirty.current = false;
         updateDocument(doc.id, { content: serializeTable(dataRef.current) });
@@ -132,12 +137,8 @@ export function TableEditor({ doc }: { doc: DocNode }) {
       : null;
   };
 
-  const roll = () => {
-    const rolled = rollChain({ docId: doc.id, title: doc.title || 'Tabela', table: dataRef.current }, resolveTable);
-    if (rolled.length === 0) return;
-    setSteps(rolled);
-    setCopied(false);
-    manager.events.emit('roller:rolled', {
+  const finishRoll = (rolled: ChainStep[]) => {
+    const payload: RollPayload = {
       tableTitle: doc.title || 'Tabela',
       steps: rolled.map((s) => ({
         title: s.title,
@@ -145,7 +146,42 @@ export function TableEditor({ doc }: { doc: DocNode }) {
         roll: s.result.roll,
         text: s.result.row.text,
       })),
+    };
+    // presentRoll revela o resultado agora ou após os dados 3D (setting do plugin)
+    dice3dBridge.presentRoll(payload, () => {
+      setSteps(rolled);
+      setCopied(false);
+      manager.events.emit('roller:rolled', payload);
     });
+  };
+
+  const roll = () => {
+    const rolled = rollChain({ docId: doc.id, title: doc.title || 'Tabela', table: dataRef.current }, resolveTable);
+    if (rolled.length === 0) return;
+    setSteps(null);
+    if (sweepTimer.current) clearInterval(sweepTimer.current);
+    // efeito de sorteio: percorre 2–3 linhas roláveis antes de fixar a sorteada
+    const rollableRows = dataRef.current.rows.filter((r) => r.weight > 0);
+    const sweep = Array.from({ length: Math.min(3, rollableRows.length) }, () =>
+      rollableRows[Math.floor(Math.random() * rollableRows.length)]?.id
+    ).filter((id): id is string => !!id);
+    if (sweep.length > 0) {
+      setSweepId(sweep[0]);
+      let i = 0;
+      sweepTimer.current = setInterval(() => {
+        i += 1;
+        if (i >= sweep.length) {
+          if (sweepTimer.current) clearInterval(sweepTimer.current);
+          sweepTimer.current = null;
+          setSweepId(null);
+          finishRoll(rolled);
+        } else {
+          setSweepId(sweep[i]);
+        }
+      }, 120);
+    } else {
+      finishRoll(rolled);
+    }
   };
 
   const copyResult = () => {
@@ -199,11 +235,13 @@ export function TableEditor({ doc }: { doc: DocNode }) {
 
   const docTitle = (id: string) => docs.find((d) => d.id === id)?.title || 'Sem título';
   const finalStep = steps && steps.length > 0 ? steps[steps.length - 1] : null;
+  const finalRowId = finalStep?.result.row.id ?? null;
+  const totalWeight = data.rows.reduce((s, r) => s + Math.max(0, r.weight), 0);
 
   return (
     <div className="h-full flex flex-col bg-app" onPaste={handlePaste}>
       {/* barra de ferramentas */}
-      <div className="flex items-center gap-1 px-3 py-1.5 border-b border-line flex-wrap">
+      <div className="flex items-center gap-1 px-3 py-1.5 flex-wrap">
         <div className="flex items-center gap-1.5 mr-1">
           <Dices size={13} className="text-table" />
           <input
@@ -218,7 +256,13 @@ export function TableEditor({ doc }: { doc: DocNode }) {
             }`}
           />
         </div>
-        <button type="button" className={toolBtn} onClick={roll} disabled={!rollable} title="Rolar na tabela">
+        <button
+          type="button"
+          onClick={roll}
+          disabled={!rollable}
+          title="Rolar na tabela"
+          className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[12px] font-semibold text-cyan-300 bg-cyan-500/15 border border-cyan-500/40 hover:bg-cyan-500/25 hover:text-neon hover:shadow-glow-cyan active:scale-90 transition-all duration-100 disabled:opacity-40 disabled:hover:bg-cyan-500/15 disabled:hover:text-cyan-300 disabled:hover:shadow-none disabled:active:scale-100"
+        >
           <Dices size={13} /> Rolar
         </button>
         <span className="ml-auto flex items-center gap-1.5 text-[11px] text-ink-3">
@@ -226,11 +270,12 @@ export function TableEditor({ doc }: { doc: DocNode }) {
           Cole de uma planilha ou markdown para adicionar linhas
         </span>
       </div>
+      <div className="h-px bg-gradient-to-r from-cyan-500/30 via-violet/20 to-transparent" />
 
       {/* resultado da rolagem (encadeada) */}
       {steps && finalStep && (
-        <div className="mx-4 mt-3 rounded-lg border border-table/40 bg-table/10 px-4 py-3 flex items-start gap-3">
-          <Dices size={18} className="text-table shrink-0 mt-0.5" />
+        <div className="animate-fade-up mx-4 mt-3 rounded-lg border border-cyan-500/20 bg-card backdrop-blur-md px-4 py-3 flex items-start gap-3 shadow-lg">
+          <Dices size={18} className="text-cyan-400 shrink-0 mt-0.5" />
           <div className="min-w-0 flex-1">
             {steps.map((step, i) => {
               const total = rollTotal(step.result);
@@ -239,7 +284,7 @@ export function TableEditor({ doc }: { doc: DocNode }) {
               <div key={i} className="flex items-baseline gap-2 flex-wrap py-0.5">
                 {i > 0 && <span className="text-ink-3 select-none">→</span>}
                 {total != null && (
-                  <span className="text-[15px] font-bold text-ink-1 font-mono">
+                  <span className="text-[15px] font-bold text-ink-1 font-mono text-glow-cyan">
                     {total}
                     {step.result.range && (
                       <span className="ml-1.5 text-[11px] font-normal text-ink-3">
@@ -282,8 +327,57 @@ export function TableEditor({ doc }: { doc: DocNode }) {
       {/* grade */}
       <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-3">
         <div className="max-w-[860px] mx-auto">
+          {/* distribuição: cobertura das faixas (fórmula) ou proporções de peso */}
+          {(ranges && ranges.some((r) => r)) || (!formula && rollable) ? (
+            <div className="px-2 py-2.5">
+              <div className="flex items-center gap-2">
+                {formula && bounds && (
+                  <span className="shrink-0 text-[10px] font-mono text-ink-3 w-8 text-right">{bounds.min}</span>
+                )}
+                <div className="relative flex-1 h-[7px] rounded-full overflow-hidden flex gap-px bg-white/5">
+                  {formula && bounds
+                    ? ranges!.map((r, i) => {
+                        const row = data.rows[i];
+                        if (!r || row.weight <= 0) return null;
+                        const pct = ((r.max - r.min + 1) / (bounds.max - bounds.min + 1)) * 100;
+                        const isFinal = finalRowId === row.id;
+                        return (
+                          <span
+                            key={row.id}
+                            title={`${row.text || '(sem texto)'} · ${r.min}–${r.max} · peso ${row.weight}`}
+                            className={`h-full transition-colors duration-150 ${
+                              isFinal ? 'bg-cyan-400 shadow-glow-cyan' : 'bg-cyan-500/35 hover:bg-cyan-400/60'
+                            }`}
+                            style={{ width: `${pct}%`, flexShrink: 0 }}
+                          />
+                        );
+                      })
+                    : data.rows
+                        .filter((r) => r.weight > 0)
+                        .map((row) => {
+                          const pct = totalWeight > 0 ? (row.weight / totalWeight) * 100 : 0;
+                          const isFinal = finalRowId === row.id;
+                          return (
+                            <span
+                              key={row.id}
+                              title={`${row.text || '(sem texto)'} · peso ${row.weight}`}
+                              className={`h-full transition-colors duration-150 ${
+                                isFinal ? 'bg-cyan-400 shadow-glow-cyan' : 'bg-cyan-500/35 hover:bg-cyan-400/60'
+                              }`}
+                              style={{ width: `${pct}%`, flexShrink: 0 }}
+                            />
+                          );
+                        })}
+                </div>
+                {formula && bounds && (
+                  <span className="shrink-0 text-[10px] font-mono text-ink-3 w-8">{bounds.max}</span>
+                )}
+              </div>
+            </div>
+          ) : null}
+
           {/* cabeçalho */}
-          <div className="grid grid-cols-[20px_72px_1fr_64px_28px_28px_28px] items-center gap-2 px-2 pb-1 border-b border-line-strong text-[10.5px] uppercase tracking-wide text-ink-3 select-none">
+          <div className="grid grid-cols-[20px_72px_1fr_64px_28px_28px_28px] items-center gap-2 px-2 py-1.5 border-b border-line-strong bg-overlay/50 text-[10.5px] uppercase tracking-wider font-semibold text-slate-500 select-none">
             <span />
             <span title={formula ? 'Faixa na rolagem (derivada dos pesos)' : 'Defina uma fórmula para ver as faixas'}>
               Faixa
@@ -305,11 +399,20 @@ export function TableEditor({ doc }: { doc: DocNode }) {
             const range = ranges?.[i] ?? null;
             const expanded = expandedId === row.id;
             const linkedDoc = row.docId ? docs.find((d) => d.id === row.docId) : null;
+            const finalRowId = finalStep?.result.row.id ?? null;
+            const isFinal = finalRowId === row.id;
+            const isSweeping = sweepId === row.id;
             return (
               <div key={row.id}>
                 <div
-                  className={`grid grid-cols-[20px_72px_1fr_64px_28px_28px_28px] items-center gap-2 px-2 py-1 border-b border-line hover:bg-hover/40 group ${
+                  className={`grid grid-cols-[20px_72px_1fr_64px_28px_28px_28px] items-center gap-2 px-2 py-1 border-b border-line group transition-colors ${
                     dropBeforeId === row.id ? 'border-t-2 border-t-accent' : ''
+                  } ${
+                    isFinal
+                      ? 'bg-cyan-500/15 border-l-2 border-l-cyan-400'
+                      : isSweeping
+                        ? 'bg-cyan-500/10 animate-row-sweep'
+                        : 'hover:bg-cyan-500/5'
                   }`}
                   {...rowDragProps(row.id)}
                 >

@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { newId } from '@diegesis/core';
 import type { CustomFont, DocNode, DocChanges, DocumentType, PdfImportResult, Realm, RealmTransferResult, UiState } from '@shared/types';
+import { bootBegin, bootPlan, bootProgress, bootStep } from './boot';
 
 const generateId = newId;
 
@@ -22,13 +23,17 @@ interface StoreState {
   uiState: UiState;
   /** draft message consumed by the AI chat panel (set by editor commands) */
   aiDraft: string | null;
-  /** AI chat right-side panel visibility */
-  aiChatOpen: boolean;
+  /** id of the view shown in the right-side panel ('ai-chat', 'roller:log', …), or null when closed */
+  rightPanelView: string | null;
   /** pending PDF navigation (set by the Explorer, consumed by PdfReader) */
   pdfFocus: PdfFocus | null;
+  /** pending Settings section to pre-select (deep-link), consumed by the SettingsPanel */
+  settingsSection: string | null;
 }
 
 interface StoreActions {
+  /** derived: true when the right panel shows the AI chat view */
+  readonly aiChatOpen: boolean;
   setActiveRealm(id: string): Promise<void>;
   createRealm(name: string): Promise<void>;
   renameRealm(id: string, name: string): Promise<void>;
@@ -56,11 +61,19 @@ interface StoreActions {
   /** opens a singleton app panel: 'settings' as a workspace tab, 'ai-chat' as the right-side panel */
   openPanel(panel: PanelKind): void;
   registerOpenPanel(fn: (panel: PanelKind) => void): void;
+  /** opens the Settings panel; `sectionId` pre-selects a section
+   *  (plugin pages: `plugin:<pluginId>`) */
+  openSettings(sectionId?: string): void;
+  clearSettingsSection(): void;
   /** opens a plugin-contributed 'workspace-tab' view as a tab */
   openView(viewId: string): void;
   registerOpenView(fn: (viewId: string) => void): void;
   setAiChatOpen(open: boolean): void;
   toggleAiChat(): void;
+  /** opens a registered 'right-panel' view; null closes the panel */
+  setRightPanelView(viewId: string | null): void;
+  /** toggles a right-panel view: closes it when already active, opens otherwise */
+  toggleRightPanel(viewId: string): void;
   setAiDraft(draft: string | null): void;
   /** ask the open PDF tab to jump to a pin or page (consumable, one-shot) */
   focusPdf(focus: PdfFocus): void;
@@ -101,8 +114,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     docs: [],
     uiState: {},
     aiDraft: null,
-    aiChatOpen: false,
+    rightPanelView: null,
     pdfFocus: null,
+    settingsSection: null,
   });
 
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -115,13 +129,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // ---- bootstrap ----
   useEffect(() => {
     (async () => {
+      bootBegin();
+      bootPlan(2);
+      bootProgress({ phase: 'database', label: 'Abrindo o Codex', detail: 'Lendo universos e preferências' });
       const [realms, ui] = await Promise.all([window.diegesis.realms.list(), window.diegesis.ui.load()]);
+      bootStep();
       const activeRealmId =
         ui?.activeRealmId && realms.some((r) => r.id === ui.activeRealmId)
           ? ui.activeRealmId
           : realms[0]?.id ?? null;
+      const activeRealm = realms.find((r) => r.id === activeRealmId);
+      bootProgress({ label: 'Carregando documentos', detail: activeRealm?.name ?? 'Preparando workspace' });
       const docs = activeRealmId ? await window.diegesis.docs.listByRealm(activeRealmId) : [];
-      setState({ ready: true, realms, activeRealmId, docs, uiState: ui ?? {}, aiDraft: null, aiChatOpen: false, pdfFocus: null });
+      bootStep();
+      setState({ ready: true, realms, activeRealmId, docs, uiState: ui ?? {}, aiDraft: null, rightPanelView: null, pdfFocus: null, settingsSection: null });
     })();
   }, []);
 
@@ -320,17 +341,30 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const registerOpenPanel = useCallback((fn: (panel: PanelKind) => void) => {
     openPanelRef.current = fn;
   }, []);
+  const openSettings = useCallback((sectionId?: string) => {
+    setState((s) => ({ ...s, settingsSection: sectionId ?? null }));
+    openPanelRef.current?.('settings');
+  }, []);
+  const clearSettingsSection = useCallback(() => {
+    setState((s) => (s.settingsSection ? { ...s, settingsSection: null } : s));
+  }, []);
   const registerOpenView = useCallback((fn: (viewId: string) => void) => {
     openViewRef.current = fn;
   }, []);
   const setAiDraft = useCallback((draft: string | null) => {
     setState((s) => ({ ...s, aiDraft: draft }));
   }, []);
+  const setRightPanelView = useCallback((viewId: string | null) => {
+    setState((s) => ({ ...s, rightPanelView: viewId }));
+  }, []);
+  const toggleRightPanel = useCallback((viewId: string) => {
+    setState((s) => ({ ...s, rightPanelView: s.rightPanelView === viewId ? null : viewId }));
+  }, []);
   const setAiChatOpen = useCallback((open: boolean) => {
-    setState((s) => ({ ...s, aiChatOpen: open }));
+    setState((s) => ({ ...s, rightPanelView: open ? 'ai-chat' : s.rightPanelView === 'ai-chat' ? null : s.rightPanelView }));
   }, []);
   const toggleAiChat = useCallback(() => {
-    setState((s) => ({ ...s, aiChatOpen: !s.aiChatOpen }));
+    setState((s) => ({ ...s, rightPanelView: s.rightPanelView === 'ai-chat' ? null : 'ai-chat' }));
   }, []);
   const focusPdf = useCallback((focus: PdfFocus) => {
     setState((s) => ({ ...s, pdfFocus: focus }));
@@ -346,6 +380,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       ...state,
+      aiChatOpen: state.rightPanelView === 'ai-chat',
       setActiveRealm,
       createRealm,
       renameRealm,
@@ -365,11 +400,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       registerOnDocumentDeleted,
       openPanel: (panel: PanelKind) => openPanelRef.current?.(panel),
       registerOpenPanel,
+      openSettings,
+      clearSettingsSection,
       openView: (viewId: string) => openViewRef.current?.(viewId),
       registerOpenView,
       setAiDraft,
       setAiChatOpen,
       toggleAiChat,
+      setRightPanelView,
+      toggleRightPanel,
       focusPdf,
       clearPdfFocus,
       subscribeExternalDocChange,
@@ -392,10 +431,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       registerOpenDocument,
       registerOnDocumentDeleted,
       registerOpenPanel,
+      openSettings,
+      clearSettingsSection,
       registerOpenView,
       setAiDraft,
       setAiChatOpen,
       toggleAiChat,
+      setRightPanelView,
+      toggleRightPanel,
       focusPdf,
       clearPdfFocus,
       subscribeExternalDocChange,

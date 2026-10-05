@@ -4,7 +4,6 @@ import { Tree, TreeApi, NodeApi, NodeRendererProps } from 'react-arborist';
 import {
   LayoutGrid,
   ChevronRight,
-  ChevronDown,
   Trash2,
   Plus,
   PenLine,
@@ -155,12 +154,15 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
         node.select();
         setMenuPos({ x: e.clientX, y: e.clientY });
       }}
-      className={`group flex items-center gap-1.5 pr-1.5 h-full cursor-pointer select-none text-[13px] rounded-md mx-1 transition-colors
-        ${node.isSelected ? 'bg-active text-ink-1' : 'text-ink-2 hover:bg-hover hover:text-ink-1'}`}
+      className={`group flex items-center gap-1.5 pr-1.5 h-full cursor-pointer select-none text-[13px] rounded-md mx-1 border-l-2 transition-colors
+        ${node.isSelected ? 'border-l-cyan-400 bg-cyan-500/10 text-ink-1' : 'border-l-transparent text-ink-2 hover:bg-hover hover:text-ink-1'}`}
     >
       {node.isInternal ? (
-        <span className="text-ink-3 shrink-0 -ml-0.5">
-          {node.isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        <span
+          className="text-ink-3 shrink-0 -ml-0.5 transition-transform duration-150 ease-out"
+          style={{ transform: node.isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
+        >
+          <ChevronRight size={13} />
         </span>
       ) : (
         <span className="w-[13px] shrink-0" />
@@ -247,7 +249,7 @@ function NewDocPopover({
   return (
     <>
       <div className="fixed inset-0 z-30" onClick={onClose} />
-      <div className="absolute right-0 top-full mt-1 z-40 w-56 bg-elevated border border-line rounded-lg shadow-2xl py-1 overflow-hidden animate-fade-up">
+      <div className="absolute right-0 top-full mt-1 z-40 w-56 bg-card backdrop-blur-md border border-cyan-500/15 rounded-lg shadow-2xl py-1 overflow-hidden animate-fade-up">
         <div className="px-2 pt-1 pb-1.5">
           <input
             autoFocus
@@ -277,7 +279,7 @@ function NewDocPopover({
             onClick={() => create(c)}
             onMouseEnter={() => setIndex(i)}
             className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] text-left transition-colors ${
-              i === active ? 'bg-hover text-ink-1' : 'text-ink-2'
+              i === active ? 'bg-cyan-500/10 text-ink-1' : 'text-ink-2'
             }`}
           >
             <c.icon size={14} strokeWidth={1.75} className={c.iconColor} />
@@ -345,7 +347,10 @@ export function Explorer() {
   return (
     <div className="h-full w-full flex flex-col bg-sidebar">
       <div className="px-3 h-9 border-b border-line flex justify-between items-center shrink-0">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-3">Explorer</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/80 shadow-[0_0_6px_rgba(56,189,248,0.6)]" />
+          Explorer
+        </span>
         <div className="flex gap-0.5">
           <div className="relative">
             <button
