@@ -3,6 +3,8 @@ import { Bot, ChevronDown, Globe, Library, MessageSquare, Plus, Send, Settings2,
 import type { ChatMessage, Conversation, RetrievedChunk } from '@shared/types';
 import { useStore } from '../state/store';
 import { AssistantMessage } from './AssistantMessage';
+import { Surface } from './ui/Surface';
+import { Button } from './ui/Button';
 import { newId } from '@diegesis/core';
 
 const generateChatId = newId;
@@ -14,7 +16,7 @@ interface DisplayMessage extends ChatMessage {
 }
 
 export function AIChatPanel() {
-  const { activeRealmId, openDocument, openPanel, aiDraft, setAiDraft, focusPdf, setAiChatOpen } = useStore();
+  const { activeRealmId, openDocument, openSettings, aiDraft, setAiDraft, focusPdf, setAiChatOpen } = useStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [convMenuOpen, setConvMenuOpen] = useState(false);
@@ -206,12 +208,9 @@ export function AIChatPanel() {
           Conecte qualquer LLM compatível com a API da OpenAI (OpenAI, Ollama, LM Studio…) para conversar com o
           seu universo.
         </p>
-        <button
-          onClick={() => openPanel('settings')}
-          className="px-4 py-2 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors flex items-center gap-2"
-        >
+        <Button size="lg" onClick={() => openSettings('plugin:core/ai-chat')}>
           <Settings2 size={15} /> Configurar provider
-        </button>
+        </Button>
       </div>
     );
   }
@@ -236,7 +235,7 @@ export function AIChatPanel() {
           {convMenuOpen && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setConvMenuOpen(false)} />
-              <div className="absolute left-0 right-0 top-full mt-1 z-40 bg-elevated border border-line rounded-lg shadow-2xl py-1 overflow-hidden animate-fade-up">
+              <Surface variant="elevated" className="absolute left-0 right-0 top-full mt-1 z-40 py-1 overflow-hidden animate-fade-up">
                 <div className="max-h-64 overflow-y-auto custom-scrollbar">
                   {conversations.length === 0 ? (
                     <div className="px-3 py-3 text-[12px] text-ink-3 text-center">Nenhuma conversa ainda.</div>
@@ -279,7 +278,7 @@ export function AIChatPanel() {
                     <Plus size={13} /> Nova conversa
                   </button>
                 </div>
-              </div>
+              </Surface>
             </>
           )}
         </div>

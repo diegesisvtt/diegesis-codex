@@ -10,7 +10,7 @@ import { executeTool, REALM_TOOLS, WEB_SEARCH_TOOL } from './tools';
 import { routeGeneration } from './specialists/router';
 import { runGeneration } from './specialists/orchestrator';
 import type { ProviderMessage, ToolCall } from './providers/base';
-import type { AIChatRequest, ChatMessage, ChatStreamChunk, RetrievedChunk, SemanticSearchResult } from '../../shared/types';
+import type { AIChatRequest, ChatMessage, ChatStreamChunk, InlineAIRequest, RetrievedChunk, SemanticSearchResult } from '../../shared/types';
 
 const TOP_K = 6;
 const MIN_SCORE = 0.25; // drop chunks that are clearly irrelevant
@@ -234,6 +234,71 @@ export async function streamChat(req: AIChatRequest, cb: ChatCallbacks, signal?:
     send('', true);
   } catch (err) {
     // user-cancelled is not an error
+    if (signal?.aborted) {
+      send('', true);
+      return;
+    }
+    send('', true, err instanceof Error ? err.message : String(err));
+  }
+}
+
+/** Formats retrieved chunks as an inline citation block for the inline editor
+ *  assistant (same [n] citation convention as the main RAG prompt). */
+function buildInlineRagContext(chunks: RetrievedChunk[]): string {
+  const body = chunks
+    .map((c, i) => {
+      const loc = c.type === 'core/pdf' && c.page ? ` (PDF, página ${c.page})` : '';
+      return `[${i + 1}] "${c.title}"${loc}\n${c.text}`;
+    })
+    .join('\n\n---\n\n');
+  return (
+    'CONTEXTO DO UNIVERSO (ao usar uma informação, cite-a imediatamente com [n]):\n\n' + body
+  );
+}
+
+/**
+ * Lightweight streaming path for the inline "Ask AI" popover. Unlike `streamChat`,
+ * it never touches conversations, the intent router, or document tools — it is a
+ * focused single-shot writing/editing call over the selection supplied in the
+ * user message, with optional RAG over the realm.
+ */
+export async function streamInline(req: InlineAIRequest, cb: ChatCallbacks, signal?: AbortSignal): Promise<void> {
+  const send = (delta: string, done: boolean, error?: string) =>
+    cb.onChunk({ chatId: req.chatId, delta, done, error });
+
+  try {
+    const cfg = getResolvedChatConfig();
+    if (!cfg) throw new Error('Configure um provider de chat nas configurações de IA.');
+    const provider = getProvider(cfg.providerId);
+    if (!provider) throw new Error(`Provider desconhecido: ${cfg.providerId}`);
+
+    const lastUser = [...req.messages].reverse().find((m) => m.role === 'user');
+
+    let sources: RetrievedChunk[] = [];
+    if (req.useContext && req.realmId && lastUser) {
+      try {
+        sources = await retrieve(req.realmId, lastUser.content);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        send(`Erro ao buscar contexto: ${msg}`, true);
+        return;
+      }
+      if (sources.length > 0) cb.onSources(req.chatId, sources);
+    }
+
+    const system = sources.length > 0 ? `${req.system}\n\n${buildInlineRagContext(sources)}` : req.system;
+
+    const working: ProviderMessage[] = [
+      { role: 'system', content: system },
+      ...req.messages.map((m) => ({ role: m.role, content: m.content })),
+    ];
+
+    for await (const chunk of provider.chat(cfg.config, { messages: working, signal })) {
+      if (chunk.done) break;
+      send(chunk.delta, false);
+    }
+    send('', true);
+  } catch (err) {
     if (signal?.aborted) {
       send('', true);
       return;
