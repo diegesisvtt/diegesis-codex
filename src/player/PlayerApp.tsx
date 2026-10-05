@@ -3,9 +3,10 @@
    document content via docs:changed broadcasts. */
 
 import { useEffect, useState } from 'react';
-import type { DocNode, SecondWindowState } from '@shared/types';
+import type { DocNode, PlayerViewState } from '@shared/types';
 import { PlayerNoteView } from './PlayerNoteView';
 import { PlayerMapView } from './PlayerMapView';
+import { PlayerImageView } from './PlayerImageView';
 import './player.css';
 
 function IdleScreen() {
@@ -18,18 +19,18 @@ function IdleScreen() {
 }
 
 export default function PlayerApp() {
-  const [state, setState] = useState<SecondWindowState>({ kind: 'none' });
+  const [state, setState] = useState<PlayerViewState>({ kind: 'none' });
   const [doc, setDoc] = useState<DocNode | null>(null);
 
   // initial state (window reopened) + live pushes from the GM window
   useEffect(() => {
     let cancelled = false;
     let gotLivePush = false;
-    const unsubscribe = window.diegesis.secondWindow.onState((s) => {
+    const unsubscribe = window.diegesis.playerView.onState((s) => {
       gotLivePush = true;
       setState(s);
     });
-    window.diegesis.secondWindow.status().then((s) => {
+    window.diegesis.playerView.status().then((s) => {
       // a live push that arrived first is newer than the cached state
       if (!cancelled && !gotLivePush) setState(s.state);
     });
@@ -41,8 +42,9 @@ export default function PlayerApp() {
 
   // load + live-reload the referenced document. Depends on primitives (not
   // the state object) so viewport-only pushes don't re-fetch the realm.
-  const realmId = state.kind === 'none' ? null : state.realmId;
-  const docId = state.kind === 'none' ? null : state.docId;
+  // Image states carry their own payload — no document fetch needed.
+  const realmId = state.kind === 'note' || state.kind === 'map' ? state.realmId : null;
+  const docId = state.kind === 'note' || state.kind === 'map' ? state.docId : null;
   useEffect(() => {
     if (!realmId || !docId) {
       setDoc(null);
@@ -67,7 +69,8 @@ export default function PlayerApp() {
     <div className="pw-root">
       {state.kind === 'note' && doc && <PlayerNoteView title={doc.title} content={doc.content} />}
       {state.kind === 'map' && doc && <PlayerMapView content={doc.content} viewport={state.viewport} />}
-      {(state.kind === 'none' || !doc) && <IdleScreen />}
+      {state.kind === 'image' && <PlayerImageView src={state.src} name={state.name} />}
+      {(state.kind === 'none' || (state.kind !== 'image' && !doc)) && <IdleScreen />}
     </div>
   );
 }

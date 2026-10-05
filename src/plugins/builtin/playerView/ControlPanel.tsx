@@ -1,18 +1,22 @@
-/* GM-side control panel for the second window: a single searchable list
+/* GM-side control panel for the player view: a single searchable list
    of displayable documents (notes → parchment, hexcrawl maps → player
-   view), plus window toggle and viewport mirroring. */
+   view), the images attached to notes/whiteboards, plus window toggle and
+   viewport mirroring. */
 
 import { useMemo, useState, useSyncExternalStore } from 'react';
-import { Eye, Monitor, MonitorOff, Search, X } from 'lucide-react';
+import { Eye, Image as ImageIcon, Monitor, MonitorOff, Search, X } from 'lucide-react';
 import type { DocNode } from '@shared/types';
 import { useStore } from '../../../state/store';
 import { useDocTypes, usePlugins } from '../../manager';
-import type { SecondWindowController } from './controller';
+import type { PlayerViewController } from './controller';
+import { extractAttachedImages, type AttachedImage } from './attachedImages';
 
 /** doc types the player window knows how to render */
 const DISPLAYABLE = new Set(['core/note', 'hexcrawl/map']);
+/** doc types that can hold attached images */
+const IMAGE_HOLDERS = new Set(['core/note', 'core/whiteboard']);
 
-export function SecondWindowControlPanel({ controller }: { controller: SecondWindowController }) {
+export function PlayerViewControlPanel({ controller }: { controller: PlayerViewController }) {
   const { docs } = useStore();
   const snap = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const docTypes = useDocTypes();
@@ -30,6 +34,14 @@ export function SecondWindowControlPanel({ controller }: { controller: SecondWin
       .sort((a, b) => a.title.localeCompare(b.title));
   }, [docs, query, hexcrawlActive]);
 
+  const attachedImages = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return docs
+      .filter((d) => IMAGE_HOLDERS.has(d.type))
+      .flatMap((d) => extractAttachedImages(d))
+      .filter((img) => !q || img.name.toLowerCase().includes(q) || img.docTitle.toLowerCase().includes(q));
+  }, [docs, query]);
+
   const typeInfo = (doc: DocNode) => docTypes.find((t) => t.docType === doc.type);
   const shownTitle = snap.shown ? (docs.find((d) => d.id === snap.shown!.docId)?.title ?? 'Documento removido') : null;
 
@@ -37,6 +49,8 @@ export function SecondWindowControlPanel({ controller }: { controller: SecondWin
     if (doc.type === 'hexcrawl/map') controller.showMap(doc.id);
     else controller.showNote(doc.id);
   };
+
+  const isShownImage = (img: AttachedImage) => snap.shown?.kind === 'image' && snap.shown.src === img.src;
 
   return (
     <div className="h-full flex flex-col min-h-0 text-[12.5px] text-ink-1">
@@ -77,7 +91,7 @@ export function SecondWindowControlPanel({ controller }: { controller: SecondWin
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar nota ou mapa…"
+            placeholder="Buscar nota, mapa ou imagem…"
             className="w-full bg-overlay border border-line rounded-lg pl-8 pr-3 py-1.5 text-[12.5px] text-ink-1 outline-none placeholder:text-ink-3 focus:border-accent"
           />
         </div>
@@ -93,7 +107,7 @@ export function SecondWindowControlPanel({ controller }: { controller: SecondWin
         {displayable.map((doc) => {
           const info = typeInfo(doc);
           const Icon = info?.icon;
-          const isShown = snap.shown?.docId === doc.id;
+          const isShown = snap.shown?.docId === doc.id && snap.shown.kind !== 'image';
           return (
             <button
               key={doc.id}
@@ -113,6 +127,35 @@ export function SecondWindowControlPanel({ controller }: { controller: SecondWin
             </button>
           );
         })}
+
+        {/* attached images (notes + whiteboards) */}
+        {attachedImages.length > 0 && (
+          <>
+            <div className="flex items-center gap-1.5 px-1 pt-3 pb-1 text-[10.5px] uppercase tracking-wide text-ink-3">
+              <ImageIcon size={11} />
+              Imagens anexadas
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {attachedImages.map((img, i) => (
+                <button
+                  key={`${img.docId}-${i}`}
+                  onClick={() => controller.showImage(img.docId, img.src, img.name)}
+                  title={`Exibir "${img.name}" (${img.docTitle || 'Sem título'}) na janela do jogador`}
+                  className={`relative aspect-square rounded-lg overflow-hidden border transition-colors ${
+                    isShownImage(img) ? 'border-accent' : 'border-line hover:border-ink-3'
+                  }`}
+                >
+                  <img src={img.src} alt={img.name} className="w-full h-full object-cover" />
+                  {isShownImage(img) && (
+                    <span className="absolute inset-x-0 bottom-0 text-[9px] uppercase tracking-wide text-center bg-accent text-white py-0.5">
+                      Exibindo
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* viewport mirroring (maps) */}
@@ -123,7 +166,7 @@ export function SecondWindowControlPanel({ controller }: { controller: SecondWin
               type="checkbox"
               checked={snap.mirrorViewport}
               onChange={(e) => controller.setMirrorViewport(e.target.checked)}
-              className="accent-[#2383e2]"
+              className="accent-[#38bdf8]"
             />
             Espelhar viewport do mestre (pan/zoom em tempo real)
           </label>

@@ -1,30 +1,30 @@
 import { BrowserWindow, shell } from 'electron';
 import path from 'node:path';
-import type { SecondWindowState } from '../shared/types';
+import type { PlayerViewState } from '../shared/types';
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 
 let playerWindow: BrowserWindow | null = null;
-let lastState: SecondWindowState = { kind: 'none' };
+let lastState: PlayerViewState = { kind: 'none' };
 
-export function isSecondWindowOpen(): boolean {
+export function isPlayerViewOpen(): boolean {
   return playerWindow !== null && !playerWindow.isDestroyed();
 }
 
-export function getSecondWindowState(): SecondWindowState {
+export function getPlayerViewState(): PlayerViewState {
   return lastState;
 }
 
 /** Broadcasts the open/closed status to every window (GM UI reacts to it). */
 function broadcastStatus(): void {
-  const open = isSecondWindowOpen();
+  const open = isPlayerViewOpen();
   for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send('second-window:status', { open });
+    win.webContents.send('player-view:status', { open });
   }
 }
 
-export function openSecondWindow(): void {
-  if (isSecondWindowOpen()) {
+export function openPlayerView(): void {
+  if (isPlayerViewOpen()) {
     playerWindow!.focus();
     return;
   }
@@ -85,14 +85,14 @@ export function openSecondWindow(): void {
   win.webContents.once('did-finish-load', broadcastStatus);
 }
 
-export function closeSecondWindow(): void {
-  if (isSecondWindowOpen()) playerWindow!.close();
+export function closePlayerView(): void {
+  if (isPlayerViewOpen()) playerWindow!.close();
 }
 
 /** Caches the state (restored when the window reopens) and pushes it live. */
-export function sendToSecondWindow(state: SecondWindowState): void {
+export function sendToPlayerView(state: PlayerViewState): void {
   lastState = state;
-  if (isSecondWindowOpen()) {
-    playerWindow!.webContents.send('second-window:state', state);
+  if (isPlayerViewOpen()) {
+    playerWindow!.webContents.send('player-view:state', state);
   }
 }
