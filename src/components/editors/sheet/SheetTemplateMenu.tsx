@@ -2,7 +2,7 @@
 // como modelo novo do realm, renomeia/exclui modelos do usuário. Modelos
 // embutidos (Personagem, Monstro/NPC) não podem ser alterados.
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Layers, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, Download, Layers, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import type { SheetTemplate } from '@shared/sheetLayout';
 
 export interface SheetTemplateMenuProps {
@@ -12,9 +12,20 @@ export interface SheetTemplateMenuProps {
   onSaveAs: (name: string) => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
+  onExport?: (template: SheetTemplate) => void;
+  onImport?: () => void;
 }
 
-export function SheetTemplateMenu({ templates, activeId, onApply, onSaveAs, onRename, onDelete }: SheetTemplateMenuProps) {
+export function SheetTemplateMenu({
+  templates,
+  activeId,
+  onApply,
+  onSaveAs,
+  onRename,
+  onDelete,
+  onExport,
+  onImport,
+}: SheetTemplateMenuProps) {
   const [open, setOpen] = useState(false);
   const [savingAs, setSavingAs] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -92,29 +103,41 @@ export function SheetTemplateMenu({ templates, activeId, onApply, onSaveAs, onRe
                   {t.builtin && <span className="text-[9.5px] uppercase tracking-wide text-ink-3">embutido</span>}
                 </button>
               )}
-              {!t.builtin && renamingId !== t.id && (
-                <span className="hidden group-hover:flex items-center gap-0.5">
+              <span className="hidden group-hover:flex items-center gap-0.5">
+                {onExport && (
                   <button
                     type="button"
-                    title="Renomear modelo"
-                    onClick={() => {
-                      setRenamingId(t.id);
-                      setName(t.name);
-                    }}
+                    title="Exportar modelo"
+                    onClick={() => onExport(t)}
                     className="p-1 rounded text-ink-3 hover:text-ink-1"
                   >
-                    <Pencil size={11} />
+                    <Download size={11} />
                   </button>
-                  <button
-                    type="button"
-                    title="Excluir modelo"
-                    onClick={() => onDelete(t.id)}
-                    className="p-1 rounded text-ink-3 hover:text-danger"
-                  >
-                    <Trash2 size={11} />
-                  </button>
-                </span>
-              )}
+                )}
+                {!t.builtin && renamingId !== t.id && (
+                  <>
+                    <button
+                      type="button"
+                      title="Renomear modelo"
+                      onClick={() => {
+                        setRenamingId(t.id);
+                        setName(t.name);
+                      }}
+                      className="p-1 rounded text-ink-3 hover:text-ink-1"
+                    >
+                      <Pencil size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Excluir modelo"
+                      onClick={() => onDelete(t.id)}
+                      className="p-1 rounded text-ink-3 hover:text-danger"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </>
+                )}
+              </span>
             </div>
           ))}
 
@@ -146,6 +169,19 @@ export function SheetTemplateMenu({ templates, activeId, onApply, onSaveAs, onRe
             >
               <Plus size={12} className="text-sheet" />
               Salvar layout como modelo…
+            </button>
+          )}
+          {onImport && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onImport();
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 text-[12.5px] text-ink-2 hover:text-ink-1 hover:bg-hover"
+            >
+              <Upload size={12} className="text-sheet" />
+              Importar modelo…
             </button>
           )}
         </div>

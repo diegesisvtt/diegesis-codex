@@ -6,7 +6,7 @@
 // modelos nomeados por reino (Personagem, Monstro/NPC, ...): a ficha herda
 // o layout do modelo e pode sobrescrevê-lo individualmente.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Pencil, Plus, RotateCcw, Sparkles, Trash2 } from 'lucide-react';
+import { Check, Download, Pencil, Plus, RotateCcw, Sparkles, Trash2, Upload } from 'lucide-react';
 import {
   SheetEngine,
   createSheetBus,
@@ -20,7 +20,7 @@ import {
 import { evaluateRoll } from '@diegesis/dice-core';
 import { toFormula } from '@diegesis/dice-notation';
 import type { DocNode } from '@shared/types';
-import { osrPack, parseSheet, serializeSheet, stripUnknownEffects, type SheetDocumentWithLayout } from '@shared/sheet';
+import { osrPack, parseSheet, serializeSheet, stripUnknownEffects, SHEET_DOC_TYPE, type SheetDocumentWithLayout } from '@shared/sheet';
 import { parseEffectDefinitions } from '@shared/sheetEffects';
 import {
   blockTab,
@@ -47,9 +47,16 @@ import { EffectsPanel } from './EffectsPanel';
 import { SheetTemplateMenu } from './SheetTemplateMenu';
 import { PanelShell } from '../../ui/PanelShell';
 import { Tabs } from '../../ui/Tabs';
+import {
+  exportSheet as downloadSheet,
+  exportTemplate as downloadTemplate,
+  importSheetFile,
+  importTemplateFile,
+} from './sheetTransfer';
 
 export function SheetEditor({ doc }: { doc: DocNode }) {
-  const { updateDocument, flushDocument, subscribeExternalDocChange, uiState, saveUiState, activeRealmId } = useStore();
+  const { updateDocument, flushDocument, subscribeExternalDocChange, uiState, saveUiState, activeRealmId, createDocument, openDocument } =
+    useStore();
   const manager = usePluginManager();
   const engineRef = useRef<SheetEngine | null>(null);
   const [computed, setComputed] = useState<ComputedSheet | null>(null);
@@ -385,6 +392,27 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     setPanelOpen(true);
   };
 
+  // ---------- import/export ----------
+
+  const handleImportTemplate = async () => {
+    const t = await importTemplateFile();
+    if (!t) return;
+    writeRealmTemplates({ ...rawRealmTemplates, [t.id]: t });
+    applyTemplate(t.id);
+  };
+
+  const handleImportSheet = async () => {
+    const imported = await importSheetFile();
+    if (!imported) return;
+    const newDoc = await createDocument(SHEET_DOC_TYPE, null, imported.title, imported.content);
+    openDocument(newDoc.id);
+  };
+
+  const handleExportSheet = () => {
+    const title = String(engine()?.document.identity.nome ?? doc.title ?? 'ficha');
+    downloadSheet(title, buildContent());
+  };
+
   /** remove o override da ficha — volta a herdar o modelo */
   const resetToTemplate = () => {
     layoutRef.current = null;
@@ -449,14 +477,32 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     <>
       <div className="flex items-center gap-2">
         <SheetTemplateMenu
-        templates={templates}
-        activeId={templateId}
-        onApply={applyTemplate}
-        onSaveAs={saveAsTemplate}
-        onRename={renameTemplate}
-        onDelete={deleteTemplate}
-      />
-      <span className="ml-auto flex items-center gap-2">
+          templates={templates}
+          activeId={templateId}
+          onApply={applyTemplate}
+          onSaveAs={saveAsTemplate}
+          onRename={renameTemplate}
+          onDelete={deleteTemplate}
+          onExport={downloadTemplate}
+          onImport={handleImportTemplate}
+        />
+        <span className="ml-auto flex items-center gap-2">
+        <button
+          type="button"
+          onClick={handleExportSheet}
+          title="Exportar ficha (.diegesis-sheet.json)"
+          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-line bg-elevated/60 text-[12px] text-ink-2 hover:text-ink-1 hover:border-sheet/40 transition-colors"
+        >
+          <Download size={13} />
+        </button>
+        <button
+          type="button"
+          onClick={handleImportSheet}
+          title="Importar ficha (.diegesis-sheet.json)"
+          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-line bg-elevated/60 text-[12px] text-ink-2 hover:text-ink-1 hover:border-sheet/40 transition-colors"
+        >
+          <Upload size={13} />
+        </button>
         {editing && (
           <span className="text-[11px] text-ink-3 select-none">
             {layoutOverride ? 'layout próprio desta ficha' : 'herdando o modelo'}
