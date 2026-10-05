@@ -4,18 +4,20 @@ import * as db from './db';
 import * as pdf from './pdf';
 import * as audio from './audio';
 import * as images from './images';
+import * as diceAssets from './diceAssets';
 import * as plugins from './plugins';
 import * as realmTransfer from './realmTransfer';
-import * as secondWindow from './secondWindow';
+import * as playerView from './playerView';
+import * as sync from './sync';
 import * as aiConfig from './ai/config';
 import * as embedder from './ai/embedder';
 import { docEvents } from './ai/events';
-import { semanticSearch, streamChat } from './ai/rag';
+import { semanticSearch, streamChat, streamInline } from './ai/rag';
 import { getProvider, listProviders } from './ai/providers/registry';
 import { emptyDossier, runSpecialist } from './ai/specialists/base';
 import { tableExtractSpecialist } from './ai/specialists/table-extract';
 import { listSearchProviders, runWebSearch } from './ai/websearch';
-import type { AIChatRequest, AIProviderConfig, DocChanges, DocInput, SecondWindowState, UiState } from '../shared/types';
+import type { AIChatRequest, AIProviderConfig, DocChanges, DocInput, InlineAIRequest, PlayerViewState, UiState } from '../shared/types';
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 
@@ -23,6 +25,7 @@ const isDev = !!process.env.VITE_DEV_SERVER_URL;
 pdf.registerPdfScheme();
 audio.registerAudioScheme();
 images.registerImageScheme();
+diceAssets.registerDiceAssetsScheme();
 
 /** in-flight chat streams, keyed by renderer-provided chatId */
 const activeChats = new Map<string, AbortController>();
@@ -62,6 +65,7 @@ function registerIpc(): void {
     const audioFiles = docs.flatMap((d) => audio.extractAudioRefs(d.content));
     const imageFiles = docs.flatMap((d) => images.extractImageRefs(d.content));
     db.deleteRealm(id);
+    sync.forgetRealm(id);
     for (const p of pdfIds) pdf.deletePdfFile(p.id);
     deleteUnreferencedAudio(audioFiles);
     deleteUnreferencedImages(imageFiles);
@@ -73,11 +77,14 @@ function registerIpc(): void {
   ipcMain.handle('docs:create', (_e, input: DocInput) => {
     const doc = db.createDoc(input);
     broadcastDocsChanged(doc.realmId);
+    sync.notifyDocsChanged(doc.realmId);
     return doc;
   });
   ipcMain.handle('docs:update', (_e, id: string, changes: DocChanges) => {
     db.updateDoc(id, changes);
-    broadcastDocsChanged(db.getDocRealmId(id));
+    const realmId = db.getDocRealmId(id);
+    broadcastDocsChanged(realmId);
+    sync.notifyDocsChanged(realmId);
   });
   ipcMain.handle('docs:delete', (_e, id: string) => {
     const realmId = db.getDocRealmId(id);
@@ -86,6 +93,7 @@ function registerIpc(): void {
     const audioFiles = docs.flatMap((d) => audio.extractAudioRefs(d.content));
     const imageFiles = docs.flatMap((d) => images.extractImageRefs(d.content));
     db.deleteDoc(id);
+    if (realmId) sync.recordDeletions(realmId, docs.map((d) => d.id));
     for (const p of pdfIds) pdf.deletePdfFile(p.id);
     deleteUnreferencedAudio(audioFiles);
     deleteUnreferencedImages(imageFiles);
@@ -93,20 +101,33 @@ function registerIpc(): void {
   });
   ipcMain.handle('docs:move', (_e, id: string, parentId: string | null, position: number) => {
     db.moveDoc(id, parentId, position);
-    broadcastDocsChanged(db.getDocRealmId(id));
+    const realmId = db.getDocRealmId(id);
+    broadcastDocsChanged(realmId);
+    sync.notifyDocsChanged(realmId);
   });
   ipcMain.handle('docs:search', (_e, realmId: string, query: string) => db.searchDocs(realmId, query));
 
   ipcMain.handle('pdf:import', (_e, realmId: string, parentId: string | null) => pdf.importPdf(realmId, parentId));
-  ipcMain.handle('pdf:saveText', (_e, docId: string, pages: string[]) => db.savePdfPages(docId, pages));
+  ipcMain.handle('pdf:saveText', (_e, docId: string, pages: string[]) => {
+    db.savePdfPages(docId, pages);
+    sync.notifyAllRealms();
+  });
   ipcMain.handle('pdf:thumb:read', (_e, docId: string, page: number) => pdf.readThumb(docId, page));
   ipcMain.handle('pdf:thumb:write', (_e, docId: string, page: number, base64: string) => pdf.writeThumb(docId, page, base64));
 
   ipcMain.handle('audio:import', () => audio.importAudio());
-  ipcMain.handle('audio:save', (_e, name: string, data: Uint8Array) => audio.saveAudio(name, data));
+  ipcMain.handle('audio:save', async (_e, name: string, data: Uint8Array) => {
+    const result = await audio.saveAudio(name, data);
+    sync.notifyAllRealms();
+    return result;
+  });
 
   ipcMain.handle('images:import', () => images.importImage());
-  ipcMain.handle('images:save', (_e, name: string, data: Uint8Array) => images.saveImage(name, data));
+  ipcMain.handle('images:save', async (_e, name: string, data: Uint8Array) => {
+    const result = await images.saveImage(name, data);
+    sync.notifyAllRealms();
+    return result;
+  });
 
   ipcMain.handle('ui:load', () => db.loadUiState());
   ipcMain.handle('ui:save', (_e, state: UiState) => db.saveUiState(state));
@@ -161,6 +182,23 @@ function registerIpc(): void {
       controller.signal
     ).finally(() => activeChats.delete(req.chatId));
   });
+  ipcMain.handle('ai:inline', (event, req: InlineAIRequest) => {
+    const sender = event.sender;
+    const safeSend = (channel: string, payload: unknown) => {
+      if (!sender.isDestroyed()) sender.send(channel, payload);
+    };
+    const controller = new AbortController();
+    activeChats.set(req.chatId, controller);
+    return streamInline(
+      req,
+      {
+        onChunk: (chunk) => safeSend('ai:chat:chunk', chunk),
+        onSources: (chatId, sources) => safeSend('ai:chat:sources', { chatId, sources }),
+        onTool: (chatId, summary, ok) => safeSend('ai:chat:tool', { chatId, summary, ok }),
+      },
+      controller.signal
+    ).finally(() => activeChats.delete(req.chatId));
+  });
   ipcMain.handle('ai:chat:cancel', (_e, chatId: string) => {
     activeChats.get(chatId)?.abort();
   });
@@ -193,35 +231,42 @@ function registerIpc(): void {
   ipcMain.handle('plugins:read', (_e, dir: string) => plugins.readPluginCode(dir));
   ipcMain.handle('plugins:openFolder', () => plugins.openPluginsFolder());
 
-  // ---- second window (player view) ----
-  ipcMain.handle('second-window:open', () => secondWindow.openSecondWindow());
-  ipcMain.handle('second-window:close', () => secondWindow.closeSecondWindow());
-  ipcMain.handle('second-window:status', () => ({
-    open: secondWindow.isSecondWindowOpen(),
-    state: secondWindow.getSecondWindowState(),
+  // ---- player view (second window) ----
+  ipcMain.handle('player-view:open', () => playerView.openPlayerView());
+  ipcMain.handle('player-view:close', () => playerView.closePlayerView());
+  ipcMain.handle('player-view:status', () => ({
+    open: playerView.isPlayerViewOpen(),
+    state: playerView.getPlayerViewState(),
   }));
-  ipcMain.handle('second-window:send', (_e, state: SecondWindowState) => {
-    if (!isValidSecondWindowState(state)) {
-      console.warn('[second-window] estado inválido rejeitado:', state);
+  ipcMain.handle('player-view:send', (_e, state: PlayerViewState) => {
+    if (!isValidPlayerViewState(state)) {
+      console.warn('[player-view] estado inválido rejeitado:', state);
       return;
     }
-    secondWindow.sendToSecondWindow(state);
+    playerView.sendToPlayerView(state);
   });
 }
 
 /** Structural validation at the IPC boundary — any window can invoke
- *  'second-window:send', so a malformed state must not reach the player. */
-function isValidSecondWindowState(s: unknown): s is SecondWindowState {
+ *  'player-view:send', so a malformed state must not reach the player. */
+function isValidPlayerViewState(s: unknown): s is PlayerViewState {
   if (!s || typeof s !== 'object') return false;
   const state = s as Record<string, unknown>;
   if (state.kind === 'none') return true;
-  if (state.kind !== 'note' && state.kind !== 'map') return false;
+  if (state.kind !== 'note' && state.kind !== 'map' && state.kind !== 'image') return false;
   if (typeof state.realmId !== 'string' || typeof state.docId !== 'string') return false;
   if (state.kind === 'map' && state.viewport != null) {
     const v = state.viewport as Record<string, unknown>;
     if (!v || typeof v !== 'object') return false;
     if (!Number.isFinite(v.x) || !Number.isFinite(v.y) || !Number.isFinite(v.zoom)) return false;
     if ((v.zoom as number) < 0.05 || (v.zoom as number) > 10) return false;
+  }
+  if (state.kind === 'image') {
+    const src = state.src;
+    if (typeof src !== 'string' || src.length > 40_000_000) return false;
+    // only app-served assets or inline image data — never arbitrary URLs
+    if (!src.startsWith('diegesis-image://') && !src.startsWith('data:image/')) return false;
+    if (state.name != null && typeof state.name !== 'string') return false;
   }
   return true;
 }
@@ -240,6 +285,10 @@ function createWindow(): void {
       nodeIntegration: false,
       sandbox: false, // preload needs nothing native, but keep require of electron only
       spellcheck: true,
+      // a animação dos dados 3D roda em requestAnimationFrame; sem isto o
+      // Chromium pausa o loop quando a janela perde foco/fica ocluída e a
+      // rolagem nunca assenta (bloqueando o resultado no histórico/tabela)
+      backgroundThrottling: false,
     },
   });
 
@@ -250,6 +299,16 @@ function createWindow(): void {
       if (input.type !== 'keyDown') return;
       if (input.key === 'F12') win.webContents.toggleDevTools();
       if (input.key.toLowerCase() === 'r' && (input.control || input.meta) && input.shift) win.webContents.reload();
+    });
+    // espelha o console do renderer no terminal (diagnóstico em dev)
+    win.webContents.on('console-message', (...args: unknown[]) => {
+      const last = args[args.length - 1] as { message?: string; level?: string } | string | undefined;
+      if (last && typeof last === 'object' && 'message' in last) {
+        console.log(`[renderer:${last.level ?? 'log'}] ${last.message ?? ''}`);
+      } else {
+        const [, level, message] = args as [unknown, number, string];
+        console.log(`[renderer:${level}] ${message}`);
+      }
     });
   }
 
@@ -268,7 +327,7 @@ function createWindow(): void {
   win.webContents.on('will-navigate', (e) => e.preventDefault());
 
   // the player window makes no sense without the GM window
-  win.on('closed', () => secondWindow.closeSecondWindow());
+  win.on('closed', () => playerView.closePlayerView());
 
   if (isDev) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL!);
@@ -305,10 +364,13 @@ app.whenReady().then(() => {
     pdf.registerPdfProtocol();
     audio.registerAudioProtocol();
     images.registerImageProtocol();
+    diceAssets.registerDiceAssetsProtocol();
     db.initDb();
     // reclaim audio files orphaned by removed blocks/shapes/highlight attachments
     audio.gcAudioFiles(db.listAllDocContents());
     registerIpc();
+    sync.initSync();
+    sync.registerSyncIpc();
     embedder.startEmbedder();
     embedder.indexEvents.on('status', (status) => {
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send('ai:index:status', status);

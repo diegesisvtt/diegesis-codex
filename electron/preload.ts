@@ -9,7 +9,8 @@ import type {
   DocInput,
   DiegesisCodexApi,
   PlayerDiegesisCodexApi,
-  SecondWindowState,
+  PlayerViewState,
+  SyncStatus,
   UiState,
 } from '../shared/types';
 
@@ -59,6 +60,7 @@ const api: DiegesisCodexApi = {
     deleteConversation: (id) => ipcRenderer.invoke('ai:conversations:delete', id),
     listMessages: (conversationId) => ipcRenderer.invoke('ai:messages:list', conversationId),
     chat: (req) => ipcRenderer.invoke('ai:chat', req),
+    inline: (req) => ipcRenderer.invoke('ai:inline', req),
     cancelChat: (chatId) => ipcRenderer.invoke('ai:chat:cancel', chatId),
     extractTable: (text: string) => ipcRenderer.invoke('ai:table:extract', text),
     onChatChunk: (cb) => subscribe<ChatStreamChunk>('ai:chat:chunk', cb),
@@ -88,13 +90,31 @@ const api: DiegesisCodexApi = {
     read: (dir: string) => ipcRenderer.invoke('plugins:read', dir),
     openFolder: () => ipcRenderer.invoke('plugins:openFolder'),
   },
-  secondWindow: {
-    open: () => ipcRenderer.invoke('second-window:open'),
-    close: () => ipcRenderer.invoke('second-window:close'),
-    status: () => ipcRenderer.invoke('second-window:status'),
-    send: (state) => ipcRenderer.invoke('second-window:send', state),
-    onState: (cb) => subscribe<SecondWindowState>('second-window:state', cb),
-    onStatus: (cb) => subscribe<{ open: boolean }>('second-window:status', cb),
+  playerView: {
+    open: () => ipcRenderer.invoke('player-view:open'),
+    close: () => ipcRenderer.invoke('player-view:close'),
+    status: () => ipcRenderer.invoke('player-view:status'),
+    send: (state) => ipcRenderer.invoke('player-view:send', state),
+    onState: (cb) => subscribe<PlayerViewState>('player-view:state', cb),
+    onStatus: (cb) => subscribe<{ open: boolean }>('player-view:status', cb),
+  },
+  sync: {
+    providers: () => ipcRenderer.invoke('sync:providers:list'),
+    getSettings: () => ipcRenderer.invoke('sync:settings:get'),
+    setProvider: (cfg) => ipcRenderer.invoke('sync:settings:setProvider', cfg),
+    setPrefs: (patch) => ipcRenderer.invoke('sync:settings:setPrefs', patch),
+    testProvider: (providerId, config) => ipcRenderer.invoke('sync:provider:test', providerId, config),
+    onedriveAuth: (clientId) => ipcRenderer.invoke('sync:onedrive:auth', clientId),
+    pickFolder: () => ipcRenderer.invoke('sync:pickFolder'),
+    now: (realmId) => ipcRenderer.invoke('sync:now', realmId),
+    status: () => ipcRenderer.invoke('sync:status'),
+    onStatus: (cb) => subscribe<SyncStatus>('sync:status', cb),
+    listConflicts: () => ipcRenderer.invoke('sync:conflicts:list'),
+    resolveConflict: (id, resolution) => ipcRenderer.invoke('sync:conflicts:resolve', id, resolution),
+    listVersions: (realmId, docId) => ipcRenderer.invoke('sync:versions:list', realmId, docId),
+    restoreVersion: (realmId, docId, timestamp) => ipcRenderer.invoke('sync:versions:restore', realmId, docId, timestamp),
+    listRemoteRealms: () => ipcRenderer.invoke('sync:remote:realms'),
+    restoreRealm: (realmId) => ipcRenderer.invoke('sync:remote:restore', realmId),
   },
 };
 
@@ -110,9 +130,9 @@ if (isPlayerWindow) {
       listByRealm: api.docs.listByRealm,
       onChanged: api.docs.onChanged,
     },
-    secondWindow: {
-      status: api.secondWindow.status,
-      onState: api.secondWindow.onState,
+    playerView: {
+      status: api.playerView.status,
+      onState: api.playerView.onState,
     },
   };
   contextBridge.exposeInMainWorld('diegesis', playerApi);

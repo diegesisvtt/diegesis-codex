@@ -237,6 +237,19 @@ export interface AIChatRequest {
   useWebSearch?: boolean;
 }
 
+/** Ephemeral single-shot editing/writing request for the inline "Ask AI" popover.
+ *  No conversation is created or persisted; the caller supplies the full system
+ *  prompt (action-aware) and the selection is carried in the user message. */
+export interface InlineAIRequest {
+  chatId: string;
+  realmId: string | null;
+  /** complete system prompt (writing/editing context + instruction) */
+  system: string;
+  messages: ChatMessage[];
+  /** RAG over the realm using the last user message as the query */
+  useContext: boolean;
+}
+
 export interface Conversation {
   id: string;
   realmId: string;
@@ -456,6 +469,7 @@ export interface DiegesisCodexApi {
     deleteConversation(id: string): Promise<void>;
     listMessages(conversationId: string): Promise<StoredChatMessage[]>;
     chat(req: AIChatRequest): Promise<void>;
+    inline(req: InlineAIRequest): Promise<void>;
     cancelChat(chatId: string): Promise<void>;
     /** extracts a roll table from raw text captured from a PDF region (AI) */
     extractTable(text: string): Promise<{ ok: boolean; table?: ExtractedTableData; error?: string }>;

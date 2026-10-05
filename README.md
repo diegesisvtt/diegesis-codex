@@ -4,7 +4,7 @@
 
 Diegesis Codex is a multiplatform desktop app for game masters and worldbuilders. Keep your notes, maps, timelines, tables and handouts in one place — and share a player-facing view with your table when it's time to play.
 
-Everything is stored locally in SQLite. No accounts, no cloud, no subscriptions. Your world belongs to you.
+Everything is stored locally in SQLite — local-first, no accounts required. Optional cloud sync (Nextcloud/WebDAV, OneDrive, S3 or a mirrored local folder) keeps your worlds backed up and available across machines. No subscriptions. Your world belongs to you.
 
 ## Features
 
@@ -18,6 +18,7 @@ Everything is stored locally in SQLite. No accounts, no cloud, no subscriptions.
 - **Player view** — a separate, spoiler-free window to show maps and notes to your players
 - **Audio panel** — set the mood with music and ambience
 - **Plugins** — extend the app with built-in and external plugins
+- **Cloud sync** — automatic, document-level sync to Nextcloud/WebDAV, OneDrive, S3 or a mirrored local folder, with version history and conflict resolution
 - **Command palette & global search** — jump anywhere in your world in a couple of keystrokes
 
 ## Download
