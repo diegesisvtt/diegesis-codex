@@ -1,7 +1,8 @@
 // Renderers do conteúdo de cada tipo de bloco da ficha (modo jogo e edição).
 // Visual premium dark-fantasy: título hero com ornamentos, stat cards com
 // numerais display, seções com filetes, chips de rolagem dourados.
-import { Dices, HelpCircle, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, ChevronDown, Dices, HelpCircle, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { getPath, type ComputedSheet, type EffectInstance } from '@diegesis/sheet';
 import type { SheetBlock } from '@shared/sheetLayout';
 import { osrPack } from '@shared/sheet';
@@ -113,27 +114,89 @@ function SectionBlock({ block, ctx }: { block: SheetBlock & { type: 'section' };
 const CARD =
   'h-full w-full rounded-xl border border-line bg-gradient-to-b from-elevated/90 to-app/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_2px_10px_rgba(0,0,0,0.35)] transition-colors';
 
+/** Seletor de dado premium: trigger em numeral display + menu dourado com
+ *  item ativo (substitui o <select> nativo nos stat cards) */
+function DieSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(!open);
+        }}
+        className="group flex items-center gap-1.5 outline-none cursor-pointer"
+      >
+        <span
+          className={`font-display text-[19px] font-semibold transition-colors ${
+            open ? 'text-sheet-strong' : 'text-ink-1 group-hover:text-sheet-strong'
+          }`}
+        >
+          {value}
+        </span>
+        <ChevronDown
+          size={12}
+          className={`transition-all duration-150 ${open ? 'rotate-180 text-sheet' : 'text-ink-3 group-hover:text-sheet'}`}
+        />
+      </button>
+      {open && (
+        <div className="absolute z-50 left-1/2 -translate-x-1/2 top-full mt-1.5 min-w-[86px] rounded-xl border border-sheet/25 bg-overlay/95 backdrop-blur-md shadow-[0_14px_40px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.05)] py-1">
+          {DIE_OPTIONS.map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange(d);
+                setOpen(false);
+              }}
+              className={`w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[12.5px] transition-colors ${
+                d === value ? 'bg-sheet-soft text-sheet-strong' : 'text-ink-2 hover:text-ink-1 hover:bg-hover'
+              }`}
+            >
+              <span className="w-3.5 shrink-0 flex items-center">
+                {d === value && <Check size={11} className="text-sheet" />}
+              </span>
+              <span className={`font-display ${d === value ? 'font-semibold' : ''}`}>{d}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FieldBlock({ block, ctx }: { block: SheetBlock & { type: 'field' }; ctx: SheetBlockCtx }) {
   const value = ctx.computed ? getPath(ctx.computed.values, block.path) : undefined;
   return (
     <label
-      className={`${CARD} px-2 py-1.5 flex flex-col items-center justify-center gap-0.5 overflow-hidden cursor-text hover:border-sheet/35`}
+      className={`${CARD} px-2 py-1.5 flex flex-col items-center justify-center gap-0.5 cursor-text hover:border-sheet/35 ${
+        block.input === 'die' ? 'overflow-visible' : 'overflow-hidden'
+      }`}
     >
       <span className="text-[9.5px] uppercase tracking-[0.16em] text-ink-3 select-none truncate max-w-full">
         {block.label}
       </span>
       {block.input === 'die' ? (
-        <select
-          value={String(value ?? 'd8')}
-          onChange={(e) => ctx.setBaseValue(block.path, e.target.value)}
-          className="bg-transparent text-center font-display text-[19px] font-semibold text-ink-1 outline-none cursor-pointer"
-        >
-          {DIE_OPTIONS.map((d) => (
-            <option key={d} value={d} className="bg-elevated text-[13px]">
-              {d}
-            </option>
-          ))}
-        </select>
+        <DieSelect value={String(value ?? 'd8')} onChange={(v) => ctx.setBaseValue(block.path, v)} />
       ) : block.input === 'checkbox' ? (
         <input
           type="checkbox"
