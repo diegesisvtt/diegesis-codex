@@ -15,12 +15,12 @@ import {
   Plug,
   RefreshCw,
   RotateCcw,
-  X,
   XCircle,
 } from 'lucide-react';
 import { Button, Toggle, ToggleList } from '../../../components/ui';
 import type {
   AIProviderConfig,
+  DocNode,
   ProviderInfo,
   ProviderTestResult,
   Realm,
@@ -31,7 +31,7 @@ import type {
   SyncVersionInfo,
 } from '@shared/types';
 import type { SettingsPageProps } from '../../api/settings';
-import { clearHistory, useHistoryTarget, useSyncStatus } from './store';
+import { useSyncStatus } from './store';
 
 const inputCls =
   'w-full bg-sidebar border border-line rounded-md px-3 py-2 text-[13px] text-ink-1 placeholder-ink-3 outline-none focus:border-accent transition-colors';
@@ -119,20 +119,54 @@ function ConflictsSection({ count }: { count: number }) {
 }
 
 function VersionsSection() {
-  const target = useHistoryTarget();
+  const [realms, setRealms] = useState<Realm[]>([]);
+  const [realmId, setRealmId] = useState('');
+  const [docs, setDocs] = useState<DocNode[]>([]);
+  const [docId, setDocId] = useState('');
   const [versions, setVersions] = useState<SyncVersionInfo[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!target) return;
-    window.diegesis.sync.listVersions(target.realmId, target.docId).then(setVersions);
-  }, [target]);
+    window.diegesis.realms.list().then((list) => {
+      setRealms(list);
+      setRealmId((cur) => cur || list[0]?.id || '');
+    });
+  }, []);
 
-  if (!target) return null;
+  useEffect(() => {
+    if (!realmId) {
+      setDocs([]);
+      return;
+    }
+    let cancelled = false;
+    window.diegesis.docs.listByRealm(realmId).then((list) => {
+      if (cancelled) return;
+      const selectable = list.filter((d) => d.type !== 'core/folder');
+      setDocs(selectable);
+      setDocId((cur) => (selectable.some((d) => d.id === cur) ? cur : selectable[0]?.id ?? ''));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [realmId]);
+
+  useEffect(() => {
+    if (!realmId || !docId) {
+      setVersions([]);
+      return;
+    }
+    let cancelled = false;
+    window.diegesis.sync.listVersions(realmId, docId).then((v) => {
+      if (!cancelled) setVersions(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [realmId, docId]);
 
   const restore = async (timestamp: number) => {
     setBusy(true);
-    const err = await window.diegesis.sync.restoreVersion(target.realmId, target.docId, timestamp);
+    const err = await window.diegesis.sync.restoreVersion(realmId, docId, timestamp);
     setBusy(false);
     if (!err) window.diegesis.sync.now();
   };
@@ -141,35 +175,45 @@ function VersionsSection() {
     <div className="mt-4 pt-4 border-t border-line">
       <div className="flex items-center gap-1.5 mb-2">
         <History size={13} className="text-accent-ink" />
-        <span className="text-[12px] font-semibold text-ink-2 truncate">Histórico · {target.title}</span>
-        <button
-          type="button"
-          title="Fechar histórico"
-          onClick={clearHistory}
-          className="ml-auto p-0.5 rounded text-ink-3 hover:text-ink-1 hover:bg-elevated transition-colors"
-        >
-          <X size={12} />
-        </button>
+        <span className="text-[12px] font-semibold text-ink-2">Histórico de versões</span>
       </div>
-      {versions.length === 0 ? (
-        <p className="text-[11.5px] text-ink-3">Nenhuma versão anterior ainda.</p>
-      ) : (
-        <div className="flex flex-col gap-1">
-          {versions.map((v) => (
-            <div key={v.path} className="flex items-center gap-2 text-[12px] text-ink-2">
-              <span className="truncate">{timeFmt(v.timestamp)}</span>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => restore(v.timestamp)}
-                className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-ink-3 hover:text-accent-ink hover:bg-accent-soft transition-colors disabled:opacity-40"
-              >
-                <RotateCcw size={11} /> Restaurar
-              </button>
-            </div>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <select value={realmId} onChange={(e) => setRealmId(e.target.value)} className={inputCls}>
+          {realms.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
           ))}
-        </div>
-      )}
+        </select>
+        <select value={docId} onChange={(e) => setDocId(e.target.value)} className={inputCls} disabled={docs.length === 0}>
+          {docs.length === 0 && <option value="">Nenhum documento</option>}
+          {docs.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.title || d.id}
+            </option>
+          ))}
+        </select>
+      </div>
+      {docId &&
+        (versions.length === 0 ? (
+          <p className="text-[11.5px] text-ink-3">Nenhuma versão anterior ainda.</p>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {versions.map((v) => (
+              <div key={v.path} className="flex items-center gap-2 text-[12px] text-ink-2">
+                <span className="truncate">{timeFmt(v.timestamp)}</span>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => restore(v.timestamp)}
+                  className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-ink-3 hover:text-accent-ink hover:bg-accent-soft transition-colors disabled:opacity-40"
+                >
+                  <RotateCcw size={11} /> Restaurar
+                </button>
+              </div>
+            ))}
+          </div>
+        ))}
     </div>
   );
 }

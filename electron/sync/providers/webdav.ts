@@ -15,6 +15,34 @@ export interface WebdavProviderConfig {
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
+/**
+ * Torna a URL WebDAV tolerante a entradas incompletas. Se o usuário colar o
+ * domínio do servidor (raiz) ou os endpoints antigos do Nextcloud/ownCloud
+ * (`remote.php/webdav`, `remote.php/dav`, `remote.php`), montamos o endpoint
+ * canônico de arquivos usando o nome de usuário.
+ */
+function normalizeBaseUrl(url: string, username: string): string {
+  let raw = (url ?? '').trim();
+  if (!raw) return raw;
+  if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return (url ?? '').trim();
+  }
+  const path = u.pathname.replace(/\/+$/, '');
+  const incomplete =
+    path === '' ||
+    /\/remote\.php$/i.test(path) ||
+    /\/remote\.php\/webdav$/i.test(path) ||
+    /\/remote\.php\/dav$/i.test(path);
+  if (incomplete && username) {
+    u.pathname = `/remote.php/dav/files/${encodeURIComponent(username)}`;
+  }
+  return u.toString().replace(/\/+$/, '');
+}
+
 function joinUrl(base: string, rel: string): string {
   const b = base.replace(/\/+$/, '');
   if (!rel) return b + '/';
@@ -40,7 +68,10 @@ function hrefPath(href: string): string {
 
 export function createWebdavProvider(cfg: WebdavProviderConfig): SyncProvider {
   if (!cfg.url) throw new SyncError('Informe a URL do servidor WebDAV.', 'unknown');
-  const base = cfg.basePath ? `${cfg.url.replace(/\/+$/, '')}/${cfg.basePath.replace(/^\/+|\/+$/g, '')}` : cfg.url;
+  const normalizedUrl = normalizeBaseUrl(cfg.url, cfg.username ?? '');
+  const base = cfg.basePath
+    ? `${normalizedUrl.replace(/\/+$/, '')}/${cfg.basePath.replace(/^\/+|\/+$/g, '')}`
+    : normalizedUrl;
   const auth = 'Basic ' + Buffer.from(`${cfg.username ?? ''}:${cfg.password ?? ''}`).toString('base64');
 
   async function request(method: string, rel: string, init: RequestInit = {}, allow404 = false): Promise<Response> {
@@ -66,7 +97,11 @@ export function createWebdavProvider(cfg: WebdavProviderConfig): SyncProvider {
     if (res.status === 507) throw new SyncError('Espaço insuficiente no servidor (quota excedida).', 'quota');
     if (allow404 && res.status === 404) return res;
     if (!res.ok && res.status !== 207) {
-      throw new SyncError(`WebDAV ${method} ${rel}: HTTP ${res.status}`, res.status === 404 ? 'unknown' : 'network');
+      const hint =
+        res.status === 405
+          ? ` — o servidor recusou a escrita. No Nextcloud/ownCloud a URL deve ser .../remote.php/dav/files/${cfg.username ?? 'SEU-USUARIO'}`
+          : '';
+      throw new SyncError(`WebDAV ${method} ${rel}: HTTP ${res.status}${hint}`, res.status === 404 ? 'unknown' : 'network');
     }
     return res;
   }

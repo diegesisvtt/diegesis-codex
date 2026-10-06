@@ -1,11 +1,11 @@
 // Cloud sync plugin (diegesis/sync): status panel, settings page (Nextcloud/
-// WebDAV, local folder, OneDrive, S3), commands, ribbon button and a per-doc
-// version-history entry in the explorer context menu.
+// WebDAV, local folder, OneDrive, S3), commands and ribbon button. Version
+// history lives in the sync settings page, not in the explorer context menu.
 import { Cloud } from 'lucide-react';
 import { PLUGIN_API_VERSION, type Plugin } from '../api/types';
 import type { SyncState } from '@shared/types';
 import { SyncSettingsPage } from './sync/SyncSettingsPage';
-import { openHistory, useSyncStatus } from './sync/store';
+import { useSyncStatus } from './sync/store';
 
 const SYNC_STATE_LABEL: Record<SyncState, string> = {
   disabled: 'Sincronização desativada',
@@ -67,19 +67,6 @@ export const syncPlugin: Plugin = {
       icon: SyncRibbonIcon,
       command: 'diegesis/sync:settings',
       order: 25,
-    });
-
-    ctx.menus.add({
-      location: 'explorer:item',
-      id: 'diegesis/sync:history',
-      label: 'Histórico de sincronização',
-      icon: Cloud,
-      when: ({ doc }) => !!doc,
-      run: ({ doc }) => {
-        if (!doc) return;
-        openHistory({ realmId: doc.realmId, docId: doc.id, title: doc.title });
-        ctx.app.openSettings('plugin:diegesis/sync');
-      },
     });
   },
 };

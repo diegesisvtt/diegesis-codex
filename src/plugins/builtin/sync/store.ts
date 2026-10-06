@@ -44,31 +44,3 @@ function subscribe(fn: () => void): () => void {
 export function useSyncStatus(): SyncStatus | null {
   return useSyncExternalStore(subscribe, getSyncStatus);
 }
-
-// ---------- version-history target (shared by the explorer menu item) ----------
-
-export interface HistoryTarget {
-  realmId: string;
-  docId: string;
-  title: string;
-}
-
-let historyTarget: HistoryTarget | null = null;
-
-export function openHistory(target: HistoryTarget): void {
-  historyTarget = target;
-  notify();
-}
-
-export function getHistoryTarget(): HistoryTarget | null {
-  return historyTarget;
-}
-
-export function clearHistory(): void {
-  historyTarget = null;
-  notify();
-}
-
-export function useHistoryTarget(): HistoryTarget | null {
-  return useSyncExternalStore(subscribe, getHistoryTarget);
-}
