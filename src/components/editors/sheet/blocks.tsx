@@ -34,8 +34,10 @@ export interface SheetBlockCtx {
   effectLabel: (fx: EffectInstance) => string;
   /** definição completa de um efeito aplicado por ref (para edição inline) */
   getEffectDef: (ref: string) => EffectDefinition | undefined;
-  /** salva uma definição editada (reino + motor) */
+  /** salva uma definição editada (efeito global, reino + motor) */
   saveEffectDef: (def: EffectDefinition) => void;
+  /** reaplica um efeito LOCAL editado (remove instância + aplica nova inline) */
+  reapplyEffect: (id: string, def: EffectDefinition) => void;
   updateBlock: (id: string, patch: Record<string, unknown>) => void;
   /** definições aplicáveis (pack + customizadas do reino) */
   effectDefs: { id: string; label: string }[];
@@ -398,14 +400,16 @@ export function EffectsBlock({ ctx }: { ctx: SheetBlockCtx }) {
       </div>
       {computed && computed.effects.length === 0 && <div className="text-[12px] text-ink-3">Nenhum efeito ativo.</div>}
       {(computed?.effects ?? []).map((fx) => {
-        const editableDef = fx.ref ? ctx.getEffectDef(fx.ref) : undefined;
+        // efeitos globais (ref) e locais (inline) são ambos editáveis
+        const editableDef = fx.ref ? ctx.getEffectDef(fx.ref) : fx.inline;
         if (editingFxId === fx.id && editableDef) {
           return (
             <EffectDefEditor
               key={fx.id}
               def={editableDef}
               onSave={(d) => {
-                ctx.saveEffectDef(d);
+                if (fx.ref) ctx.saveEffectDef(d);
+                else ctx.reapplyEffect(fx.id, d);
                 setEditingFxId(null);
               }}
               onCancel={() => setEditingFxId(null)}

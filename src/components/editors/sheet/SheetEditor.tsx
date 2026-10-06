@@ -68,6 +68,15 @@ function computeSafe(e: SheetEngine): ComputedSheet | null {
   }
 }
 
+/** refresh protegido (refresh ⇒ afterMutation ⇒ compute) */
+function safeRefresh(e: SheetEngine): void {
+  try {
+    e.refresh();
+  } catch (err) {
+    console.error('[sheet] refresh falhou', err);
+  }
+}
+
 /** achata { pv: { atual, max } } → ['pv.atual', 'pv.max'] (grounding da IA) */
 function flattenPaths(obj: unknown, prefix = ''): string[] {
   if (!obj || typeof obj !== 'object') return [];
@@ -163,46 +172,56 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   customDefsRef.current = customDefs;
   const effectDefs = useMemo(() => customDefs.map((d) => ({ id: d.id, label: d.label })), [customDefs]);
 
-  /** pack OSR + definições do reino: o motor já nasce conhecendo todos os refs */
-  const sheetPack = useMemo(() => defineSystemPack({ ...osrPack, definitions: customDefs }), [customDefs]);
+  /** pack OSR + definições do reino: o motor já nasce conhecendo todos os refs.
+   *  Defesivo: uma def inválida (fórmula quebrada) não pode derrubar o editor
+   *  inteiro via defineSystemPack (validação completa) durante o render. */
+  const sheetPack = useMemo(() => {
+    try {
+      return defineSystemPack({ ...osrPack, definitions: customDefs });
+    } catch (err) {
+      console.error('[sheet] pack com definições inválidas — usando apenas o OSR', err);
+      return defineSystemPack({ ...osrPack, definitions: [] });
+    }
+  }, [customDefs]);
   const sheetPackRef = useRef(sheetPack);
   sheetPackRef.current = sheetPack;
   const knownEffectRefs = () => new Set(customDefsRef.current.map((d) => d.id));
 
-  /** criação simples de efeito (aba Efeitos): aplica à ficha atual com validação
-   *  (rollback se quebrar o pipeline) e salva como definição global do reino.
-   *  Retorna mensagem de erro ou null em caso de sucesso. */
+  /** criação simples de efeito (aba Efeitos): efeito LOCAL (inline) desta ficha
+   *  — viaja com o documento, não vira definição global do reino. Valida o
+   *  pipeline e faz rollback se quebrar. Retorna mensagem de erro ou null. */
   const createAndApplyEffect = (def: EffectDefinition): string | null => {
     const e = engine();
-    if (e) {
-      let appliedId: string | null = null;
-      try {
-        e.registerDefinition(def);
-        const inst = e.applyEffect(def.id, { source: { kind: 'manual' } });
-        appliedId = inst.id;
-        e.compute(); // valida já: fórmula inválida não pode ficar persistida
-      } catch (err) {
-        console.error('[sheet] efeito inválido', err);
-        if (appliedId) {
-          try {
-            e.removeEffect(appliedId);
-          } catch {
-            /* rollback best-effort */
-          }
+    if (!e) return 'Ficha não carregada — tente novamente.';
+    let appliedId: string | null = null;
+    try {
+      const inst = e.applyEffect(def, { source: { kind: 'manual' } }); // objeto → instância inline
+      appliedId = inst.id;
+      e.compute(); // valida já: fórmula inválida não pode ficar persistida
+    } catch (err) {
+      console.error('[sheet] efeito inválido', err);
+      if (appliedId) {
+        try {
+          e.removeEffect(appliedId);
+        } catch {
+          /* rollback best-effort */
         }
-        return 'O efeito gerado é inválido para esta ficha — revise as alterações e tente novamente.';
       }
-    }
-    if (activeRealmId) {
-      const raw = (uiState.realmSettings?.[activeRealmId]?.sheetEffects ?? {}) as Record<string, EffectDefinition>;
-      saveUiState({
-        realmSettings: {
-          ...(uiState.realmSettings ?? {}),
-          [activeRealmId]: { ...(uiState.realmSettings?.[activeRealmId] ?? {}), sheetEffects: { ...raw, [def.id]: def } },
-        },
-      });
+      return 'O efeito gerado é inválido para esta ficha — revise as alterações e tente novamente.';
     }
     return null;
+  };
+
+  /** reaplica um efeito local editado (remove a instância antiga e aplica a nova definição inline) */
+  const reapplyEffect = (id: string, def: EffectDefinition) => {
+    const e = engine();
+    if (!e) return;
+    try {
+      e.removeEffect(id);
+      e.applyEffect(def, { source: { kind: 'manual' } });
+    } catch (err) {
+      console.error('[sheet] falha ao reaplicar efeito editado', err);
+    }
   };
 
   /** salva definição editada (aba Efeitos): reino + re-registro no motor vivo */
@@ -355,7 +374,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
       setLayoutOverride(parsed.layout ?? null);
       setTemplateId(parsed.templateId);
       engine.loadDocument(parsed);
-      engine.refresh();
+      safeRefresh(engine);
     });
     setComputed(computeSafe(engine));
     setNome(String((engine.document.identity.nome as string) ?? doc.title ?? ''));
@@ -377,25 +396,33 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
   useEffect(() => {
     const e = engineRef.current;
     if (!e) return;
-    for (const def of customDefs) e.registerDefinition(def);
-    e.refresh();
+    try {
+      for (const def of customDefs) e.registerDefinition(def);
+    } catch (err) {
+      console.error('[sheet] definição de efeito inválida ignorada', err);
+    }
+    safeRefresh(e);
   }, [customDefs]);
 
   const engine = () => engineRef.current;
 
   const setBaseValue = (path: string, value: unknown) => {
-    engine()?.updateBase((base) => {
-      const next = structuredClone(base);
-      setPath(next, path, value);
-      return next;
-    });
+    try {
+      engine()?.updateBase((base) => {
+        const next = structuredClone(base);
+        setPath(next, path, value);
+        return next;
+      });
+    } catch (err) {
+      console.error('[sheet] falha ao atualizar valor base', err);
+    }
   };
 
   const setIdentity = (key: string, value: unknown) => {
     const e = engine();
     if (!e) return;
     e.loadDocument({ ...e.document, identity: { ...e.document.identity, [key]: value } });
-    e.refresh();
+    safeRefresh(e);
   };
 
   const rollTemplate = (template: string) => {
@@ -565,6 +592,7 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     effectLabel,
     getEffectDef: (ref) => engine()?.getDefinition(ref),
     saveEffectDef,
+    reapplyEffect,
     updateBlock,
     effectDefs,
   };
@@ -755,7 +783,6 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
         <span className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-sheet/90">
           Efeitos ativos
         </span>
-        <span className="ml-auto text-[10.5px] text-ink-3">definições globais em Configurações → Fichas</span>
       </div>
       <EffectCreator aiAvailable={aiAvailable} attributes={attributePaths} onCreate={createAndApplyEffect} />
       <div className="flex-1 min-h-0">

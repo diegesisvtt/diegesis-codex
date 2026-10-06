@@ -4,6 +4,7 @@
 // (validated by the schema), never free text.
 import type { ProviderMessage } from '../providers/base';
 import type { Specialist, SpecialistContext } from './base';
+import { parseFormula } from '@diegesis/formula';
 
 export interface SheetEffectInput {
   /** free-form description, e.g. "escudo +2" */
@@ -63,9 +64,15 @@ export function parseSheetEffect(value: unknown): GeneratedSheetEffect {
     const row = c as Record<string, unknown>;
     if (typeof row.path !== 'string' || !row.path.trim()) throw new Error(`alteração ${i + 1} sem path`);
     const op = typeof row.op === 'string' && OPS.has(row.op) ? (row.op as SheetEffectOp) : 'add';
-    const value = typeof row.value === 'number' ? String(row.value) : typeof row.value === 'string' ? row.value.trim() : '';
+    let value = typeof row.value === 'number' ? String(row.value) : typeof row.value === 'string' ? row.value.trim() : '';
+    value = value.replace(/^\+/, ''); // unary '+' não é suportado pelo motor
     if (!value || !ARITH.test(value) || !/\d/.test(value)) {
       throw new Error(`alteração ${i + 1} com valor inválido ("${value}") — use expressão aritmética simples`);
+    }
+    try {
+      parseFormula(value); // rejeita sintaxe que derrubaria o defineSystemPack
+    } catch {
+      throw new Error(`alteração ${i + 1} com fórmula inválida ("${value}")`);
     }
     changes.push({ path: row.path.trim(), op, value });
   }

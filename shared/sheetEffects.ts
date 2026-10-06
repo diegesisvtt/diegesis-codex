@@ -2,6 +2,7 @@
 // painel da ficha, persistidas em RealmSettings.sheetEffects e registradas
 // no SheetEngine em runtime (registerDefinition) — aplicáveis em qualquer
 // ficha do reino, ao lado das definições embutidas do pack.
+import { parseFormula } from '@diegesis/formula';
 import type { Change, EffectDefinition } from '@diegesis/sheet';
 
 /** valida entrada hostil (realm settings, imports); descarta defs inválidas */
@@ -24,7 +25,25 @@ export function parseEffectDefinitions(raw: unknown): EffectDefinition[] {
 function isChange(c: unknown): boolean {
   if (!c || typeof c !== 'object') return false;
   const k = (c as Record<string, unknown>).kind;
-  return k === 'value' || k === 'roll' || k === 'flag';
+  if (k !== 'value' && k !== 'roll' && k !== 'flag') return false;
+  if (k !== 'value') return true;
+  // alterações de valor com op aritmético têm que ser fórmulas válidas —
+  // senão o defineSystemPack (validação completa do pack) explode no render
+  const row = c as Record<string, unknown>;
+  const op = row.op;
+  if (op === 'upgrade' || op === 'downgrade' || op === 'append' || op === 'remove') return typeof row.value === 'string';
+  return isFormula(String(row.value ?? ''));
+}
+
+function isFormula(value: string): boolean {
+  const s = value.trim();
+  if (!s) return false;
+  try {
+    parseFormula(s);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** id estável a partir do rótulo (prefixo custom: evita colisão com o pack) */

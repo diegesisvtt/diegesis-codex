@@ -120,7 +120,7 @@ function ManualEffectForm({ onCreate }: { onCreate: (d: EffectDefinition) => str
     if (!valid) return;
     const changes: Change[] = rows
       .filter((r) => r.path.trim() && r.value.trim())
-      .map((r) => ({ kind: 'value', path: r.path.trim(), op: r.op, value: r.value.trim() }));
+      .map((r) => ({ kind: 'value', path: r.path.trim(), op: r.op, value: r.value.trim().replace(/^\+/, '') }));
     if (changes.length === 0) return;
     const name = label.trim();
     const err = onCreate({ id: newEffectId(name), label: name, changes });
