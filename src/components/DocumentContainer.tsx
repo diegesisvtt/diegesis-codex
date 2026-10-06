@@ -5,6 +5,7 @@ import { useEditor } from '../plugins/manager';
 import { NoteEditor } from './editors/NoteEditor';
 import { Whiteboard } from './editors/Whiteboard';
 import { PdfReader } from './editors/pdf/PdfReader';
+import { ErrorBoundary } from './ErrorBoundary';
 
 /** Built-in editor components per core document type (folders have no editor). */
 const CORE_EDITORS: Partial<Record<DocumentType, ComponentType<{ doc: DocNode }>>> = {
@@ -28,10 +29,20 @@ export function DocumentContainer({ docId }: { docId: string }) {
   }
 
   const CoreEditor = CORE_EDITORS[doc.type];
-  if (CoreEditor) return <CoreEditor key={doc.id} doc={doc} />;
+  if (CoreEditor) {
+    return (
+      <ErrorBoundary label={`o documento ${doc.type}`}>
+        <CoreEditor key={doc.id} doc={doc} />
+      </ErrorBoundary>
+    );
+  }
   if (contributed) {
     const PluginEditor = contributed.component;
-    return <PluginEditor key={doc.id} doc={doc} />;
+    return (
+      <ErrorBoundary label="a ficha">
+        <PluginEditor key={doc.id} doc={doc} />
+      </ErrorBoundary>
+    );
   }
   return (
     <div className="p-6 text-ink-3 text-sm">
