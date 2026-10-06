@@ -22,6 +22,18 @@ export function parseEffectDefinitions(raw: unknown): EffectDefinition[] {
   return out;
 }
 
+/** uma definição de efeito é íntegra se tem rótulo e todas as alterações são
+ *  válidas (fórmulas parseáveis). Usada também para sanear efeitos INLINE do
+ *  documento antes de construir o SheetEngine (cujo construtor computa e
+ *  lançaria com fórmula inválida). */
+export function isValidEffectDefinition(def: unknown): def is EffectDefinition {
+  if (!def || typeof def !== 'object') return false;
+  const d = def as Record<string, unknown>;
+  if (typeof d.label !== 'string' || !d.label) return false;
+  if (!Array.isArray(d.changes) || d.changes.length === 0) return false;
+  return d.changes.every(isChange);
+}
+
 function isChange(c: unknown): boolean {
   if (!c || typeof c !== 'object') return false;
   const k = (c as Record<string, unknown>).kind;

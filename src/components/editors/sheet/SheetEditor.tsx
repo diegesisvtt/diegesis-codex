@@ -20,7 +20,7 @@ import {
 import { evaluateRoll } from '@diegesis/dice-core';
 import { toFormula } from '@diegesis/dice-notation';
 import type { DocNode } from '@shared/types';
-import { osrPack, parseSheet, serializeSheet, stripUnknownEffects, SHEET_DOC_TYPE, type SheetDocumentWithLayout } from '@shared/sheet';
+import { osrPack, parseSheet, serializeSheet, stripUnknownEffects, createDefaultSheet, SHEET_DOC_TYPE, type SheetDocumentWithLayout } from '@shared/sheet';
 import { parseEffectDefinitions } from '@shared/sheetEffects';
 import {
   blockTab,
@@ -335,7 +335,15 @@ export function SheetEditor({ doc }: { doc: DocNode }) {
     // refs sem definição (efeitos removidos) são descartados na carga —
     // o SheetEngine explode com UnknownEffectError no primeiro compute
     const initialDoc = stripUnknownEffects(parseSheet(doc.content), knownEffectRefs());
-    const engine = new SheetEngine(initialDoc, { pack: sheetPackRef.current, bus });
+    // o construtor computa (lastSnapshot); um efeito inválido que escape da
+    // sanitização não pode desmontar o editor inteiro
+    let engine: SheetEngine;
+    try {
+      engine = new SheetEngine(initialDoc, { pack: sheetPackRef.current, bus });
+    } catch (err) {
+      console.error('[sheet] documento com efeito inválido — carregando ficha vazia', err);
+      engine = new SheetEngine(createDefaultSheet(), { pack: sheetPackRef.current, bus });
+    }
     engineRef.current = engine;
     // conteúdo que este editor conhece/persistiu — para distinguir mudanças externas de ecos
     let lastKnownContent = doc.content ?? buildContentRef.current();

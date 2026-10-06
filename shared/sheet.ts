@@ -12,6 +12,7 @@ import {
 } from '@diegesis/sheet';
 import { fromFormula } from '@diegesis/dice-notation';
 import { parseSheetLayout, SHEET_TEMPLATE_MONSTRO, SHEET_TEMPLATE_PERSONAGEM, type SheetLayout } from './sheetLayout';
+import { isValidEffectDefinition } from './sheetEffects';
 
 /** documento com layout/template opcionais (campos extras tolerados pelo SheetEngine) */
 export type SheetDocumentWithLayout = CharacterDocument & { layout?: SheetLayout; templateId?: string };
@@ -114,7 +115,11 @@ export function parseSheet(content: string | null | undefined): CharacterDocumen
  * Instâncias inline (definição embutida) são sempre preservadas.
  */
 export function stripUnknownEffects<T extends { effects: EffectInstance[] }>(doc: T, knownRefs: ReadonlySet<string>): T {
-  const effects = doc.effects.filter((fx) => fx.inline || !fx.ref || knownRefs.has(fx.ref));
+  const effects = doc.effects.filter((fx) =>
+    // inline: definição embutida tem que ser íntegra (o construtor do motor
+    // computa e lançaria com fórmula inválida); ref: precisa ter def conhecida
+    fx.inline ? isValidEffectDefinition(fx.inline) : !fx.ref || knownRefs.has(fx.ref)
+  );
   return effects.length === doc.effects.length ? doc : { ...doc, effects };
 }
 
