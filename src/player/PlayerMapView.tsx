@@ -10,14 +10,12 @@ import { gridPixelSize } from '../components/editors/hexcrawl/hexMath';
 import { MARGIN, ORIGIN, MapRenderer, type LayerVisibility, type MapCamera } from '../components/editors/hexcrawl/MapRenderer';
 
 const PLAYER_LAYERS: LayerVisibility = {
-  natural: true,
-  infrastructure: true,
-  political: true,
   features: true,
   notes: false,
   regions: true,
   fog: true,
   grid: true,
+  hiddenTags: [],
 };
 
 export function PlayerMapView({ content, viewport }: { content: string | null; viewport?: MapViewport | null }) {

@@ -77,7 +77,8 @@ export interface FeatureDef {
 
 /* ---------- styles & content ---------- */
 
-export type LayerTag = 'natural' | 'infrastructure' | 'political';
+/** free-form thematic tag (user-defined, no built-in categories) */
+export type LayerTag = string;
 
 export interface LineStyle {
   id: string;
@@ -126,6 +127,8 @@ export interface MapPin {
   docId: string | null;
   name: string;
   color?: string | null;
+  /** created by the terrain generator — replaced on re-generation */
+  generated?: boolean;
 }
 
 export interface HexLine {
@@ -167,7 +170,6 @@ export interface HexRegion {
   labelMode: 'inside' | 'key';
   modifiers: {
     travelMultiplier: number;
-    climate: string;
     notes: string;
   };
 }
@@ -240,21 +242,21 @@ export const DEFAULT_FEATURES: FeatureDef[] = [
 ];
 
 export const DEFAULT_LINE_STYLES: LineStyle[] = [
-  { id: 'river', name: 'Rio', color: '#3f7fbf', width: 3, dash: false, tags: ['natural'] },
-  { id: 'coast', name: 'Costa', color: '#2c5f8f', width: 2, dash: false, tags: ['natural'] },
-  { id: 'road', name: 'Estrada', color: '#7d5a3a', width: 3, dash: false, tags: ['infrastructure'], travelMultiplier: 0.75 },
-  { id: 'trail', name: 'Trilha', color: '#97805a', width: 2, dash: true, tags: ['infrastructure'], travelMultiplier: 0.9 },
-  { id: 'border', name: 'Fronteira', color: '#b03a2e', width: 2.5, dash: true, tags: ['political'] },
+  { id: 'river', name: 'Rio', color: '#3f7fbf', width: 3, dash: false, tags: [] },
+  { id: 'coast', name: 'Costa', color: '#2c5f8f', width: 2, dash: false, tags: [] },
+  { id: 'road', name: 'Estrada', color: '#7d5a3a', width: 3, dash: false, tags: [], travelMultiplier: 0.75 },
+  { id: 'trail', name: 'Trilha', color: '#97805a', width: 2, dash: true, tags: [], travelMultiplier: 0.9 },
+  { id: 'border', name: 'Fronteira', color: '#b03a2e', width: 2.5, dash: true, tags: [] },
 ];
 
 const TEXT_HALO = '#1e1e1e';
 
 export const DEFAULT_TEXT_STYLES: TextStyle[] = [
   { id: 'label', name: 'Rótulo', font: 'inherit', size: 13, color: '#e8e2d6', bold: false, italic: false, letterSpacing: 0, uppercase: false, halo: true, haloColor: TEXT_HALO, tags: [] },
-  { id: 'city', name: 'Cidade', font: 'inherit', size: 14, color: '#f2ecdc', bold: true, italic: false, letterSpacing: 0, uppercase: false, halo: true, haloColor: TEXT_HALO, tags: ['political'] },
-  { id: 'country', name: 'País/Reino', font: 'Georgia, serif', size: 20, color: '#d9cfb6', bold: false, italic: true, letterSpacing: 3, uppercase: true, halo: true, haloColor: TEXT_HALO, tags: ['political'] },
-  { id: 'river', name: 'Rio', font: 'Georgia, serif', size: 12, color: '#7db3d8', bold: false, italic: true, letterSpacing: 1, uppercase: false, halo: true, haloColor: TEXT_HALO, tags: ['natural'] },
-  { id: 'mountain', name: 'Cordilheira', font: 'Georgia, serif', size: 14, color: '#cfc5ae', bold: false, italic: false, letterSpacing: 4, uppercase: true, halo: true, haloColor: TEXT_HALO, tags: ['natural'] },
+  { id: 'city', name: 'Cidade', font: 'inherit', size: 14, color: '#f2ecdc', bold: true, italic: false, letterSpacing: 0, uppercase: false, halo: true, haloColor: TEXT_HALO, tags: [] },
+  { id: 'country', name: 'País/Reino', font: 'Georgia, serif', size: 20, color: '#d9cfb6', bold: false, italic: true, letterSpacing: 3, uppercase: true, halo: true, haloColor: TEXT_HALO, tags: [] },
+  { id: 'river', name: 'Rio', font: 'Georgia, serif', size: 12, color: '#7db3d8', bold: false, italic: true, letterSpacing: 1, uppercase: false, halo: true, haloColor: TEXT_HALO, tags: [] },
+  { id: 'mountain', name: 'Cordilheira', font: 'Georgia, serif', size: 14, color: '#cfc5ae', bold: false, italic: false, letterSpacing: 4, uppercase: true, halo: true, haloColor: TEXT_HALO, tags: [] },
 ];
 
 export const DEFAULT_SETTINGS: HexMapSettings = {
@@ -279,6 +281,34 @@ export const DEFAULT_SETTINGS: HexMapSettings = {
 
 export const DEFAULT_GRID: HexGridConfig = { cols: 32, rows: 24, orientation: 'flat', offset: 'odd', size: 46 };
 
+/* ---------- icon set (import/export via plugin settings) ---------- */
+
+export interface HexIconSet {
+  terrains: TerrainDef[];
+  features: FeatureDef[];
+  lineStyles: LineStyle[];
+  textStyles: TextStyle[];
+}
+
+export function defaultIconSet(): HexIconSet {
+  return {
+    terrains: DEFAULT_TERRAINS.map((t) => ({ ...t })),
+    features: DEFAULT_FEATURES.map((f) => ({ ...f })),
+    lineStyles: DEFAULT_LINE_STYLES.map((s) => ({ ...s, tags: [...s.tags] })),
+    textStyles: DEFAULT_TEXT_STYLES.map((s) => ({ ...s, tags: [...s.tags] })),
+  };
+}
+
+/** validates an imported icon set file; returns null when the shape is wrong */
+export function parseIconSet(data: unknown): HexIconSet | null {
+  if (!data || typeof data !== 'object') return null;
+  const raw = data as Record<string, unknown>;
+  if (!Array.isArray(raw.terrains) || !Array.isArray(raw.features) || !Array.isArray(raw.lineStyles) || !Array.isArray(raw.textStyles)) return null;
+  const validDefs = (arr: unknown[]) => arr.every((d) => d && typeof d === 'object' && typeof (d as { id?: unknown }).id === 'string' && typeof (d as { name?: unknown }).name === 'string');
+  if (!validDefs(raw.terrains) || !validDefs(raw.features) || !validDefs(raw.lineStyles) || !validDefs(raw.textStyles)) return null;
+  return data as HexIconSet;
+}
+
 export const generateId = newId;
 
 export const REGION_COLORS = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d68910', '#16a085', '#e84393', '#6c7a35'];
@@ -291,7 +321,7 @@ export function createRegion(index: number): HexRegion {
     hexes: [],
     tags: [],
     labelMode: 'inside',
-    modifiers: { travelMultiplier: 1, climate: '', notes: '' },
+    modifiers: { travelMultiplier: 1, notes: '' },
   };
 }
 
@@ -342,7 +372,12 @@ export function parseHexMap(content: string | null | undefined): HexMapDoc {
       labels: Array.isArray(raw.labels) ? raw.labels : [],
       pins: Array.isArray(raw.pins) ? raw.pins : [],
       regions: Array.isArray(raw.regions)
-        ? raw.regions.map((r: Partial<HexRegion> & Pick<HexRegion, 'id'>) => ({ tags: [], labelMode: 'inside' as const, ...r }))
+        ? raw.regions.map((r: Partial<HexRegion> & Pick<HexRegion, 'id'>) => {
+            const region: HexRegion = { tags: [], labelMode: 'inside' as const, ...r } as HexRegion;
+            // legacy drop: modifiers.climate não existe mais
+            if (region.modifiers) delete (region.modifiers as Record<string, unknown>).climate;
+            return region;
+          })
         : [],
       fog: Array.isArray(raw.fog) ? raw.fog : [],
       background: raw.background ?? null,
@@ -449,6 +484,38 @@ export function resolveLabelStyle(doc: HexMapDoc, label: MapLabel): ResolvedLabe
     halo: o.halo ?? style?.halo ?? false,
     haloColor: o.haloColor ?? style?.haloColor ?? '#1e1e1e',
   };
+}
+
+/** every tag in use across styles, lines, labels and regions (sorted, unique) */
+export function allTags(doc: HexMapDoc): string[] {
+  const set = new Set<string>();
+  const add = (tags: string[] | undefined) => tags?.forEach((t) => t && set.add(t));
+  doc.lineStyles.forEach((s) => add(s.tags));
+  doc.textStyles.forEach((s) => add(s.tags));
+  doc.lines.forEach((l) => add(l.tags));
+  doc.labels.forEach((l) => add(l.tags));
+  doc.regions.forEach((r) => add(r.tags));
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+/** first ~maxLen chars of plain text extracted from a note's tiptap JSON content */
+export function noteExcerpt(content: string | null | undefined, maxLen = 140): string {
+  if (!content) return '';
+  try {
+    const raw = JSON.parse(content);
+    let out = '';
+    const walk = (node: unknown): void => {
+      if (out.length >= maxLen || !node || typeof node !== 'object') return;
+      const n = node as { text?: string; content?: unknown[] };
+      if (typeof n.text === 'string') out += (out ? ' ' : '') + n.text;
+      n.content?.forEach(walk);
+    };
+    walk(raw);
+    const trimmed = out.trim();
+    return trimmed.length > maxLen ? `${trimmed.slice(0, maxLen).trimEnd()}…` : trimmed;
+  } catch {
+    return '';
+  }
 }
 
 export const geomOf = (doc: HexMapDoc): HexGeom => ({

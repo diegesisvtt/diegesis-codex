@@ -1,9 +1,9 @@
 // Settings page do plugin Hexcrawl (contributed via ctx.settingsPages):
 // padrões aplicados a NOVOS mapas (grade, medidas e viagem). Mapas existentes
 // não são alterados — estas são preferências de plugin, não de documento.
-import { Footprints, Grid3x3, Ruler } from 'lucide-react';
-import type { ComponentType } from 'react';
-import { DEFAULT_GRID, DEFAULT_SETTINGS } from '../../../components/editors/hexcrawl/model';
+import { Download, Footprints, Grid3x3, RotateCcw, Ruler, Shapes, Upload } from 'lucide-react';
+import { useState, type ComponentType } from 'react';
+import { DEFAULT_GRID, DEFAULT_SETTINGS, defaultIconSet, parseIconSet, type HexIconSet } from '../../../components/editors/hexcrawl/model';
 import type { SettingsPageProps } from '../../api/settings';
 
 const inputCls =
@@ -138,9 +138,100 @@ function SelectField({
   );
 }
 
+function downloadJson(data: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+/** Icon set padrão de novos mapas: import/export fica nas settings do plugin. */
+function IconSetSection({ settings }: SettingsPageProps) {
+  const custom = settings.get<HexIconSet | null>('iconSet', null);
+  const [, bump] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+
+  const importSet = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json';
+    input.onchange = () => {
+      const f = input.files?.[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => {
+        try {
+          const parsed = parseIconSet(JSON.parse(String(r.result)));
+          if (!parsed) {
+            setError('Arquivo inválido: esperado { terrains, features, lineStyles, textStyles } com id e nome.');
+            return;
+          }
+          settings.set('iconSet', parsed);
+          setError(null);
+          bump((v) => v + 1);
+        } catch {
+          setError('Arquivo de icon set inválido (JSON malformado).');
+        }
+      };
+      r.readAsText(f);
+    };
+    input.click();
+  };
+
+  return (
+    <Section
+      title="Icon set"
+      icon={Shapes}
+      description="Terrenos, marcadores e estilos de linha/texto usados como padrão em mapas novos. Mapas existentes guardam a própria cópia e não são alterados."
+    >
+      <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+        <div className="min-w-0">
+          <div className="text-[13px] text-ink-1">{custom ? 'Icon set personalizado ativo' : 'Icon set padrão do plugin'}</div>
+          <div className="text-[12px] text-ink-3 mt-0.5 leading-snug">
+            {custom
+              ? `${custom.terrains.length} terrenos · ${custom.features.length} marcadores · ${custom.lineStyles.length} estilos de linha · ${custom.textStyles.length} estilos de texto`
+              : 'Exporte para editar, importe para substituir o padrão de novos mapas.'}
+          </div>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <button
+            onClick={() => downloadJson(custom ?? defaultIconSet(), 'hex-iconset.json')}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-line text-[12px] text-ink-2 hover:border-accent hover:text-accent"
+          >
+            <Download size={13} /> Exportar
+          </button>
+          <button
+            onClick={importSet}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-line text-[12px] text-ink-2 hover:border-accent hover:text-accent"
+          >
+            <Upload size={13} /> Importar
+          </button>
+          {custom && (
+            <button
+              onClick={() => {
+                settings.set('iconSet', null);
+                bump((v) => v + 1);
+              }}
+              title="Voltar ao icon set padrão do plugin"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-line text-[12px] text-ink-2 hover:border-accent hover:text-accent"
+            >
+              <RotateCcw size={13} /> Restaurar
+            </button>
+          )}
+        </div>
+      </div>
+      {error && <p className="text-[12px] text-danger py-1">{error}</p>}
+    </Section>
+  );
+}
+
 export function HexcrawlSettingsPage({ settings }: SettingsPageProps) {
   return (
     <>
+      <IconSetSection settings={settings} />
       <Section
         title="Grade do mapa"
         icon={Grid3x3}

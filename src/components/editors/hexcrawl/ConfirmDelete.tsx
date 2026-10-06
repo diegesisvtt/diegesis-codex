@@ -4,7 +4,7 @@
 
 import React, { useState } from 'react';
 import { Trash2 } from 'lucide-react';
-import { Modal, Button } from '../../ui';
+import { ConfirmDialog } from '../../ui';
 
 export function ConfirmModal({
   open,
@@ -22,29 +22,14 @@ export function ConfirmModal({
   onClose(): void;
 }) {
   return (
-    <Modal
-      isOpen={open}
-      onClose={onClose}
+    <ConfirmDialog
+      open={open}
       title={title}
-      actions={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              onConfirm();
-              onClose();
-            }}
-          >
-            {confirmLabel}
-          </Button>
-        </>
-      }
-    >
-      <p>{message}</p>
-    </Modal>
+      message={message}
+      confirmLabel={confirmLabel}
+      onConfirm={onConfirm}
+      onClose={onClose}
+    />
   );
 }
 

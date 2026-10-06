@@ -6,6 +6,7 @@ import {
   DEFAULT_GRID,
   DEFAULT_SETTINGS,
   serializeHexMap,
+  type HexIconSet,
 } from '../../components/editors/hexcrawl/model';
 import { HexcrawlSettingsPage } from './hexcrawl/HexcrawlSettingsPage';
 
@@ -38,6 +39,14 @@ function buildDefaultMap(ctx: PluginContext): string {
     },
     displayUnit: ctx.settings.get('displayUnit', DEFAULT_SETTINGS.displayUnit),
   };
+  // icon set padrão (importável nas settings) substitui terrains/features/estilos
+  const iconSet = ctx.settings.get<HexIconSet | null>('iconSet', null);
+  if (iconSet) {
+    doc.terrains = iconSet.terrains;
+    doc.features = iconSet.features;
+    doc.lineStyles = iconSet.lineStyles;
+    doc.textStyles = iconSet.textStyles;
+  }
   return serializeHexMap(doc);
 }
 

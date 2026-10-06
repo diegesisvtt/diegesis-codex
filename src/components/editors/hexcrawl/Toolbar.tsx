@@ -14,11 +14,8 @@ import {
   Shapes,
   Ruler,
   Magnet,
-  Palette,
-  Layers,
   Settings2,
   Dices,
-  KeySquare,
   Undo2,
   Redo2,
   CloudFog,
@@ -28,7 +25,7 @@ import { getGlyph } from './icons';
 
 export type HexTool = 'select' | 'pan' | 'terrain' | 'pin' | 'line' | 'text' | 'region' | 'fog' | 'measure';
 
-export type PanelTab = 'hex' | 'styles' | 'layers' | 'regions' | 'travel' | 'config' | 'generate' | 'key';
+export type PanelTab = 'hex' | 'lineStyles' | 'textStyles' | 'regions' | 'travel' | 'config' | 'generate';
 
 const TOOLS: { id: HexTool; title: string; kbd: string; icon: React.FC<{ size?: number | string }> }[] = [
   { id: 'select', title: 'Selecionar / inspecionar hex', kbd: 'V', icon: MousePointer2 },
@@ -43,15 +40,13 @@ const TOOLS: { id: HexTool; title: string; kbd: string; icon: React.FC<{ size?: 
 ];
 
 /**
- * Painéis contextuais (hex/regions/travel) não têm toggle próprio: abrem
- * junto com a ferramenta companheira (ver TOOL_PANEL no HexcrawlMap).
- * Aqui ficam apenas os painéis globais do mapa.
+ * Painéis contextuais (hex/lineStyles/textStyles/regions/travel) não têm
+ * toggle próprio: abrem junto com a ferramenta companheira (ver TOOL_PANEL
+ * no HexcrawlMap). Aqui ficam apenas os painéis globais do mapa. Camadas
+ * vivem num widget flutuante sempre visível; numeração e chave em Configurar.
  */
 const PANELS: { id: PanelTab; title: string; icon: React.FC<{ size?: number | string }> }[] = [
-  { id: 'styles', title: 'Estilos de linha e texto', icon: Palette },
-  { id: 'layers', title: 'Camadas e numeração', icon: Layers },
   { id: 'generate', title: 'Gerador de terreno', icon: Dices },
-  { id: 'key', title: 'Chave do mapa (legenda)', icon: KeySquare },
   { id: 'config', title: 'Configurar mapa e hexes', icon: Settings2 },
 ];
 

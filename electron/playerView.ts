@@ -1,5 +1,6 @@
 import { BrowserWindow, shell } from 'electron';
 import path from 'node:path';
+import { appIconPath } from './appIcon';
 import type { PlayerViewState } from '../shared/types';
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
@@ -36,6 +37,7 @@ export function openPlayerView(): void {
     minHeight: 480,
     backgroundColor: '#0c0a09',
     title: 'Diegesis Codex — Visão do Jogador',
+    icon: appIconPath(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

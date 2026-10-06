@@ -34,9 +34,6 @@ const PARCHMENT_EDGE = 'var(--color-line-strong)';
 const GRID_STROKE = 'var(--color-line-strong)';
 
 export interface LayerVisibility {
-  natural: boolean;
-  infrastructure: boolean;
-  political: boolean;
   /** pins (marcadores) */
   features: boolean;
   notes: boolean;
@@ -44,6 +41,8 @@ export interface LayerVisibility {
   fog: boolean;
   /** hex grid strokes */
   grid: boolean;
+  /** thematic tags currently hidden (linhas, rótulos, regiões) */
+  hiddenTags: string[];
 }
 
 export interface MapCamera {
@@ -116,7 +115,8 @@ export function MapRenderer({
     };
   }, [camera, viewSize, geom, map.grid]);
 
-  const tagVisible = (tags: LayerTag[]): boolean => tags.every((t) => layers[t]);
+  const hiddenTags = useMemo(() => new Set(layers.hiddenTags), [layers.hiddenTags]);
+  const tagVisible = (tags: LayerTag[]): boolean => tags.every((t) => !hiddenTags.has(t));
 
   const gridStrokePath = useMemo(() => {
     let d = '';

@@ -5,14 +5,16 @@
    ============================================================ */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileCode, Image as ImageIcon, Maximize, Minus, Plus } from 'lucide-react';
+import { FileCode, FileText, Image as ImageIcon, Layers, Maximize, Minus, Plus } from 'lucide-react';
 import type { DocNode, MapViewport } from '@shared/types';
 import { REF_DRAG_MIME, parseExplorerDragRef } from '@shared/dragDrop';
 import { useStore, useRealmFonts } from '../../../state/store';
 import { ContextMenu, type CtxMenuEntry } from '../../ContextMenu';
 import {
+  allTags,
   computeTravel,
   createRegion,
+  featureOf,
   findTravelPath,
   generateId,
   geomOf,
@@ -20,6 +22,7 @@ import {
   hexNumber,
   kmToDisplay,
   lineStyleOf,
+  noteExcerpt,
   parseHexMap,
   resolveDisplayUnit,
   resolveLabelStyle,
@@ -49,12 +52,24 @@ import {
   type Point,
 } from './hexMath';
 import { getGlyph } from './icons';
+import { pinIcon } from '../pdf/rpg';
+import { Toggle } from '../../ui/Toggle';
 import { HexcrawlToolbar, HexPalette, type HexTool, type PanelTab } from './Toolbar';
 import { HexSidePanel } from './SidePanel';
 import { ConfirmModal } from './ConfirmDelete';
 import { MARGIN, ORIGIN, MapRenderer, type LayerVisibility, type MapCamera } from './MapRenderer';
 
 export type { LayerVisibility } from './MapRenderer';
+
+/** linha do widget flutuante de camadas: rótulo + Toggle (linha clicável) */
+function LayerRow({ label, checked, onChange }: { label: string; checked: boolean; onChange(v: boolean): void }) {
+  return (
+    <div className="flex items-center justify-between gap-2 py-1.5 text-[12px] text-ink-2 cursor-pointer select-none" onClick={() => onChange(!checked)}>
+      <span className="truncate">{label}</span>
+      <Toggle checked={checked} onChange={onChange} />
+    </div>
+  );
+}
 
 const CANVAS_BG = 'var(--color-app)';
 
@@ -128,8 +143,8 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
   const [snap, setSnap] = useState(true);
   const [panel, setPanel] = useState<PanelTab | null>(null);
 
-  /** companion panels open together with their tool (region→Regiões, measure→Viagem) */
-  const TOOL_PANEL: Partial<Record<HexTool, PanelTab>> = { region: 'regions', measure: 'travel' };
+  /** companion panels open together with their tool (region→Regiões, measure→Viagem, line/text→seus estilos) */
+  const TOOL_PANEL: Partial<Record<HexTool, PanelTab>> = { region: 'regions', measure: 'travel', line: 'lineStyles', text: 'textStyles' };
   const activateTool = useCallback((t: HexTool) => {
     setTool(t);
     const companion = TOOL_PANEL[t];
@@ -164,15 +179,14 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
   const previewTs = useRef(0);
 
   const [layers, setLayers] = useState<LayerVisibility>({
-    natural: true,
-    infrastructure: true,
-    political: true,
     features: true,
     notes: true,
     regions: true,
     fog: true,
     grid: true,
+    hiddenTags: [],
   });
+  const [layersOpen, setLayersOpen] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [confirmLabelDelete, setConfirmLabelDelete] = useState(false);
@@ -716,6 +730,7 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
     // select tool
     setLabelEditorId(null);
     setPinEditorId(null);
+    setTooltipPinId(null);
     const pin = hitTestPin(p);
     if (pin) {
       setSelectedPinId(pin.id);
@@ -737,7 +752,7 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
       setSelectedLabelId(null);
       setSelectedPinId(null);
       setSelectedHex(null);
-      setPanel('styles');
+      setPanel('lineStyles');
       return;
     }
     setSelectedLineId(null);
@@ -1012,6 +1027,9 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s.source);
   };
 
+  /** every tag in use on the map (drives the floating layers widget) */
+  const mapTags = useMemo(() => allTags(map), [map]);
+
   const usedSymbols = useMemo(() => {
     const terrains = new Set<string>();
     for (const cell of Object.values(map.cells)) {
@@ -1024,6 +1042,19 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
 
   const editingLabel = labelEditorId ? (map.labels.find((l) => l.id === labelEditorId) ?? null) : null;
   const editingPin = pinEditorId ? (map.pins.find((p) => p.id === pinEditorId) ?? null) : null;
+
+  /* ---------- rich tooltip on pin hover (select tool) ---------- */
+  const [tooltipPinId, setTooltipPinId] = useState<string | null>(null);
+  useEffect(() => {
+    if (tool !== 'select' || hoverSel?.kind !== 'pin' || pinEditorId) {
+      setTooltipPinId(null);
+      return;
+    }
+    const id = hoverSel.id;
+    const t = setTimeout(() => setTooltipPinId(id), 350);
+    return () => clearTimeout(t);
+  }, [hoverSel, tool, pinEditorId]);
+  const tooltipPin = tooltipPinId ? (map.pins.find((p) => p.id === tooltipPinId) ?? null) : null;
 
   const linkNoteToPin = useCallback(
     async (pin: MapPin) => {
@@ -1257,6 +1288,59 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
           className={`absolute left-3 ${overlayOffset} z-20 px-2.5 py-1 rounded-md bg-sidebar/90 border border-line text-[11px] text-ink-2 tabular-nums pointer-events-none`}
         >
           {hoverHex && inGrid(hoverHex) ? `Hex ${hexNumber(map, hoverHex.col, hoverHex.row)} · ${hoverHex.col},${hoverHex.row}` : 'fora do mapa'}
+        </div>
+
+        {/* floating layers widget — sempre visível sobre o mapa */}
+        <div className="absolute right-3 top-3 z-20 flex flex-col items-end gap-1.5">
+          <button
+            title="Camadas"
+            onClick={() => setLayersOpen((v) => !v)}
+            className={`p-2 rounded-lg border shadow-md transition-colors ${
+              layersOpen ? 'border-accent bg-sidebar text-accent' : 'border-line bg-sidebar/90 text-ink-3 hover:text-ink-1'
+            }`}
+          >
+            <Layers size={15} />
+          </button>
+          {layersOpen && (
+            <div className="w-56 max-h-[70vh] overflow-y-auto custom-scrollbar rounded-lg border border-line bg-sidebar/95 shadow-xl p-2.5">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-semibold text-[11px] uppercase tracking-wide text-ink-3">Camadas</span>
+                <button
+                  onClick={() => setLayers({ features: true, notes: true, regions: true, fog: true, grid: true, hiddenTags: [] })}
+                  className="text-[11px] text-ink-3 hover:text-accent underline"
+                >
+                  mostrar tudo
+                </button>
+              </div>
+              <div className="flex flex-col divide-y divide-line/60">
+                <LayerRow label="Grade de hexes" checked={layers.grid} onChange={(v) => setLayers((l) => ({ ...l, grid: v }))} />
+                <LayerRow label="Marcadores (pins)" checked={layers.features} onChange={(v) => setLayers((l) => ({ ...l, features: v }))} />
+                <LayerRow label="Indicadores de nota" checked={layers.notes} onChange={(v) => setLayers((l) => ({ ...l, notes: v }))} />
+                <LayerRow label="Regiões" checked={layers.regions} onChange={(v) => setLayers((l) => ({ ...l, regions: v }))} />
+                <LayerRow label="Névoa de guerra" checked={layers.fog} onChange={(v) => setLayers((l) => ({ ...l, fog: v }))} />
+              </div>
+              {mapTags.length > 0 && (
+                <>
+                  <div className="font-semibold text-[11px] uppercase tracking-wide text-ink-3 mt-2.5 mb-1">Visibilidade por tag</div>
+                  <div className="flex flex-col divide-y divide-line/60">
+                    {mapTags.map((t) => (
+                      <LayerRow
+                        key={t}
+                        label={t}
+                        checked={!layers.hiddenTags.includes(t)}
+                        onChange={(v) => setLayers((l) => ({ ...l, hiddenTags: v ? l.hiddenTags.filter((x) => x !== t) : [...l.hiddenTags, t] }))}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+              {map.fog.length > 0 && (
+                <button onClick={() => setMap((m) => ({ ...m, fog: [] }))} className="mt-2 text-[11px] text-ink-3 hover:text-accent underline">
+                  Revelar o mapa inteiro ({map.fog.length} hexes sob névoa)
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* zoom controls */}
@@ -1532,6 +1616,54 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
             );
           })()}
 
+        {/* rich tooltip on pin hover (name + marker type + linked note) */}
+        {tooltipPin &&
+          !editingPin &&
+          (() => {
+            const r = resolvePin(map, tooltipPin);
+            const def = featureOf(map, tooltipPin.markerId);
+            const note = tooltipPin.docId ? docs.find((d) => d.id === tooltipPin.docId) : undefined;
+            const excerpt = note ? noteExcerpt(note.content) : '';
+            const docIcon = tooltipPin.docId ? pinDocIcon(tooltipPin.docId) : undefined;
+            const Glyph = docIcon ? pinIcon(docIcon) : getGlyph(r.icon);
+            const pos = worldToScreen(tooltipPin);
+            return (
+              <div
+                className="absolute z-30 w-64 rounded-lg border border-line bg-sidebar/95 shadow-xl p-3 pointer-events-none"
+                style={{
+                  left: Math.max(8, Math.min(pos.x - 128, viewSize.w - 264)),
+                  top: Math.max(8, pos.y - 14),
+                  transform: 'translateY(-100%)',
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 shrink-0 flex items-center justify-center">
+                    {r.iconSrc && !docIcon ? (
+                      <img src={r.iconSrc} alt="" className="w-5 h-5 object-contain" />
+                    ) : Glyph ? (
+                      <Glyph size={18} color={r.color} />
+                    ) : null}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-semibold text-ink-1 truncate">{r.name}</div>
+                    {def && <div className="text-[10px] uppercase tracking-wide text-ink-3">{def.name}</div>}
+                  </div>
+                </div>
+                {note ? (
+                  <div className="mt-2 pt-2 border-t border-line">
+                    <div className="flex items-center gap-1.5 text-[12px] text-note">
+                      <FileText size={12} className="shrink-0" />
+                      <span className="truncate">{note.title || 'Sem título'}</span>
+                    </div>
+                    {excerpt && <p className="text-[11px] text-ink-2 leading-snug mt-1 line-clamp-3">{excerpt}</p>}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-ink-3 italic mt-1.5">Sem nota vinculada — clique para editar o marcador.</p>
+                )}
+              </div>
+            );
+          })()}
+
         {/* context menu (export etc.) */}
         {ctxMenu &&
           (() => {
@@ -1624,8 +1756,6 @@ export function HexcrawlMap({ doc, onCameraChange }: { doc: DocNode; onCameraCha
             activeTerrain={activeTerrain}
             activeRegionId={activeRegionId}
             setActiveRegionId={setActiveRegionId}
-            layers={layers}
-            setLayers={setLayers}
             showKey={showKey}
             setShowKey={setShowKey}
             measureMode={measureMode}

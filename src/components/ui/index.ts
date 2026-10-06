@@ -8,5 +8,7 @@ export { IconButton, type IconButtonProps } from './IconButton';
 export { TacticalInput, CommandInput, type TacticalInputProps, type CommandInputProps } from './input';
 export { Tabs, TabItem, type TabsProps, type TabItemProps, type TabItemData } from './Tabs';
 export { Modal, type ModalProps } from './Modal';
+export { ConfirmDialog, type ConfirmDialogProps } from './ConfirmDialog';
 export { Toggle, type ToggleProps } from './Toggle';
 export { ToggleList, type ToggleListProps, type ToggleListItem } from './ToggleList';
+export { TagInput, type TagInputProps } from './TagInput';
