@@ -725,6 +725,11 @@ export function getDocRealmId(id: string): string | null {
   return row?.realm_id ?? null;
 }
 
+export function getDoc(id: string): DocNode | null {
+  const row = db.prepare('SELECT * FROM documents WHERE id = ?').get(id) as any;
+  return row ? rowToDoc(row) : null;
+}
+
 export function listDocs(realmId: string): DocNode[] {
   const rows = db
     .prepare('SELECT * FROM documents WHERE realm_id = ? ORDER BY position ASC, updated_at ASC')

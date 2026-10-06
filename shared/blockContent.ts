@@ -194,6 +194,96 @@ function inlineToText(content: BNInline[] | string | undefined): string {
     .join('');
 }
 
+// ---------- BlockNote → Markdown (single-document export) ----------
+
+function applyInlineStyles(text: string, styles: BNStyles): string {
+  if (!text) return text;
+  let out = text;
+  if (styles.code) out = '`' + out + '`';
+  if (styles.bold) out = '**' + out + '**';
+  if (styles.italic) out = '*' + out + '*';
+  if (styles.strike) out = '~~' + out + '~~';
+  return out;
+}
+
+function inlineToMarkdown(content: BNInline[] | string | undefined): string {
+  if (!content) return '';
+  if (typeof content === 'string') return content;
+  return content
+    .map((c) =>
+      c.type === 'link'
+        ? `[${c.content.map((t) => applyInlineStyles(t.text, t.styles)).join('')}](${c.href})`
+        : applyInlineStyles(c.text, c.styles)
+    )
+    .join('');
+}
+
+const NESTED_LIST_TYPES = new Set(['bulletListItem', 'numberedListItem', 'checkListItem']);
+
+function blockToMarkdown(block: BNBlock, indent: number): string {
+  const pad = '  '.repeat(indent);
+  const text = inlineToMarkdown(block.content);
+  const lines: string[] = [];
+  switch (block.type) {
+    case 'heading': {
+      const level = Math.min(Math.max(Number(block.props?.level ?? 1), 1), 6);
+      lines.push(`${'#'.repeat(level)} ${text}`.trimEnd());
+      break;
+    }
+    case 'bulletListItem':
+      lines.push(`${pad}- ${text}`.trimEnd());
+      break;
+    case 'numberedListItem':
+      lines.push(`${pad}1. ${text}`.trimEnd());
+      break;
+    case 'checkListItem':
+      lines.push(`${pad}- [${block.props?.checked ? 'x' : ' '}] ${text}`.trimEnd());
+      break;
+    case 'quote':
+      lines.push(`${pad}> ${text}`.trimEnd());
+      break;
+    case 'codeBlock': {
+      const code = typeof block.content === 'string' ? block.content : inlineToMarkdown(block.content);
+      const lang = typeof block.props?.language === 'string' ? block.props.language : '';
+      lines.push(`${pad}\`\`\`${lang}`, code, `${pad}\`\`\``);
+      break;
+    }
+    case 'divider':
+      lines.push(`${pad}---`);
+      break;
+    case 'image': {
+      const url = typeof block.props?.url === 'string' ? block.props.url : '';
+      const caption = typeof block.props?.caption === 'string' ? block.props.caption : '';
+      if (url) lines.push(`${pad}![${caption}](${url})`);
+      break;
+    }
+    case 'callout': {
+      const title = typeof block.props?.title === 'string' ? block.props.title : '';
+      const variant = typeof block.props?.variant === 'string' ? block.props.variant : '';
+      lines.push(`${pad}> ${title ? `**${title}**` : `_${variant}_`}`);
+      if (text) lines.push(`${pad}> ${text}`);
+      break;
+    }
+    default:
+      if (text) lines.push(`${pad}${text}`);
+      break;
+  }
+  const childIndent = NESTED_LIST_TYPES.has(block.type) ? indent + 1 : indent;
+  for (const child of block.children ?? []) {
+    const childMd = blockToMarkdown(child, childIndent);
+    if (childMd) lines.push(childMd);
+  }
+  return lines.filter((l) => l.trim() !== '').join('\n');
+}
+
+/** Converts note content (BlockNote or legacy tiptap JSON) to Markdown. */
+export function blocksToMarkdown(raw: string | null | undefined): string {
+  return parseNoteContent(raw)
+    .map((b) => blockToMarkdown(b, 0))
+    .filter(Boolean)
+    .join('\n\n');
+}
+
 /** Extracts plain text from note content (BlockNote or legacy tiptap JSON). */
 export function blocksToPlainText(raw: string | null | undefined): string {
   if (!raw) return '';

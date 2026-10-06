@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Tree, TreeApi, NodeApi, NodeRendererProps } from 'react-arborist';
 import {
@@ -11,6 +11,7 @@ import {
   FileUp,
   MapPin,
   Bookmark,
+  Download,
   Star,
 } from 'lucide-react';
 import type { DocNode, DocumentType } from '@shared/types';
@@ -20,9 +21,19 @@ import { useDocTypes, useMenuItems } from '../plugins/manager';
 import type { DocTypeContribution } from '../plugins/api/docTypes';
 import type { ExplorerMenuContext } from '../plugins/api/menus';
 import { ContextMenu, type CtxMenuEntry } from './ContextMenu';
+import { ConfirmDialog } from './ui';
 import { buildTree, TreeData } from './treeData';
 import { buildPdfTreeInfo, parseBookmarkVirtualId, renameBookmarkLabel, removeBookmark, type PdfTreeInfo } from './pdfTree';
 import { pinIcon } from './editors/pdf/rpg';
+
+/** A pending delete confirmation, requested by a row or the tree's Delete key. */
+interface DeleteRequest {
+  ids: string[];
+  /** display name of the single targeted item ('N itens' cases use the count) */
+  label?: string;
+}
+
+const DeleteConfirmContext = createContext<(req: DeleteRequest) => void>(() => {});
 
 // buildPdfTreeInfo parses every PDF's content JSON; cache per docs-array
 // reference so each row render doesn't redo the work.
@@ -37,7 +48,8 @@ function cachedPdfInfo(docs: DocNode[]): PdfTreeInfo {
 }
 
 function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
-  const { docs, deleteDocument, updateDocument, openDocument, focusPdf } = useStore();
+  const { docs, openDocument, focusPdf, exportDocument } = useStore();
+  const requestDelete = useContext(DeleteConfirmContext);
   const docTypes = useDocTypes();
   const menuItems = useMenuItems('explorer:item');
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
@@ -49,14 +61,14 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
   // PDFs are imported rather than created, so they have no docType contribution
   const contribution = docTypes.find((d) => d.docType === data.docType);
 
-  const remove = () => {
-    if (bookmark) {
-      const pdfDoc = docs.find((d) => d.id === bookmark.pdfDocId);
-      if (pdfDoc) updateDocument(pdfDoc.id, { content: removeBookmark(pdfDoc.content, bookmark.bookmarkId) });
-      return;
-    }
-    deleteDocument(data.id);
+  // deletions are confirmed by a modal owned by <Explorer> (rendered outside
+  // the transformed tree rows)
+  const remove = () => requestDelete({ ids: [data.id], label: data.name });
+  const onExport = async () => {
+    const res = await exportDocument(data.id);
+    if (!res.ok && !res.canceled) window.alert(res.error ?? 'Falha ao exportar o documento.');
   };
+  const canExport = !bookmark && data.docType !== 'core/folder';
 
   const menuCtx: ExplorerMenuContext = bookmark
     ? { doc: null, bookmark: { pdfDocId: bookmark.pdfDocId, bookmarkId: bookmark.bookmarkId, label: data.name, page: bookmark.page } }
@@ -67,6 +79,7 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
     .map((item) => ({ icon: item.icon, label: item.label, danger: item.danger, onClick: () => item.run(menuCtx) }));
 
   const menuEntries: CtxMenuEntry[] = [
+    { icon: Download, label: 'Exportar', disabled: !canExport, onClick: onExport },
     { icon: PenLine, label: 'Renomear', onClick: () => node.edit() },
     { icon: Trash2, label: 'Excluir', danger: true, onClick: remove },
     ...(pluginEntries.length > 0 ? (['divider', ...pluginEntries] as CtxMenuEntry[]) : []),
@@ -298,9 +311,32 @@ export function Explorer() {
   const [height, setHeight] = useState(400);
   const [importing, setImporting] = useState(false);
   const [newDocOpen, setNewDocOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<DeleteRequest | null>(null);
 
   const pdfInfo = useMemo(() => cachedPdfInfo(docs), [docs]);
   const data = useMemo(() => buildTree(docs, pdfInfo.bookmarksByPdf), [docs, pdfInfo]);
+
+  const requestDelete = useCallback((req: DeleteRequest) => setPendingDelete(req), []);
+
+  // Bookmarks are virtual rows stored inside their PDF's content; real docs
+  // delete their subtree.
+  const performDelete = useCallback(
+    (ids: string[]) => {
+      ids.forEach((id) => {
+        const bm = parseBookmarkVirtualId(id);
+        if (bm) {
+          const pdfDoc = docs.find((d) => d.id === bm.pdfDocId);
+          if (pdfDoc) updateDocument(pdfDoc.id, { content: removeBookmark(pdfDoc.content, bm.bookmarkId) });
+          return;
+        }
+        deleteDocument(id);
+      });
+    },
+    [docs, updateDocument, deleteDocument]
+  );
+
+  const deleteCount = pendingDelete?.ids.length ?? 0;
+  const deletingFolder = pendingDelete?.ids.some((id) => docs.find((d) => d.id === id)?.type === 'core/folder') ?? false;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -345,6 +381,7 @@ export function Explorer() {
   };
 
   return (
+    <DeleteConfirmContext.Provider value={requestDelete}>
     <div className="h-full w-full flex flex-col bg-sidebar">
       <div className="px-3 h-9 border-b border-line flex justify-between items-center shrink-0">
         <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
@@ -417,17 +454,7 @@ export function Explorer() {
               }
               updateDocument(id, { title: name });
             }}
-            onDelete={({ ids }) =>
-              ids.forEach((id) => {
-                const bm = parseBookmarkVirtualId(id);
-                if (bm) {
-                  const pdfDoc = docs.find((d) => d.id === bm.pdfDocId);
-                  if (pdfDoc) updateDocument(pdfDoc.id, { content: removeBookmark(pdfDoc.content, bm.bookmarkId) });
-                  return;
-                }
-                deleteDocument(id);
-              })
-            }
+            onDelete={({ ids }) => requestDelete({ ids })}
             onMove={({ dragIds, parentId, index }) => {
               // virtual bookmark nodes can't be dragged, and nothing can be
               // dropped "inside" one (it has no real children)
@@ -443,6 +470,24 @@ export function Explorer() {
           </Tree>
         )}
       </div>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={deleteCount > 1 ? 'Excluir itens' : 'Excluir documento'}
+        message={
+          <>
+            <p>
+              {deleteCount > 1
+                ? `Excluir ${deleteCount} itens? Esta ação não pode ser desfeita.`
+                : `Excluir "${pendingDelete?.label ?? 'este item'}"? Esta ação não pode ser desfeita.`}
+            </p>
+            {deletingFolder && <p className="mt-1 text-ink-3">Os itens dentro da pasta também serão excluídos.</p>}
+          </>
+        }
+        confirmLabel="Excluir"
+        onConfirm={() => pendingDelete && performDelete(pendingDelete.ids)}
+        onClose={() => setPendingDelete(null)}
+      />
     </div>
+    </DeleteConfirmContext.Provider>
   );
 }

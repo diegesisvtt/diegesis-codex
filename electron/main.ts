@@ -7,7 +7,9 @@ import * as images from './images';
 import * as diceAssets from './diceAssets';
 import * as plugins from './plugins';
 import * as realmTransfer from './realmTransfer';
+import * as docExport from './docExport';
 import * as playerView from './playerView';
+import { appIconPath } from './appIcon';
 import * as sync from './sync';
 import * as aiConfig from './ai/config';
 import * as embedder from './ai/embedder';
@@ -16,6 +18,7 @@ import { semanticSearch, streamChat, streamInline } from './ai/rag';
 import { getProvider, listProviders } from './ai/providers/registry';
 import { emptyDossier, runSpecialist } from './ai/specialists/base';
 import { tableExtractSpecialist } from './ai/specialists/table-extract';
+import { sheetEffectSpecialist } from './ai/specialists/sheet-effect';
 import { listSearchProviders, runWebSearch } from './ai/websearch';
 import type { AIChatRequest, AIProviderConfig, DocChanges, DocInput, InlineAIRequest, PlayerViewState, UiState } from '../shared/types';
 
@@ -106,6 +109,7 @@ function registerIpc(): void {
     sync.notifyDocsChanged(realmId);
   });
   ipcMain.handle('docs:search', (_e, realmId: string, query: string) => db.searchDocs(realmId, query));
+  ipcMain.handle('docs:export', (_e, id: string) => docExport.exportDocument(id));
 
   ipcMain.handle('pdf:import', (_e, realmId: string, parentId: string | null) => pdf.importPdf(realmId, parentId));
   ipcMain.handle('pdf:saveText', (_e, docId: string, pages: string[]) => {
@@ -223,6 +227,30 @@ function registerIpc(): void {
     }
   });
 
+  // sheet effect creation ("escudo +2") → sheet-effect specialist → structured payload
+  ipcMain.handle('ai:sheet:effect', async (_e, req: { description?: unknown; attributes?: unknown }) => {
+    try {
+      const description = typeof req?.description === 'string' ? req.description.trim() : '';
+      if (!description) return { ok: false, error: 'Descreva o efeito.' };
+      const cfg = aiConfig.getResolvedChatConfig();
+      if (!cfg) return { ok: false, error: 'Configure um provider de chat nas configurações de IA.' };
+      const provider = getProvider(cfg.providerId);
+      if (!provider) return { ok: false, error: `Provider desconhecido: ${cfg.providerId}` };
+      const attributes = Array.isArray(req?.attributes)
+        ? req.attributes.filter((a): a is string => typeof a === 'string').slice(0, 60)
+        : [];
+      const effect = await runSpecialist(
+        sheetEffectSpecialist,
+        { descricao: description, atributos: attributes },
+        { realmId: '', canon: [], dossier: emptyDossier() },
+        { provider, config: cfg.config }
+      );
+      return { ok: true, effect };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
   ipcMain.handle('app:platform', () => process.platform);
   ipcMain.handle('app:version', () => app.getVersion());
 
@@ -279,6 +307,7 @@ function createWindow(): void {
     minHeight: 600,
     backgroundColor: '#18181b',
     title: 'Diegesis Codex',
+    icon: appIconPath(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -366,19 +395,21 @@ app.whenReady().then(() => {
     images.registerImageProtocol();
     diceAssets.registerDiceAssetsProtocol();
     db.initDb();
-    // reclaim audio files orphaned by removed blocks/shapes/highlight attachments
-    audio.gcAudioFiles(db.listAllDocContents());
     registerIpc();
     sync.initSync();
     sync.registerSyncIpc();
-    embedder.startEmbedder();
     embedder.indexEvents.on('status', (status) => {
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send('ai:index:status', status);
     });
     docEvents.on('changed', (realmId) => {
       for (const win of BrowserWindow.getAllWindows()) win.webContents.send('docs:changed', realmId);
     });
+    // Show the window (and its loading screen) before the non-critical startup
+    // work below runs, so first paint isn't delayed by asset GC / the embedder.
     createWindow();
+    // reclaim audio files orphaned by removed blocks/shapes/highlight attachments
+    audio.gcAudioFiles(db.listAllDocContents());
+    embedder.startEmbedder();
   } catch (err) {
     reportFatalStartup(err);
     return;

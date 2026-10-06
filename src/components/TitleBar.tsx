@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, ChevronDown, Pencil, Trash2, FileDown, FileUp, Settings2, Search, Type, Upload } from 'lucide-react';
 import { useStore } from '../state/store';
 import { usePluginManager, useRibbonItems } from '../plugins';
@@ -14,6 +15,8 @@ export function TitleBar() {
   const manager = usePluginManager();
   const ribbonItems = useRibbonItems();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const realmBtnRef = useRef<HTMLButtonElement>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [renaming, setRenaming] = useState<Realm | null>(null);
@@ -149,8 +152,15 @@ export function TitleBar() {
 
         <div className="relative shrink-0">
           <button
+            ref={realmBtnRef}
             type="button"
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={() => {
+              if (!menuOpen && realmBtnRef.current) {
+                const rect = realmBtnRef.current.getBoundingClientRect();
+                setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+              }
+              setMenuOpen((v) => !v);
+            }}
             title="Alternar universo"
             className={`hd-realm${menuOpen ? ' hd-realm--open' : ''}`}
           >
@@ -158,10 +168,17 @@ export function TitleBar() {
             <span className="hd-realm-name font-medium">{active?.name ?? 'Sem universo'}</span>
             <ChevronDown size={13} className="hd-realm-chevron text-ink-3" />
           </button>
-          {menuOpen && (
-            <>
-              <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
-              <Surface variant="elevated" className="absolute right-0 top-full mt-1 z-40 w-72 py-1 overflow-hidden animate-fade-up">
+          {menuOpen && menuPos &&
+            // portal: o dropdown vive num stacking context próprio no body,
+            // senão ficaria preso ao z-index do header (abaixo da tab bar)
+            createPortal(
+              <>
+                <div className="fixed inset-0 z-[80]" onClick={() => setMenuOpen(false)} />
+                <Surface
+                  variant="elevated"
+                  style={{ top: menuPos.top, right: menuPos.right }}
+                  className="fixed z-[90] w-72 py-1 overflow-hidden animate-fade-up"
+                >
                 <div className="h-px bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent" aria-hidden="true" />
                 <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-ink-3">
                   Universos
@@ -253,9 +270,10 @@ export function TitleBar() {
                     <FileUp size={13} /> Importar universo…
                   </button>
                 </div>
-              </Surface>
-            </>
-          )}
+                </Surface>
+              </>,
+              document.body
+            )}
         </div>
       </div>
 

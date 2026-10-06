@@ -51,6 +51,8 @@ interface StoreActions {
   flushDocument(id: string, changes: DocChanges): void;
   deleteDocument(id: string): Promise<void>;
   moveDocument(id: string, parentId: string | null, position: number): Promise<void>;
+  /** opens a save dialog and writes the document to disk (Markdown/PDF/JSON) */
+  exportDocument(id: string): Promise<RealmTransferResult>;
 
   saveUiState(patch: Partial<UiState>): void;
   /** registered by the Workspace so other components can open tabs */
@@ -309,6 +311,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const exportDocument = useCallback((id: string) => window.diegesis.docs.export(id), []);
+
   const moveDocument = useCallback(async (id: string, parentId: string | null, position: number) => {
     await window.diegesis.docs.move(id, parentId, position);
     setState((s) => {
@@ -393,6 +397,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       flushDocument,
       deleteDocument,
       moveDocument,
+      exportDocument,
       saveUiState,
       openDocument: (docId: string) => openDocRef.current?.(docId),
       registerOpenDocument,
@@ -427,6 +432,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       flushDocument,
       deleteDocument,
       moveDocument,
+      exportDocument,
       saveUiState,
       registerOpenDocument,
       registerOnDocumentDeleted,
