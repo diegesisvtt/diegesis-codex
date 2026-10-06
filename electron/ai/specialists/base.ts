@@ -46,7 +46,8 @@ export type SpecialistId =
   | 'quest'
   | 'location'
   | 'dungeon'
-  | 'table-extract';
+  | 'table-extract'
+  | 'sheet-effect';
 
 /** A ready-to-call model: provider + resolved config. */
 export interface LLMHandle {

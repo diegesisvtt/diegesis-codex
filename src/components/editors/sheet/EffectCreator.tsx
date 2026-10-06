@@ -1,9 +1,11 @@
 // Criação simples de efeitos na aba fixa "Efeitos". Se o plugin de IA está
 // ativo (e configurado), o usuário descreve o efeito em linguagem natural e a
-// IA gera a definição (endpoint single-shot `ai.inline`); caso contrário, um
-// pequeno formulário inline (rótulo + alterações atributo/op/valor). Em ambos
-// os casos o efeito vira uma definição global do reino e é aplicado à ficha.
-import { useEffect, useRef, useState } from 'react';
+// IA devolve uma definição ESTRUTURADA (specialist `sheet-effect` no processo
+// principal — tool call forçada, nada de parsear texto). Sem IA, um pequeno
+// formulário inline (rótulo + alterações atributo/op/valor). Em ambos os casos
+// o efeito vira definição global do reino e é aplicado à ficha (com rollback
+// se a definição for inválida — onCreate retorna a mensagem de erro).
+import { useState } from 'react';
 import { Loader2, Plus, Sparkles, Trash2, Wand2 } from 'lucide-react';
 import type { Change, EffectDefinition, ValueOp } from '@diegesis/sheet';
 import { newEffectId } from '@shared/sheetEffects';
@@ -14,59 +16,20 @@ const OPS: [ValueOp, string][] = [
   ['set', 'definir'],
   ['multiply', 'multiplicar'],
 ];
-const OP_IDS = new Set<string>(OPS.map(([v]) => v));
-
-const AI_SYSTEM = `Você gera definições de efeito para fichas de RPG OSR.
-Responda APENAS com JSON válido, sem markdown nem explicações, no formato:
-{"label": string, "changes": [{"path": string, "op": "add" | "set" | "multiply", "value": string}]}
-Regras:
-- path é o atributo afetado; prefira os existentes: ca, pv.atual, pv.max, atq, moral, save, dv, desl.quad, dadoVida.
-- value é sempre string numérica ou expressão de dados (ex.: "2", "-1", "1d4").
-- No máximo 3 alterações.`;
-
-interface ParsedAiEffect {
-  label: string;
-  changes: { path?: unknown; op?: unknown; value?: unknown }[];
-}
-
-/** extrai o primeiro objeto JSON da resposta (tolera texto/markdown ao redor) */
-function parseAiJson(text: string): ParsedAiEffect | null {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end <= start) return null;
-  try {
-    const raw = JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
-    if (typeof raw.label !== 'string' || !raw.label.trim()) return null;
-    const changes = Array.isArray(raw.changes) ? raw.changes : [];
-    return { label: raw.label.trim(), changes: changes as ParsedAiEffect['changes'] };
-  } catch {
-    return null;
-  }
-}
-
-function toChanges(list: ParsedAiEffect['changes']): Change[] {
-  const out: Change[] = [];
-  for (const c of list.slice(0, 4)) {
-    if (!c || typeof c.path !== 'string' || !c.path.trim()) continue;
-    const op = typeof c.op === 'string' && OP_IDS.has(c.op) ? (c.op as ValueOp) : 'add';
-    const value = typeof c.value === 'number' ? String(c.value) : typeof c.value === 'string' ? c.value.trim() : '';
-    if (!value) continue;
-    out.push({ kind: 'value', path: c.path.trim(), op, value });
-  }
-  return out;
-}
 
 export function EffectCreator({
   aiAvailable,
-  realmId,
+  attributes,
   onCreate,
 }: {
   aiAvailable: boolean;
-  realmId: string | null;
-  onCreate: (def: EffectDefinition) => void;
+  /** caminhos de atributos conhecidos da ficha (grounding da IA) */
+  attributes: string[];
+  /** cria a definição e aplica à ficha; retorna mensagem de erro ou null */
+  onCreate: (def: EffectDefinition) => string | null;
 }) {
   return aiAvailable ? (
-    <AiEffectForm realmId={realmId} onCreate={onCreate} />
+    <AiEffectForm attributes={attributes} onCreate={onCreate} />
   ) : (
     <ManualEffectForm onCreate={onCreate} />
   );
@@ -77,52 +40,43 @@ const headCls = 'text-[10.5px] font-semibold uppercase tracking-[0.16em] text-sh
 const submitCls =
   'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-sheet/50 bg-sheet-soft text-[12px] text-sheet-strong hover:border-sheet/70 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0';
 
-// ---------- IA ----------
+// ---------- IA (resultado estruturado via specialist sheet-effect) ----------
 
-function AiEffectForm({ realmId, onCreate }: { realmId: string | null; onCreate: (d: EffectDefinition) => void }) {
+function AiEffectForm({
+  attributes,
+  onCreate,
+}: {
+  attributes: string[];
+  onCreate: (d: EffectDefinition) => string | null;
+}) {
   const [input, setInput] = useState('');
-  const [streaming, setStreaming] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const chatIdRef = useRef('');
-  const bufferRef = useRef('');
 
-  useEffect(() => {
-    return window.diegesis.ai.onChatChunk((chunk) => {
-      if (chunk.chatId !== chatIdRef.current) return;
-      if (chunk.error) {
-        setError(chunk.error);
-        setStreaming(false);
+  const generate = async () => {
+    const description = input.trim();
+    if (!description || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await window.diegesis.ai.generateSheetEffect({ description, attributes });
+      if (!res.ok || !res.effect) {
+        setError(res.error ?? 'A IA não retornou um efeito válido. Tente descrever de outra forma.');
         return;
       }
-      if (chunk.delta) bufferRef.current += chunk.delta;
-      if (chunk.done) {
-        setStreaming(false);
-        const parsed = parseAiJson(bufferRef.current);
-        const changes = parsed ? toChanges(parsed.changes) : [];
-        if (!parsed || changes.length === 0) {
-          setError('A IA não retornou um efeito válido. Tente descrever de outra forma.');
-          return;
-        }
-        onCreate({ id: newEffectId(parsed.label), label: parsed.label, changes });
-        setInput('');
+      const changes: Change[] = res.effect.changes.map((c) => ({ kind: 'value', path: c.path, op: c.op, value: c.value }));
+      if (changes.length === 0) {
+        setError('A IA não retornou alterações válidas.');
+        return;
       }
-    });
-  }, [onCreate]);
-
-  const generate = () => {
-    const description = input.trim();
-    if (!description || streaming) return;
-    const chatId = `fx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    chatIdRef.current = chatId;
-    bufferRef.current = '';
-    setError(null);
-    setStreaming(true);
-    window.diegesis.ai
-      .inline({ chatId, realmId, system: AI_SYSTEM, messages: [{ role: 'user', content: description }], useContext: false })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : String(err));
-        setStreaming(false);
-      });
+      const err = onCreate({ id: newEffectId(res.effect.label), label: res.effect.label, changes });
+      if (err) setError(err);
+      else setInput('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -142,8 +96,8 @@ function AiEffectForm({ realmId, onCreate }: { realmId: string | null; onCreate:
           spellCheck={false}
           className="flex-1 min-w-0 bg-overlay border border-line rounded-lg px-2.5 py-1.5 text-[12.5px] text-ink-1 outline-none focus:border-sheet/60 placeholder:text-ink-3 transition-colors"
         />
-        <button type="button" onClick={generate} disabled={!input.trim() || streaming} className={submitCls}>
-          {streaming ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+        <button type="button" onClick={generate} disabled={!input.trim() || busy} className={submitCls}>
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
           Gerar
         </button>
       </div>
@@ -154,10 +108,11 @@ function AiEffectForm({ realmId, onCreate }: { realmId: string | null; onCreate:
 
 // ---------- formulário inline ----------
 
-function ManualEffectForm({ onCreate }: { onCreate: (d: EffectDefinition) => void }) {
+function ManualEffectForm({ onCreate }: { onCreate: (d: EffectDefinition) => string | null }) {
   const emptyRow = () => ({ path: 'ca', op: 'add' as ValueOp, value: '1' });
   const [label, setLabel] = useState('');
   const [rows, setRows] = useState<{ path: string; op: ValueOp; value: string }[]>([emptyRow()]);
+  const [error, setError] = useState<string | null>(null);
 
   const valid = Boolean(label.trim()) && rows.some((r) => r.path.trim() && r.value.trim());
 
@@ -168,7 +123,12 @@ function ManualEffectForm({ onCreate }: { onCreate: (d: EffectDefinition) => voi
       .map((r) => ({ kind: 'value', path: r.path.trim(), op: r.op, value: r.value.trim() }));
     if (changes.length === 0) return;
     const name = label.trim();
-    onCreate({ id: newEffectId(name), label: name, changes });
+    const err = onCreate({ id: newEffectId(name), label: name, changes });
+    if (err) {
+      setError(err);
+      return;
+    }
+    setError(null);
     setLabel('');
     setRows([emptyRow()]);
   };
@@ -218,6 +178,7 @@ function ManualEffectForm({ onCreate }: { onCreate: (d: EffectDefinition) => voi
           <Plus size={12} /> Criar e aplicar
         </button>
       </div>
+      {error && <div className="text-[11.5px] text-danger">{error}</div>}
     </div>
   );
 }

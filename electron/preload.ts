@@ -36,6 +36,7 @@ const api: DiegesisCodexApi = {
     delete: (id) => ipcRenderer.invoke('docs:delete', id),
     move: (id, parentId, position) => ipcRenderer.invoke('docs:move', id, parentId, position),
     search: (realmId, query) => ipcRenderer.invoke('docs:search', realmId, query),
+    export: (id) => ipcRenderer.invoke('docs:export', id),
     onChanged: (cb) => subscribe<string>('docs:changed', cb),
   },
   ui: {
@@ -63,6 +64,7 @@ const api: DiegesisCodexApi = {
     inline: (req) => ipcRenderer.invoke('ai:inline', req),
     cancelChat: (chatId) => ipcRenderer.invoke('ai:chat:cancel', chatId),
     extractTable: (text: string) => ipcRenderer.invoke('ai:table:extract', text),
+    generateSheetEffect: (req) => ipcRenderer.invoke('ai:sheet:effect', req),
     onChatChunk: (cb) => subscribe<ChatStreamChunk>('ai:chat:chunk', cb),
     onChatSources: (cb) => subscribe<AIChatSources>('ai:chat:sources', cb),
     onToolEvent: (cb) => subscribe<AIToolEvent>('ai:chat:tool', cb),

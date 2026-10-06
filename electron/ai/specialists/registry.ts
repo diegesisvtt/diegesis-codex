@@ -38,6 +38,7 @@ import { questSpecialist } from './quest';
 import { locationSpecialist } from './location';
 import { dungeonSpecialist } from './dungeon';
 import { tableExtractSpecialist } from './table-extract';
+import { sheetEffectSpecialist } from './sheet-effect';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const BUILTIN_SPECIALISTS: Specialist<any, any>[] = [
@@ -78,6 +79,7 @@ const BUILTIN_SPECIALISTS: Specialist<any, any>[] = [
   locationSpecialist,
   dungeonSpecialist,
   tableExtractSpecialist,
+  sheetEffectSpecialist,
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

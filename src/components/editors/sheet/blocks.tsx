@@ -2,10 +2,12 @@
 // Visual premium dark-fantasy: título hero com ornamentos, stat cards com
 // numerais display, seções com filetes, chips de rolagem dourados.
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Dices, HelpCircle, Plus, Sparkles, Trash2 } from 'lucide-react';
-import { getPath, type ComputedSheet, type EffectInstance } from '@diegesis/sheet';
+import { Check, ChevronDown, Dices, HelpCircle, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { getPath, type Change, type ComputedSheet, type EffectDefinition, type EffectInstance, type ValueOp } from '@diegesis/sheet';
 import type { SheetBlock } from '@shared/sheetLayout';
 import { osrPack } from '@shared/sheet';
+import { summarizeChange } from '@shared/sheetEffects';
+import { Select, TextInput } from '../../ui/fields';
 
 export const DIE_OPTIONS = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20'];
 
@@ -30,6 +32,10 @@ export interface SheetBlockCtx {
   setEffectEnabled: (id: string, on: boolean) => void;
   removeEffect: (id: string) => void;
   effectLabel: (fx: EffectInstance) => string;
+  /** definição completa de um efeito aplicado por ref (para edição inline) */
+  getEffectDef: (ref: string) => EffectDefinition | undefined;
+  /** salva uma definição editada (reino + motor) */
+  saveEffectDef: (def: EffectDefinition) => void;
   updateBlock: (id: string, patch: Record<string, unknown>) => void;
   /** definições aplicáveis (pack + customizadas do reino) */
   effectDefs: { id: string; label: string }[];
@@ -287,8 +293,89 @@ function RollsBlock({ block, ctx }: { block: SheetBlock & { type: 'rolls' }; ctx
   );
 }
 
+const EFFECT_VALUE_OPS: [ValueOp, string][] = [
+  ['add', 'somar'],
+  ['set', 'definir'],
+  ['multiply', 'multiplicar'],
+  ['upgrade', 'aumentar (dado)'],
+  ['downgrade', 'diminuir (dado)'],
+  ['append', 'anexar'],
+  ['remove', 'remover'],
+];
+
+/** formulário inline de edição de uma definição de efeito (alterações do tipo
+ *  valor são editáveis; roll/flag aparecem como resumo somente-leitura) */
+function EffectDefEditor({ def, onSave, onCancel }: { def: EffectDefinition; onSave: (d: EffectDefinition) => void; onCancel: () => void }) {
+  const [label, setLabel] = useState(def.label);
+  const [changes, setChanges] = useState<Change[]>([...def.changes]);
+
+  const valueRows = changes
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => c.kind === 'value');
+  const otherRows = changes.filter((c) => c.kind !== 'value');
+
+  const setValueChange = (i: number, patch: Partial<{ path: string; op: ValueOp; value: string }>) =>
+    setChanges((cs) => cs.map((c, j) => (j === i && c.kind === 'value' ? ({ ...c, ...patch } as Change) : c)));
+
+  const save = () => {
+    const clean = changes.filter((c) => c.kind !== 'value' || (c.path.trim() && String(c.value).trim()));
+    if (!label.trim() || clean.length === 0) return;
+    onSave({ ...def, label: label.trim(), changes: clean });
+  };
+
+  return (
+    <div className="rounded-lg border border-sheet/30 bg-sheet-soft/40 p-2.5 flex flex-col gap-1.5">
+      <TextInput value={label} onChange={setLabel} placeholder="Nome do efeito" />
+      {valueRows.map(({ c, i }) => {
+        if (c.kind !== 'value') return null;
+        return (
+          <div key={i} className="flex items-center gap-1.5">
+            <TextInput value={c.path} onChange={(v) => setValueChange(i, { path: v })} placeholder="atributo" mono className="flex-1" />
+            <Select value={c.op} onChange={(v) => setValueChange(i, { op: v as ValueOp })} options={EFFECT_VALUE_OPS} className="w-32" />
+            <TextInput value={String(c.value)} onChange={(v) => setValueChange(i, { value: v })} placeholder="valor" mono className="w-20" />
+            <button
+              type="button"
+              onClick={() => setChanges((cs) => cs.filter((_, j) => j !== i))}
+              title="Remover alteração"
+              className="p-1 rounded text-ink-3 hover:text-danger shrink-0 transition-colors"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        );
+      })}
+      {otherRows.map((c, i) => (
+        <div key={`other-${i}`} className="text-[11px] text-ink-3 font-mono px-1">{summarizeChange(c)}</div>
+      ))}
+      <div className="flex items-center gap-3 mt-0.5">
+        <button
+          type="button"
+          onClick={() => setChanges((cs) => [...cs, { kind: 'value', path: '', op: 'add', value: '1' }])}
+          className="flex items-center gap-1 text-[11.5px] text-ink-3 hover:text-sheet-strong transition-colors"
+        >
+          <Plus size={11} /> alteração
+        </button>
+        <span className="ml-auto flex items-center gap-2">
+          <button type="button" onClick={onCancel} className="text-[11.5px] text-ink-3 hover:text-ink-1 transition-colors">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-sheet/50 bg-sheet-soft text-[12px] text-sheet-strong hover:border-sheet/70 transition-colors"
+          >
+            <Check size={12} /> Salvar
+          </button>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function EffectsBlock({ ctx }: { ctx: SheetBlockCtx }) {
   const computed = ctx.computed;
+  const [editingFxId, setEditingFxId] = useState<string | null>(null);
+
   return (
     <div className="h-full overflow-y-auto custom-scrollbar flex flex-col gap-1.5 py-0.5">
       <div className="flex gap-1.5 flex-wrap">
@@ -310,33 +397,59 @@ export function EffectsBlock({ ctx }: { ctx: SheetBlockCtx }) {
         ))}
       </div>
       {computed && computed.effects.length === 0 && <div className="text-[12px] text-ink-3">Nenhum efeito ativo.</div>}
-      {(computed?.effects ?? []).map((fx) => (
-        <div
-          key={fx.id}
-          className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 ${
-            fx.enabled ? 'border-sheet/30 bg-sheet-soft' : 'border-line bg-elevated/50'
-          }`}
-        >
-          <Sparkles size={12} className={fx.enabled ? 'text-sheet' : 'text-ink-3'} />
-          <span className={`text-[12.5px] ${fx.enabled ? 'text-sheet-strong' : 'text-ink-3 line-through'}`}>
-            {ctx.effectLabel(fx)}
-          </span>
-          <button
-            type="button"
-            onClick={() => ctx.setEffectEnabled(fx.id, !fx.enabled)}
-            className="ml-auto text-[11px] text-ink-3 hover:text-ink-1 transition-colors"
+      {(computed?.effects ?? []).map((fx) => {
+        const editableDef = fx.ref ? ctx.getEffectDef(fx.ref) : undefined;
+        if (editingFxId === fx.id && editableDef) {
+          return (
+            <EffectDefEditor
+              key={fx.id}
+              def={editableDef}
+              onSave={(d) => {
+                ctx.saveEffectDef(d);
+                setEditingFxId(null);
+              }}
+              onCancel={() => setEditingFxId(null)}
+            />
+          );
+        }
+        return (
+          <div
+            key={fx.id}
+            className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 ${
+              fx.enabled ? 'border-sheet/30 bg-sheet-soft' : 'border-line bg-elevated/50'
+            }`}
           >
-            {fx.enabled ? 'desativar' : 'ativar'}
-          </button>
-          <button
-            type="button"
-            onClick={() => ctx.removeEffect(fx.id)}
-            className="p-1 rounded text-ink-3 hover:text-danger hover:bg-danger-soft transition-colors"
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
-      ))}
+            <Sparkles size={12} className={fx.enabled ? 'text-sheet' : 'text-ink-3'} />
+            <span className={`text-[12.5px] ${fx.enabled ? 'text-sheet-strong' : 'text-ink-3 line-through'}`}>
+              {ctx.effectLabel(fx)}
+            </span>
+            <button
+              type="button"
+              onClick={() => ctx.setEffectEnabled(fx.id, !fx.enabled)}
+              className="ml-auto text-[11px] text-ink-3 hover:text-ink-1 transition-colors"
+            >
+              {fx.enabled ? 'desativar' : 'ativar'}
+            </button>
+            {editableDef && (
+              <button
+                type="button"
+                onClick={() => setEditingFxId(fx.id)}
+                title="Editar definição do efeito"
+                className="p-1 rounded text-ink-3 hover:text-sheet-strong hover:bg-sheet-soft transition-colors"
+              >
+                <Pencil size={12} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => ctx.removeEffect(fx.id)}
+              className="p-1 rounded text-ink-3 hover:text-danger hover:bg-danger-soft transition-colors"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        );
+      })}
       {(computed?.suppressed ?? []).map((s) => (
         <div key={s.instance.id} className="flex items-center gap-2 rounded-lg border border-line/50 px-3 py-1.5 opacity-60">
           <Sparkles size={12} className="text-ink-3" />
