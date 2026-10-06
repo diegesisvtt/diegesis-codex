@@ -58,16 +58,23 @@ interface Metrics {
 
 export function SheetCanvas(props: SheetCanvasProps) {
   const { layout, editing, onMoveBlock, onDropTool } = props;
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  // o nó do grid vive em state (não ref): quando a aba Efeitos substitui o grid
+  // pelo `body`, o CanvasDropZone desmonta e remonta num nó NOVO — o observer
+  // precisa reconectar, senão o width fica 0 e os blocos nunca mais renderizam
+  const [canvasEl, setCanvasEl] = useState<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
-    const el = canvasRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
-    ro.observe(el);
-    setWidth(el.clientWidth);
+    if (!canvasEl) return;
+    const ro = new ResizeObserver(() => setWidth(canvasEl.clientWidth));
+    ro.observe(canvasEl);
+    setWidth(canvasEl.clientWidth);
     return () => ro.disconnect();
-  }, []);
+  }, [canvasEl]);
+  const bindCanvas = (el: HTMLDivElement | null) => {
+    canvasRef.current = el;
+    setCanvasEl(el);
+  };
 
   const { cols, rowHeight, gap } = layout.grid;
   const metrics: Metrics = useMemo(
@@ -133,7 +140,7 @@ export function SheetCanvas(props: SheetCanvasProps) {
               {props.tabs}
               {props.body ?? (
                 <CanvasDropZone
-                  innerRef={canvasRef}
+                  innerRef={bindCanvas}
                   editing={editing}
                   height={rows * stepY}
                   crosshair={editing && props.armedTool !== null}
@@ -164,7 +171,7 @@ function CanvasDropZone({
   onClick,
   children,
 }: {
-  innerRef: React.MutableRefObject<HTMLDivElement | null>;
+  innerRef: (el: HTMLDivElement | null) => void;
   editing: boolean;
   height: number;
   crosshair: boolean;
@@ -175,7 +182,7 @@ function CanvasDropZone({
   return (
     <div
       ref={(el) => {
-        innerRef.current = el;
+        innerRef(el);
         setNodeRef(el);
       }}
       onClick={onClick}
