@@ -12,6 +12,7 @@
     "build": "npm run build:renderer && npm run build:electron",
     "build:renderer": "tsc -b && vite build",
     "build:electron": "node scripts/build-electron.mjs",
+    "build:icons": "node scripts/build-icons.mjs",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
     "dist:mac": "npm run build && electron-builder --mac",

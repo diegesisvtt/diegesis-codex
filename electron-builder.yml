@@ -12,10 +12,14 @@ asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/sqlite-vec/**
   - node_modules/onnxruntime-node/**
+extraResources:
+  - from: build/icon.png
+    to: icon.png
 publish:
   provider: github
   releaseType: release
 win:
+  icon: build/icon.ico
   target:
     - nsis
     - portable
@@ -23,12 +27,16 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   shortcutName: Diegesis Codex
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
 mac:
+  icon: build/icon.icns
   target:
     - dmg
     - zip
   category: public.app-category.productivity
 linux:
+  icon: build/icon.png
   target:
     - AppImage
     - deb
