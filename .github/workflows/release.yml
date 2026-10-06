@@ -64,7 +64,7 @@ jobs:
 
   notes:
     name: Generate release notes
-    needs: build
+    needs: [tag, build]
     runs-on: ubuntu-latest
     steps:
       - name: Auto-generate release notes from merged PRs/commits
