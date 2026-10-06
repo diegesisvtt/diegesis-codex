@@ -4,7 +4,10 @@
   "version": "1.0.6",
   "description": "Multiplatform note-taking & worldbuilding studio (Electron + SQLite)",
   "main": "dist-electron/main.js",
-  "author": "Patrick Porto",
+  "author": {
+    "name": "Patrick Porto",
+    "email": "patrick.s.porto@gmail.com"
+  },
   "license": "GPL-3.0-only",
   "private": true,
   "scripts": {
@@ -28,6 +31,7 @@
     "@rollup/rollup-linux-x64-gnu": "4.63.3",
     "@tailwindcss/oxide-darwin-arm64": "4.3.3",
     "@tailwindcss/oxide-linux-x64-gnu": "4.3.3",
+    "dmg-license": "^1.0.11",
     "lightningcss-darwin-arm64": "1.32.0",
     "lightningcss-linux-x64-gnu": "1.32.0"
   },
