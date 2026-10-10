@@ -241,7 +241,7 @@ export function extractPlainText(content: string | null): string {
       return extractSheetText(content);
     }
     // notes (BlockNote JSON), whiteboards and legacy content
-    return blocksToPlainText(content);
+    return blocksToPlainText(content, (id) => getDoc(id)?.title);
   } catch {
     return '';
   }

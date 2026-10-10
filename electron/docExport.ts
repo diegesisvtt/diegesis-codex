@@ -28,7 +28,7 @@ function buildPayload(doc: DocNode): ExportPayload | { error: string } {
       return { data: fs.readFileSync(file), ext: 'pdf', filterName: 'PDF' };
     }
     case 'core/note': {
-      const markdown = blocksToMarkdown(doc.content);
+      const markdown = blocksToMarkdown(doc.content, (id) => db.getDoc(id)?.title);
       return { data: `# ${doc.title}\n\n${markdown}\n`, ext: 'md', filterName: 'Markdown' };
     }
     default: {

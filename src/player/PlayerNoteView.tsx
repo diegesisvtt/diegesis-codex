@@ -3,7 +3,7 @@
    dependency-free helpers — no editor is mounted in this window. */
 
 import React, { useMemo } from 'react';
-import { parseNoteContent, type BNBlock, type BNInline, type BNStyles } from '@shared/blockContent';
+import { parseNoteContent, type BNBlock, type BNInline, type BNStyles, type NoteTitleResolver } from '@shared/blockContent';
 
 function inlineKey(i: number): string {
   return `in-${i}`;
@@ -34,17 +34,25 @@ function safeHref(href: string): string | null {
   return null;
 }
 
-function renderInline(content: BNInline[] | string | undefined): React.ReactNode {
+function renderInline(content: BNInline[] | string | undefined, resolveTitle?: NoteTitleResolver): React.ReactNode {
   if (!content) return null;
   if (typeof content === 'string') return content;
   return content.map((inline, i) => {
     if (inline.type === 'link') {
       const href = safeHref(inline.href);
-      if (!href) return <span key={inlineKey(i)}>{renderInline(inline.content)}</span>;
+      if (!href) return <span key={inlineKey(i)}>{renderInline(inline.content, resolveTitle)}</span>;
       return (
         <a key={inlineKey(i)} href={href} target="_blank" rel="noreferrer">
-          {renderInline(inline.content)}
+          {renderInline(inline.content, resolveTitle)}
         </a>
+      );
+    }
+    if (inline.type === 'noteRef') {
+      const text = inline.props.label || resolveTitle?.(inline.props.docId) || 'referência';
+      return (
+        <span key={inlineKey(i)} className="pw-note-ref">
+          {text}
+        </span>
       );
     }
     if (inline.text === '\n') return <br key={inlineKey(i)} />;
@@ -64,15 +72,15 @@ function renderInline(content: BNInline[] | string | undefined): React.ReactNode
   });
 }
 
-function blockChildren(block: BNBlock): React.ReactNode {
+function blockChildren(block: BNBlock, resolveTitle?: NoteTitleResolver): React.ReactNode {
   if (!block.children || block.children.length === 0) return null;
-  return block.children.map((child, i) => renderBlock(child, i));
+  return block.children.map((child, i) => renderBlock(child, i, resolveTitle));
 }
 
-function renderBlock(block: BNBlock, index: number): React.ReactNode {
+function renderBlock(block: BNBlock, index: number, resolveTitle?: NoteTitleResolver): React.ReactNode {
   const key = block.id ?? `b-${index}`;
-  const body = renderInline(block.content);
-  const children = blockChildren(block);
+  const body = renderInline(block.content, resolveTitle);
+  const children = blockChildren(block, resolveTitle);
 
   switch (block.type) {
     case 'heading': {
@@ -154,7 +162,15 @@ function renderBlock(block: BNBlock, index: number): React.ReactNode {
   }
 }
 
-export function PlayerNoteView({ title, content }: { title: string; content: string | null }) {
+export function PlayerNoteView({
+  title,
+  content,
+  resolveTitle,
+}: {
+  title: string;
+  content: string | null;
+  resolveTitle?: NoteTitleResolver;
+}) {
   const blocks = useMemo(() => parseNoteContent(content), [content]);
   const hasContent = blocks.some((b) => {
     if (typeof b.content === 'string') return b.content.trim().length > 0;
@@ -165,7 +181,7 @@ export function PlayerNoteView({ title, content }: { title: string; content: str
     <div className="pw-scroll-wrap">
       <article className="pw-parchment">
         {title && <h1>{title}</h1>}
-        {hasContent ? blocks.map((b, i) => renderBlock(b, i)) : <p style={{ fontStyle: 'italic', opacity: 0.7 }}>Este pergaminho ainda está em branco…</p>}
+        {hasContent ? blocks.map((b, i) => renderBlock(b, i, resolveTitle)) : <p style={{ fontStyle: 'italic', opacity: 0.7 }}>Este pergaminho ainda está em branco…</p>}
       </article>
     </div>
   );

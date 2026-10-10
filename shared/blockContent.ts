@@ -23,7 +23,18 @@ export interface BNLink {
   content: BNText[];
 }
 
-export type BNInline = BNText | BNLink;
+/** Wiki-style reference to another note (core/note). `label` overrides the
+ *  visible text; empty means "use the target's title". */
+export interface BNNoteRef {
+  type: 'noteRef';
+  props: { docId: string; label: string };
+}
+
+export type BNInline = BNText | BNLink | BNNoteRef;
+
+/** Resolves a note-reference target to its title (used by FTS/export/player,
+ *  where the document list isn't directly available to the pure helpers). */
+export type NoteTitleResolver = (docId: string) => string | undefined;
 
 export interface BNBlock {
   id?: string;
@@ -186,11 +197,15 @@ export function markdownToBlocks(md: string): string {
 
 // ---------- plain text extraction (FTS / RAG) ----------
 
-function inlineToText(content: BNInline[] | string | undefined): string {
+function inlineToText(content: BNInline[] | string | undefined, resolveTitle?: NoteTitleResolver): string {
   if (!content) return '';
   if (typeof content === 'string') return content;
   return content
-    .map((c) => (c.type === 'text' ? c.text : c.content.map((t) => t.text).join('')))
+    .map((c) => {
+      if (c.type === 'text') return c.text;
+      if (c.type === 'link') return c.content.map((t) => t.text).join('');
+      return c.props.label || resolveTitle?.(c.props.docId) || '';
+    })
     .join('');
 }
 
@@ -206,23 +221,28 @@ function applyInlineStyles(text: string, styles: BNStyles): string {
   return out;
 }
 
-function inlineToMarkdown(content: BNInline[] | string | undefined): string {
+function inlineToMarkdown(content: BNInline[] | string | undefined, resolveTitle?: NoteTitleResolver): string {
   if (!content) return '';
   if (typeof content === 'string') return content;
   return content
-    .map((c) =>
-      c.type === 'link'
-        ? `[${c.content.map((t) => applyInlineStyles(t.text, t.styles)).join('')}](${c.href})`
-        : applyInlineStyles(c.text, c.styles)
-    )
+    .map((c) => {
+      if (c.type === 'link') {
+        return `[${c.content.map((t) => applyInlineStyles(t.text, t.styles)).join('')}](${c.href})`;
+      }
+      if (c.type === 'noteRef') {
+        const text = c.props.label || resolveTitle?.(c.props.docId) || 'referência';
+        return `[${text}](diegesis://note/${c.props.docId})`;
+      }
+      return applyInlineStyles(c.text, c.styles);
+    })
     .join('');
 }
 
 const NESTED_LIST_TYPES = new Set(['bulletListItem', 'numberedListItem', 'checkListItem']);
 
-function blockToMarkdown(block: BNBlock, indent: number): string {
+function blockToMarkdown(block: BNBlock, indent: number, resolveTitle?: NoteTitleResolver): string {
   const pad = '  '.repeat(indent);
-  const text = inlineToMarkdown(block.content);
+  const text = inlineToMarkdown(block.content, resolveTitle);
   const lines: string[] = [];
   switch (block.type) {
     case 'heading': {
@@ -243,7 +263,7 @@ function blockToMarkdown(block: BNBlock, indent: number): string {
       lines.push(`${pad}> ${text}`.trimEnd());
       break;
     case 'codeBlock': {
-      const code = typeof block.content === 'string' ? block.content : inlineToMarkdown(block.content);
+      const code = typeof block.content === 'string' ? block.content : inlineToMarkdown(block.content, resolveTitle);
       const lang = typeof block.props?.language === 'string' ? block.props.language : '';
       lines.push(`${pad}\`\`\`${lang}`, code, `${pad}\`\`\``);
       break;
@@ -270,22 +290,22 @@ function blockToMarkdown(block: BNBlock, indent: number): string {
   }
   const childIndent = NESTED_LIST_TYPES.has(block.type) ? indent + 1 : indent;
   for (const child of block.children ?? []) {
-    const childMd = blockToMarkdown(child, childIndent);
+    const childMd = blockToMarkdown(child, childIndent, resolveTitle);
     if (childMd) lines.push(childMd);
   }
   return lines.filter((l) => l.trim() !== '').join('\n');
 }
 
 /** Converts note content (BlockNote or legacy tiptap JSON) to Markdown. */
-export function blocksToMarkdown(raw: string | null | undefined): string {
+export function blocksToMarkdown(raw: string | null | undefined, resolveTitle?: NoteTitleResolver): string {
   return parseNoteContent(raw)
-    .map((b) => blockToMarkdown(b, 0))
+    .map((b) => blockToMarkdown(b, 0, resolveTitle))
     .filter(Boolean)
     .join('\n\n');
 }
 
 /** Extracts plain text from note content (BlockNote or legacy tiptap JSON). */
-export function blocksToPlainText(raw: string | null | undefined): string {
+export function blocksToPlainText(raw: string | null | undefined, resolveTitle?: NoteTitleResolver): string {
   if (!raw) return '';
   try {
     const parsed = JSON.parse(raw);
@@ -293,7 +313,7 @@ export function blocksToPlainText(raw: string | null | undefined): string {
     if (Array.isArray(parsed)) {
       const walkBlocks = (blocks: BNBlock[]): void => {
         for (const b of blocks) {
-          const text = inlineToText(b.content);
+          const text = inlineToText(b.content, resolveTitle);
           if (text) parts.push(text);
           if (b.children?.length) walkBlocks(b.children);
         }

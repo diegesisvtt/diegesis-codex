@@ -152,6 +152,15 @@
 
 .pw-parchment a { color: #6a4a12; text-decoration: underline; }
 
+/* wiki-style note reference shown inline (read-only) */
+.pw-parchment .pw-note-ref {
+  color: #6a4a12;
+  background: rgba(106, 74, 18, 0.12);
+  border-radius: 4px;
+  padding: 0 0.35em;
+  font-weight: 500;
+}
+
 .pw-parchment img { max-width: 100%; border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
 
 .pw-parchment hr {

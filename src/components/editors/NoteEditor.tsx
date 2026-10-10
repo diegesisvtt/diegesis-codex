@@ -13,9 +13,9 @@ import {
 } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/ariakit';
 import { pt } from '@blocknote/core/locales';
-import { BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core';
+import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs } from '@blocknote/core';
 import { filterSuggestionItems, insertOrUpdateBlockForSlashMenu } from '@blocknote/core/extensions';
-import { BookMarked, Clock, FileText, ImagePlus, Layers, Sparkles, Table } from 'lucide-react';
+import { BookMarked, Clock, FileText, ImagePlus, Layers, Link2, Sparkles, Table } from 'lucide-react';
 import { REF_DRAG_MIME, parseExplorerDragRef } from '@shared/dragDrop';
 import type { DocNode } from '@shared/types';
 import { parseNoteContent } from '@shared/blockContent';
@@ -26,6 +26,7 @@ import { AudioBlock } from './note/audioBlock';
 import { InteractiveTableBlock } from './note/tableBlock';
 import { CalloutBlockNote } from './note/calloutBlock';
 import { InlineAiPopover } from './note/InlineAiPopover';
+import { NoteRefInline, NotePickerPopover } from './note/noteRef';
 
 /** rótulo legível por tipo de documento (metadados) */
 const DOC_TYPE_LABEL: Record<string, string> = {
@@ -74,6 +75,10 @@ const schema = BlockNoteSchema.create({
     audio: AudioBlock(),
     interactiveTable: InteractiveTableBlock(),
     callout: CalloutBlockNote(),
+  },
+  inlineContentSpecs: {
+    ...defaultInlineContentSpecs,
+    noteRef: NoteRefInline(),
   },
 });
 
@@ -145,6 +150,13 @@ export function NoteEditor({
   const [aiAnchor, setAiAnchor] = useState({ x: 0, y: 0 });
   const rootRef = useRef<HTMLDivElement>(null);
   const aiTriggerRef = useRef<HTMLButtonElement>(null);
+  /** note-reference picker (slash menu + toolbar button) */
+  const [notePicker, setNotePicker] = useState<{
+    x: number;
+    y: number;
+    mode: 'insert' | 'link';
+    selectionText: string;
+  } | null>(null);
 
   const editor = useCreateBlockNote(
     {
@@ -188,9 +200,44 @@ export function NoteEditor({
           icon: <BookMarked size={18} />,
           subtext: 'Bloco de destaque (regra, lore, segredo, citação)',
         },
+        {
+          title: 'Referência de nota',
+          onItemClick: () => {
+            const box = editor.getSelectionBoundingBox();
+            setNotePicker({
+              x: box?.left ?? 40,
+              y: (box?.bottom ?? 40) + 6,
+              mode: 'insert',
+              selectionText: '',
+            });
+          },
+          aliases: ['nota', 'referência', 'referencia', 'link', 'vínculo', 'vinculo', 'wikilink', 'mention', 'mencionar'],
+          group: 'Diegesis Codex',
+          icon: <Link2 size={18} />,
+          subtext: 'Referencia outra nota do universo',
+        },
       ],
       query
     );
+
+  /* ---------- `[[` wikilink: sugerir notas (alias via `|`) ---------- */
+  const noteRefItems = async (query: string) => {
+    const pipe = query.indexOf('|');
+    const search = (pipe >= 0 ? query.slice(0, pipe) : query).trim().toLowerCase();
+    const alias = pipe >= 0 ? query.slice(pipe + 1).trim() : '';
+    return docs
+      .filter((d) => d.type === 'core/note' && d.id !== doc.id)
+      .filter((d) => !search || d.title.toLowerCase().includes(search))
+      .slice(0, 10)
+      .map((d) => ({
+        title: d.title || 'Sem título',
+        subtext: alias ? `exibido como “${alias}”` : 'Referência de nota',
+        icon: <FileText size={18} />,
+        onItemClick: () => {
+          editor.insertInlineContent([{ type: 'noteRef', props: { docId: d.id, label: alias } }] as never);
+        },
+      }));
+  };
 
   /* ---------- drop de documentos do Explorer (tabelas viram bloco) ---------- */
   // react-dnd's HTML5 backend force-sets dropEffect='none' outside its own drop
@@ -438,6 +485,7 @@ export function NoteEditor({
           className={embedded ? 'diegesis-bn embedded' : 'diegesis-bn'}
         >
           <SuggestionMenuController triggerCharacter="/" getItems={slashItems} />
+          <SuggestionMenuController triggerCharacter="[[" minQueryLength={0} getItems={noteRefItems} />
           <FormattingToolbarController
             formattingToolbar={() => (
               <FormattingToolbar>
@@ -448,6 +496,22 @@ export function NoteEditor({
                 <BasicTextStyleButton basicTextStyle="strike" key="strikeStyleButton" />
                 <BasicTextStyleButton basicTextStyle="code" key="codeStyleButton" />
                 <CreateLinkButton key="createLinkButton" />
+                <button
+                  key="linkNote"
+                  title="Vincular nota"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) =>
+                    setNotePicker({
+                      x: (e.currentTarget as HTMLElement).getBoundingClientRect().left,
+                      y: (e.currentTarget as HTMLElement).getBoundingClientRect().bottom + 6,
+                      mode: 'link',
+                      selectionText: editor.getSelectedText(),
+                    })
+                  }
+                  className="bn-ak-button bn-ak-secondary bn-ask-ai"
+                >
+                  <Link2 size={16} strokeWidth={1.75} />
+                </button>
                 <button
                   key="askAI"
                   ref={aiTriggerRef}
@@ -464,6 +528,26 @@ export function NoteEditor({
         </BlockNoteView>
       </div>
       {aiOpen && <InlineAiPopover editor={editor} anchor={aiAnchor} onClose={() => setAiOpen(false)} />}
+      {notePicker && (
+        <NotePickerPopover
+          anchor={{ x: notePicker.x, y: notePicker.y }}
+          excludeId={doc.id}
+          onClose={() => setNotePicker(null)}
+          onPick={(target) => {
+            if (notePicker.mode === 'link' && notePicker.selectionText.trim()) {
+              // replace the current selection with the reference, keeping the
+              // selected text as the display label
+              editor.insertInlineContent([
+                { type: 'noteRef', props: { docId: target.id, label: notePicker.selectionText.trim() } },
+              ] as never);
+            } else {
+              editor.insertInlineContent([
+                { type: 'noteRef', props: { docId: target.id, label: '' } },
+              ] as never);
+            }
+          }}
+        />
+      )}
       <input
         ref={coverInputRef}
         type="file"

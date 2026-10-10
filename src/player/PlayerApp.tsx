@@ -21,6 +21,7 @@ function IdleScreen() {
 export default function PlayerApp() {
   const [state, setState] = useState<PlayerViewState>({ kind: 'none' });
   const [doc, setDoc] = useState<DocNode | null>(null);
+  const [docs, setDocs] = useState<DocNode[]>([]);
 
   // initial state (window reopened) + live pushes from the GM window
   useEffect(() => {
@@ -48,12 +49,16 @@ export default function PlayerApp() {
   useEffect(() => {
     if (!realmId || !docId) {
       setDoc(null);
+      setDocs([]);
       return;
     }
     let cancelled = false;
     const load = async () => {
       const docs = await window.diegesis.docs.listByRealm(realmId);
-      if (!cancelled) setDoc(docs.find((d) => d.id === docId) ?? null);
+      if (!cancelled) {
+        setDocs(docs);
+        setDoc(docs.find((d) => d.id === docId) ?? null);
+      }
     };
     void load();
     const unsubscribe = window.diegesis.docs.onChanged((changedRealm) => {
@@ -67,7 +72,13 @@ export default function PlayerApp() {
 
   return (
     <div className="pw-root">
-      {state.kind === 'note' && doc && <PlayerNoteView title={doc.title} content={doc.content} />}
+      {state.kind === 'note' && doc && (
+        <PlayerNoteView
+          title={doc.title}
+          content={doc.content}
+          resolveTitle={(id) => docs.find((d) => d.id === id)?.title}
+        />
+      )}
       {state.kind === 'map' && doc && <PlayerMapView content={doc.content} viewport={state.viewport} />}
       {state.kind === 'image' && <PlayerImageView src={state.src} name={state.name} />}
       {(state.kind === 'none' || (state.kind !== 'image' && !doc)) && <IdleScreen />}
