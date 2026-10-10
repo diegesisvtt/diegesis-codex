@@ -39,6 +39,16 @@ export function migrateSyncTables(): void {
       synced_at INTEGER NOT NULL,
       PRIMARY KEY (realm_id, file_key)
     );
+    CREATE TABLE IF NOT EXISTS sync_retries (
+      realm_id TEXT NOT NULL,
+      item_key TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT NOT NULL DEFAULT '',
+      next_retry_at INTEGER NOT NULL DEFAULT 0,
+      gave_up INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (realm_id, item_key)
+    );
   `);
 }
 
@@ -92,6 +102,7 @@ export function clearRealmSyncData(realmId: string): void {
   db.prepare('DELETE FROM sync_tombstones WHERE realm_id = ?').run(realmId);
   db.prepare('DELETE FROM sync_conflicts WHERE realm_id = ?').run(realmId);
   db.prepare('DELETE FROM sync_assets WHERE realm_id = ?').run(realmId);
+  db.prepare('DELETE FROM sync_retries WHERE realm_id = ?').run(realmId);
 }
 
 // ---------- conflict queue ----------
@@ -156,6 +167,49 @@ export function setAssetState(realmId: string, fileKey: string, hash: string): v
 
 export function clearAssetState(realmId: string, fileKey: string): void {
   getDb().prepare('DELETE FROM sync_assets WHERE realm_id = ? AND file_key = ?').run(realmId, fileKey);
+}
+
+// ---------- retry ledger (resilient per-item retries) ----------
+
+export type RetryKind = 'doc' | 'asset';
+
+export interface RetryState {
+  attempts: number;
+  lastError: string;
+  nextRetryAt: number;
+  gaveUp: boolean;
+}
+
+/** Items that fail permanently after this many consecutive attempts. */
+export const RETRY_MAX_ATTEMPTS = 3;
+
+export function getRetry(realmId: string, itemKey: string): RetryState | null {
+  const r = getDb()
+    .prepare('SELECT attempts, last_error, next_retry_at, gave_up FROM sync_retries WHERE realm_id = ? AND item_key = ?')
+    .get(realmId, itemKey) as { attempts: number; last_error: string; next_retry_at: number; gave_up: number } | undefined;
+  if (!r) return null;
+  return { attempts: r.attempts, lastError: r.last_error, nextRetryAt: r.next_retry_at, gaveUp: r.gave_up === 1 };
+}
+
+/** Backoff grows with attempts (jittered); capped at 5 minutes. */
+function retryDelay(attempts: number): number {
+  return Math.min(5 * 60_000, 1000 * 2 ** Math.min(attempts, 9)) + Math.floor(Math.random() * 1000);
+}
+
+export function recordRetryFailure(realmId: string, kind: RetryKind, itemKey: string, error: string): RetryState {
+  const attempts = (getRetry(realmId, itemKey)?.attempts ?? 0) + 1;
+  const gaveUp = attempts >= RETRY_MAX_ATTEMPTS;
+  const nextRetryAt = gaveUp ? 0 : Date.now() + retryDelay(attempts);
+  getDb()
+    .prepare(
+      'INSERT INTO sync_retries (realm_id, item_key, kind, attempts, last_error, next_retry_at, gave_up) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(realm_id, item_key) DO UPDATE SET kind = excluded.kind, attempts = excluded.attempts, last_error = excluded.last_error, next_retry_at = excluded.next_retry_at, gave_up = excluded.gave_up'
+    )
+    .run(realmId, itemKey, kind, attempts, error, nextRetryAt, gaveUp ? 1 : 0);
+  return { attempts, lastError: error, nextRetryAt, gaveUp };
+}
+
+export function clearRetry(realmId: string, itemKey: string): void {
+  getDb().prepare('DELETE FROM sync_retries WHERE realm_id = ? AND item_key = ?').run(realmId, itemKey);
 }
 
 // ---------- provider config (encrypted secrets) ----------

@@ -143,6 +143,10 @@ export function createWebdavProvider(cfg: WebdavProviderConfig): SyncProvider {
       const probe = `.diegesis-probe-${Date.now()}`;
       await this.put(probe, new TextEncoder().encode('ok'));
       await this.delete(probe);
+      // PROPFIND confirms read/listing works — the operation the restore flow
+      // (listRemoteRealms) and the pull side of a cycle actually depend on.
+      await propfind('');
+      return base;
     },
 
     async list(prefix) {

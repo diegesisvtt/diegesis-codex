@@ -257,6 +257,12 @@ function StatusCard() {
             <span>Pendentes</span>
             <span className="text-ink-2">{status.pending}</span>
           </div>
+          {status.skipped > 0 && (
+            <div className="flex justify-between">
+              <span className="text-accent-ink">Não sincronizados</span>
+              <span className="text-accent-ink">{status.skipped}</span>
+            </div>
+          )}
           {status.lastError && <p className="text-danger break-words mt-0.5">{status.lastError}</p>}
         </div>
       )}
@@ -301,6 +307,10 @@ export function SyncSettingsPage(_props: SettingsPageProps) {
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [msBusy, setMsBusy] = useState(false);
+  const [remoteBusy, setRemoteBusy] = useState(false);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const [restoreMsg, setRestoreMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const reload = useCallback(async () => {
     const [p, s, r] = await Promise.all([
@@ -402,17 +412,41 @@ export function SyncSettingsPage(_props: SettingsPageProps) {
   };
 
   const loadRemote = async () => {
-    setRemote(await window.diegesis.sync.listRemoteRealms());
+    setRemoteBusy(true);
+    setRemoteError(null);
+    try {
+      const res = await window.diegesis.sync.listRemoteRealms();
+      if (!res.ok) {
+        setRemoteError(res.error ?? 'Falha ao buscar universos remotos.');
+        setRemote([]);
+        return;
+      }
+      setRemote(res.realms);
+    } catch (err) {
+      setRemoteError(err instanceof Error ? err.message : String(err));
+      setRemote([]);
+    } finally {
+      setRemoteBusy(false);
+    }
   };
 
   const restore = async (realmId: string) => {
-    const res = await window.diegesis.sync.restoreRealm(realmId);
-    if (!res.ok) {
-      setTestResult({ ok: false, error: res.error });
-      return;
+    setRestoring(realmId);
+    setRestoreMsg(null);
+    try {
+      const res = await window.diegesis.sync.restoreRealm(realmId);
+      if (!res.ok) {
+        setRestoreMsg({ ok: false, text: res.error ?? 'Falha ao restaurar.' });
+        return;
+      }
+      setRestoreMsg({ ok: true, text: 'Universo restaurado com sucesso.' });
+      await reload();
+      await loadRemote();
+    } catch (err) {
+      setRestoreMsg({ ok: false, text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setRestoring(null);
     }
-    await reload();
-    await loadRemote();
   };
 
   const missingRequired = provider?.fields.some((f) => !f.secret && f.required && !(values[f.key] ?? '').trim()) ?? false;
@@ -496,7 +530,13 @@ export function SyncSettingsPage(_props: SettingsPageProps) {
                 }`}
               >
                 {testResult.ok ? <CheckCircle2 size={14} className="shrink-0 mt-px" /> : <XCircle size={14} className="shrink-0 mt-px" />}
-                <span className="break-all">{testResult.ok ? 'Conexão OK' : (testResult.error ?? 'Falhou')}</span>
+                <span className="break-all">
+                  {testResult.ok
+                    ? testResult.url
+                      ? `Conexão OK — conectado a ${testResult.url}`
+                      : 'Conexão OK'
+                    : (testResult.error ?? 'Falhou')}
+                </span>
               </div>
             )}
 
@@ -573,16 +613,34 @@ export function SyncSettingsPage(_props: SettingsPageProps) {
         icon={CloudDownload}
         description="Em um dispositivo novo, baixe um universo já sincronizado. Os documentos mantêm os mesmos identificadores, então passam a sincronizar junto."
       >
-        <Button variant="secondary" onClick={loadRemote} className="mb-3">
+        <Button variant="secondary" onClick={loadRemote} className="mb-3" disabled={remoteBusy}>
+          {remoteBusy ? <Loader2 size={14} className="animate-spin" /> : null}
           Buscar universos remotos
         </Button>
+        {remoteError && (
+          <div className="flex items-start gap-2 text-[12px] rounded-md px-3 py-2 mb-3 bg-danger-soft text-danger">
+            <XCircle size={14} className="shrink-0 mt-px" />
+            <span className="break-all">{remoteError}</span>
+          </div>
+        )}
+        {restoreMsg && (
+          <div
+            className={`flex items-start gap-2 text-[12px] rounded-md px-3 py-2 mb-3 ${
+              restoreMsg.ok ? 'bg-accent-soft text-accent-ink' : 'bg-danger-soft text-danger'
+            }`}
+          >
+            {restoreMsg.ok ? <CheckCircle2 size={14} className="shrink-0 mt-px" /> : <XCircle size={14} className="shrink-0 mt-px" />}
+            <span className="break-all">{restoreMsg.text}</span>
+          </div>
+        )}
         {remote.length > 0 && (
           <div className="flex flex-col gap-1.5">
             {remote.map((r) => (
               <div key={r.realmId} className="flex items-center gap-2 text-[13px] text-ink-1 border border-line rounded-md px-3 py-2">
                 <span className="truncate">{r.name}</span>
                 <span className="text-[11px] text-ink-3 shrink-0">{r.docCount} doc(s)</span>
-                <Button variant="ghost" className="ml-auto" onClick={() => restore(r.realmId)}>
+                <Button variant="ghost" className="ml-auto" disabled={restoring === r.realmId} onClick={() => restore(r.realmId)}>
+                  {restoring === r.realmId ? <Loader2 size={13} className="animate-spin" /> : null}
                   Restaurar
                 </Button>
               </div>

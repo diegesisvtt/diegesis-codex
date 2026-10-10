@@ -18,8 +18,8 @@ export interface RemoteEntry {
  */
 export interface SyncProvider {
   readonly kind: SyncProviderKind;
-  /** validates credentials/paths; throws with a user-readable message */
-  test(): Promise<void>;
+  /** validates credentials/paths; optionally returns the effective base URL/root */
+  test(): Promise<string | void>;
   /** recursive listing under a prefix ('' = everything) */
   list(prefix: string): Promise<RemoteEntry[]>;
   get(path: string): Promise<Uint8Array>;
@@ -68,6 +68,8 @@ export interface SyncStatus {
   pending: number;
   conflictCount: number;
   lastError: string | null;
+  /** items that failed to sync this cycle (pending retry or permanent failure) */
+  skipped: number;
   log: SyncLogEntry[];
 }
 

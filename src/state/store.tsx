@@ -169,6 +169,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Refresh the realm list when realms change outside the renderer (cloud sync
+  // restore); auto-switch to a restored realm so it appears immediately.
+  useEffect(() => {
+    return window.diegesis.realms.onChanged((realmId) => {
+      window.diegesis.realms.list().then((realms) => {
+        setState((cur) => {
+          if (realmId && realms.some((r) => r.id === realmId)) {
+            window.diegesis.docs.listByRealm(realmId).then((docs) =>
+              setState((c) => (c.activeRealmId === realmId ? { ...c, docs } : c))
+            );
+            window.diegesis.ui.load().then((ui) =>
+              window.diegesis.ui.save({ ...(ui ?? {}), activeRealmId: realmId })
+            );
+            return { ...cur, realms, activeRealmId: realmId, docs: [] };
+          }
+          return { ...cur, realms };
+        });
+      });
+    });
+  }, []);
+
   const setActiveRealm = useCallback(async (id: string) => {
     const docs = await window.diegesis.docs.listByRealm(id);
     setState((s) => ({ ...s, activeRealmId: id, docs }));

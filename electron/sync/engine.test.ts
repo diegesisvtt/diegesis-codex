@@ -53,6 +53,7 @@ function makeLocal(initialDocs: DocNode[] = []) {
   const assetRefs = new Map<string, Set<string>>();
   const assetStates = new Map<string, Map<string, string>>();
   const conflicts: { realmId: string; docId: string }[] = [];
+  const retries = new Map<string, { attempts: number; lastError: string; nextRetryAt: number; gaveUp: boolean }>();
   const prefs: SyncPrefs = { enabled: true, realmIds: [REALM], intervalMin: 5, retentionDays: 30, deviceId: 'dev-test' };
 
   const realmState = (r: string) => state.get(r) ?? (state.set(r, new Map()), state.get(r)!);
@@ -94,9 +95,22 @@ function makeLocal(initialDocs: DocNode[] = []) {
     listAssetRefs: (r) => [...realmAssets(r)],
     readAsset: (k) => assets.get(k) ?? null,
     writeAsset: (k, d) => assets.set(k, d),
+    getRetry: (realmId, itemKey) => retries.get(`${realmId}:${itemKey}`) ?? null,
+    recordRetryFailure: (realmId, _kind, itemKey, error) => {
+      const key = `${realmId}:${itemKey}`;
+      const prev = retries.get(key);
+      const attempts = (prev?.attempts ?? 0) + 1;
+      const gaveUp = attempts >= 3;
+      const state = { attempts, lastError: error, nextRetryAt: gaveUp ? 0 : Date.now() + 60_000, gaveUp };
+      retries.set(key, state);
+      return state;
+    },
+    clearRetry: (realmId, itemKey) => {
+      retries.delete(`${realmId}:${itemKey}`);
+    },
     prefs: () => prefs,
   };
-  return { adapter, docs, prefs, assets, realmAssets, conflicts };
+  return { adapter, docs, prefs, assets, realmAssets, conflicts, retries };
 }
 
 function makeDoc(id: string, title: string, updatedAt: number, content = '{}'): DocNode {
@@ -245,5 +259,48 @@ describe('sync engine', () => {
     await engine.syncNow(REALM);
     expect(local.docs.has('b')).toBe(false);
     expect(engine.getStatus().state).toBe('idle');
+    // the corrupt item is counted as skipped and queued for retry
+    expect(engine.getStatus().skipped).toBe(1);
+    expect(local.retries.get(`${REALM}:doc:b`)?.attempts).toBe(1);
+  });
+
+  test('a failed item is backed off and not retried immediately', async () => {
+    const local = makeLocal([makeDoc('a', 'Nota A', 100)]);
+    const provider = makeProvider();
+    const engine = engineFor(local, provider);
+    await engine.syncNow(REALM);
+
+    await provider.put(remotePaths.doc(REALM, 'b'), new TextEncoder().encode('not json'));
+    const manifest = decodeManifest(provider.files.get(remotePaths.manifest(REALM))!)!;
+    manifest.docs.b = { hash: 'deadbeef', updatedAt: 999 };
+    await provider.put(remotePaths.manifest(REALM), encodeManifest(manifest));
+
+    await engine.syncNow(REALM);
+    expect(local.retries.get(`${REALM}:doc:b`)?.attempts).toBe(1);
+    // second cycle within the backoff window must not re-attempt the item
+    await engine.syncNow(REALM);
+    expect(local.retries.get(`${REALM}:doc:b`)?.attempts).toBe(1);
+    expect(engine.getStatus().skipped).toBe(1);
+  });
+
+  test('a permanently-failed item is skipped without re-fetching', async () => {
+    const local = makeLocal([makeDoc('a', 'Nota A', 100)]);
+    const provider = makeProvider();
+    const engine = engineFor(local, provider);
+    await engine.syncNow(REALM);
+
+    await provider.put(remotePaths.doc(REALM, 'b'), new TextEncoder().encode('not json'));
+    const manifest = decodeManifest(provider.files.get(remotePaths.manifest(REALM))!)!;
+    manifest.docs.b = { hash: 'deadbeef', updatedAt: 999 };
+    await provider.put(remotePaths.manifest(REALM), encodeManifest(manifest));
+
+    await engine.syncNow(REALM); // fails once → attempts=1
+    // simulate the item having given up after 3 consecutive failures
+    local.retries.set(`${REALM}:doc:b`, { attempts: 3, lastError: 'corrupt', nextRetryAt: 0, gaveUp: true });
+
+    await engine.syncNow(REALM); // gave-up item is skipped, not re-fetched
+    expect(local.retries.get(`${REALM}:doc:b`)?.attempts).toBe(3);
+    expect(local.docs.has('b')).toBe(false);
+    expect(engine.getStatus().skipped).toBe(1);
   });
 });

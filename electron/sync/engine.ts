@@ -31,7 +31,7 @@ import {
   type SyncedDocPayload,
   type SyncManifest,
 } from './snapshot';
-import type { SyncPrefs } from './state';
+import type { RetryState, SyncPrefs } from './state';
 
 export interface EngineLocalAdapter {
   // realms & docs
@@ -62,6 +62,10 @@ export interface EngineLocalAdapter {
   listAssetRefs(realmId: string): string[];
   readAsset(fileKey: string): Uint8Array | null;
   writeAsset(fileKey: string, data: Uint8Array): void;
+  // retry ledger
+  getRetry(realmId: string, itemKey: string): RetryState | null;
+  recordRetryFailure(realmId: string, kind: 'doc' | 'asset', itemKey: string, error: string): RetryState;
+  clearRetry(realmId: string, itemKey: string): void;
   // prefs
   prefs(): SyncPrefs;
 }
@@ -71,6 +75,8 @@ export interface EngineDeps {
   /** null while no provider is configured — engine stays idle */
   getProvider(): SyncProvider | null;
   onStatus?(status: SyncStatus): void;
+  /** fired when a cycle pulled/changed docs in a realm (renderer refresh) */
+  onRealmChanged?(realmId: string): void;
   now?(): number;
   /** delay injector for tests */
   sleep?(ms: number): Promise<void>;
@@ -116,12 +122,13 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     pending: 0,
     conflictCount: 0,
     lastError: null,
+    skipped: 0,
     log: [],
   };
   let sweepTimer: ReturnType<typeof setInterval> | null = null;
   const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let queue: Promise<void> = Promise.resolve();
-  let failureAttempts = 0;
+  const realmAttempts = new Map<string, number>();
   let authPaused = false;
 
   function log(level: SyncLogEntry['level'], message: string): void {
@@ -147,6 +154,14 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
       log('error', e.message);
       return null;
     }
+  }
+
+  /** True when an item must be skipped this cycle: permanently failed, or its
+   *  backoff window hasn't elapsed yet. */
+  function retryBlocked(realmId: string, itemKey: string): boolean {
+    const r = local.getRetry(realmId, itemKey);
+    if (!r) return false;
+    return r.gaveUp || r.nextRetryAt > now();
   }
 
   async function readManifest(provider: SyncProvider, realmId: string): Promise<SyncManifest> {
@@ -213,19 +228,25 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     const hash = hashPayload(payload);
     manifest.docs[doc.id] = { hash, updatedAt: doc.updatedAt };
     local.setState(realmId, doc.id, hash);
+    local.clearRetry(realmId, `doc:${doc.id}`);
     return hash;
   }
 
-  async function pullDoc(provider: SyncProvider, manifest: SyncManifest, realmId: string, docId: string): Promise<boolean> {
+  /** Pulls a remote doc. Returns 'ok', 'corrupt' (integrity failure recorded for
+   *  retry) or 'skipped' (permanent failure / backoff not elapsed). */
+  async function pullDoc(provider: SyncProvider, manifest: SyncManifest, realmId: string, docId: string): Promise<'ok' | 'corrupt' | 'skipped'> {
+    if (retryBlocked(realmId, `doc:${docId}`)) return 'skipped';
     const bytes = await provider.get(remotePaths.doc(realmId, docId));
     const payload = decodeDoc(bytes);
     if (!payload) {
       log('warn', `Documento remoto corrompido ignorado: ${docId}`);
-      return false;
+      local.recordRetryFailure(realmId, 'doc', `doc:${docId}`, 'Documento remoto corrompido');
+      return 'corrupt';
     }
     local.applyRemoteDoc(payload);
     local.setState(realmId, docId, manifest.docs[docId]?.hash ?? hashPayload(payload));
-    return true;
+    local.clearRetry(realmId, `doc:${docId}`);
+    return 'ok';
   }
 
   /** Serializes cycles: at most one realm syncs at a time, callers coalesce. */
@@ -246,7 +267,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     }
     if (!local.realmExists(realmId)) return;
 
-    emit({ state: 'syncing', providerId: provider.kind, enabled: true });
+    emit({ state: 'syncing', providerId: provider.kind, enabled: true, skipped: 0 });
     try {
       const manifest = await readManifest(provider, realmId);
       const state = local.getState(realmId);
@@ -255,6 +276,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
       let pushed = 0;
       let pulled = 0;
       let conflicts = 0;
+      let skipped = 0;
 
       // local hashes
       const localHashes = new Map<string, string>();
@@ -279,7 +301,8 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
         const remoteEntry = manifest.docs[docId];
         if (remoteEntry && !remoteEntry.deleted && remoteEntry.hash !== state.get(docId)) {
           // remote edited after our base: deletion vs edit → keep the edit, queue conflict
-          await pullDoc(provider, manifest, realmId, docId);
+          const pr = await pullDoc(provider, manifest, realmId, docId);
+          if (pr !== 'ok') skipped++;
           local.addConflict(
             realmId,
             docId,
@@ -358,7 +381,9 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
             if (doc.updatedAt >= remoteEntry.updatedAt) {
               await pushDoc(provider, manifest, realmId, doc);
             } else {
-              await pullDoc(provider, manifest, realmId, docId);
+              const pr = await pullDoc(provider, manifest, realmId, docId);
+              if (pr === 'ok') pulled++;
+              else skipped++;
             }
             local.addConflict(realmId, docId, doc.title, localText || null, remoteText || null);
             conflicts++;
@@ -366,11 +391,15 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
             await pushDoc(provider, manifest, realmId, docById.get(docId)!);
             pushed++;
           } else if (remoteChanged) {
-            if (await pullDoc(provider, manifest, realmId, docId)) pulled++;
+            const pr = await pullDoc(provider, manifest, realmId, docId);
+            if (pr === 'ok') pulled++;
+            else skipped++;
           }
         } else if (remoteEntry && !remoteEntry.deleted && !state.has(docId)) {
           // doc created on another device, unknown locally
-          if (await pullDoc(provider, manifest, realmId, docId)) pulled++;
+          const pr = await pullDoc(provider, manifest, realmId, docId);
+          if (pr === 'ok') pulled++;
+          else skipped++;
         }
       }
 
@@ -378,6 +407,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
       const assetResult = await syncAssets(provider, manifest, realmId);
       pushed += assetResult.uploaded;
       pulled += assetResult.downloaded;
+      skipped += assetResult.skipped;
 
       // prune old remote tombstones
       for (const [docId, entry] of Object.entries(manifest.docs)) {
@@ -387,14 +417,18 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
       manifest.realmName = local.realmName(realmId);
       await writeManifest(provider, manifest, realmId);
 
-      failureAttempts = 0;
-      emit({ state: 'idle', lastSyncAt: now(), pending: 0, lastError: null });
+      realmAttempts.delete(realmId);
+      const skippedMsg = skipped > 0 ? `${skipped} item(ns) não sincronizado(s) — ver detalhes no log de atividade.` : null;
+      emit({ state: 'idle', lastSyncAt: now(), pending: 0, skipped, lastError: skippedMsg });
       if (pushed || pulled || conflicts) {
         log('info', `Sincronização concluída: ${pushed} enviados, ${pulled} recebidos${conflicts ? `, ${conflicts} conflitos` : ''}.`);
       }
+      if (skipped > 0) log('warn', skippedMsg!);
+      if (pulled > 0 || conflicts > 0) deps.onRealmChanged?.(realmId);
     } catch (err) {
       const e = classifyError(err);
-      failureAttempts++;
+      const attempts = (realmAttempts.get(realmId) ?? 0) + 1;
+      realmAttempts.set(realmId, attempts);
       if (e.code === 'auth') {
         authPaused = true;
         emit({ state: 'auth-required', lastError: e.message });
@@ -410,7 +444,8 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
   }
 
   function scheduleRetry(realmId: string): void {
-    const delay = Math.min(5 * 60_000, 1000 * 2 ** Math.min(failureAttempts, 9)) + Math.random() * 1000;
+    const attempts = realmAttempts.get(realmId) ?? 0;
+    const delay = Math.min(5 * 60_000, 1000 * 2 ** Math.min(attempts, 9)) + Math.random() * 1000;
     const prev = debounceTimers.get(realmId);
     if (prev) clearTimeout(prev);
     debounceTimers.set(
@@ -441,9 +476,10 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     provider: SyncProvider,
     manifest: SyncManifest,
     realmId: string
-  ): Promise<{ uploaded: number; downloaded: number }> {
+  ): Promise<{ uploaded: number; downloaded: number; skipped: number }> {
     let uploaded = 0;
     let downloaded = 0;
+    let skipped = 0;
     const assetState = local.getAssetStates(realmId);
     const localRefs = new Set(local.listAssetRefs(realmId));
     const localHashes = new Map<string, string>();
@@ -461,6 +497,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
         await provider.put(remotePaths.asset(realmId, key), data);
         manifest.assets[key] = { hash, size: data.byteLength };
         local.setAssetState(realmId, key, hash);
+        local.clearRetry(realmId, `asset:${key}`);
         uploaded++;
       } else if (!remoteEntry && base !== undefined) {
         // asset vanished remotely without us deleting it: re-upload
@@ -473,24 +510,36 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     // remote assets unknown locally (referenced by pulled docs)
     for (const [key, entry] of Object.entries(manifest.assets)) {
       if (localHashes.has(key)) continue;
-      if (assetState.get(key) === entry.hash) continue;
+      if (assetState.get(key) === entry.hash) {
+        local.clearRetry(realmId, `asset:${key}`);
+        continue;
+      }
+      if (retryBlocked(realmId, `asset:${key}`)) {
+        skipped++;
+        continue;
+      }
       try {
         const data = await provider.get(remotePaths.asset(realmId, key));
         if (sha256Hex(data) !== entry.hash) {
           log('warn', `Asset remoto corrompido ignorado: ${key}`);
+          local.recordRetryFailure(realmId, 'asset', `asset:${key}`, 'Asset remoto corrompido');
+          skipped++;
           continue;
         }
         local.writeAsset(key, data);
         local.setAssetState(realmId, key, entry.hash);
+        local.clearRetry(realmId, `asset:${key}`);
         downloaded++;
       } catch {
         log('warn', `Asset remoto indisponível: ${key}`);
+        local.recordRetryFailure(realmId, 'asset', `asset:${key}`, 'Asset remoto indisponível');
+        skipped++;
       }
     }
 
     // assets no longer referenced locally AND already synced: keep remotely
     // (other realms/devices may reference the same file — asset GC is local)
-    return { uploaded, downloaded };
+    return { uploaded, downloaded, skipped };
   }
 
   return {
@@ -514,6 +563,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
 
     notifyChanged(realmId) {
       if (!local.prefs().realmIds.includes(realmId)) return;
+      realmAttempts.delete(realmId);
       const prev = debounceTimers.get(realmId);
       if (prev) clearTimeout(prev);
       debounceTimers.set(
@@ -527,7 +577,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
 
     notifyConfigChanged() {
       authPaused = false;
-      failureAttempts = 0;
+      realmAttempts.clear();
       const prefs = local.prefs();
       emit({ enabled: prefs.enabled, state: prefs.enabled ? 'idle' : 'disabled', lastError: null });
       this.start();
@@ -535,6 +585,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
 
     async syncNow(realmId) {
       const targets = realmId ? [realmId] : local.listSyncRealmIds();
+      for (const id of targets) realmAttempts.delete(id);
       for (const id of targets) await enqueue(id);
     },
 
@@ -542,7 +593,9 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
 
     async listRemoteRealms() {
       const provider = providerOrNull();
-      if (!provider) return [];
+      if (!provider) {
+        throw new SyncError('Configure e salve um provedor de sincronização antes de buscar universos remotos.', 'unknown');
+      }
       const entries = await provider.list(SYNC_ROOT);
       const manifests = entries.filter((e) => /\/manifest\.json$/.test(e.path));
       const out: RemoteRealmView[] = [];

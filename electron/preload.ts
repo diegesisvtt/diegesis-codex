@@ -28,6 +28,7 @@ const api: DiegesisCodexApi = {
     delete: (id) => ipcRenderer.invoke('realms:delete', id),
     export: (id) => ipcRenderer.invoke('realms:export', id),
     import: () => ipcRenderer.invoke('realms:import'),
+    onChanged: (cb) => subscribe<string | null>('realms:changed', cb),
   },
   docs: {
     listByRealm: (realmId) => ipcRenderer.invoke('docs:list', realmId),

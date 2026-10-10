@@ -297,6 +297,8 @@ export interface AIChatSources {
 export interface ProviderTestResult {
   ok: boolean;
   error?: string;
+  /** effective base URL the provider connected to (WebDAV normalization) */
+  url?: string;
 }
 
 export interface PdfImportResult {
@@ -370,6 +372,8 @@ export interface SyncStatus {
   pending: number;
   conflictCount: number;
   lastError: string | null;
+  /** items that failed to sync this cycle (pending retry or permanent failure) */
+  skipped: number;
   log: SyncLogEntry[];
 }
 
@@ -443,6 +447,9 @@ export interface DiegesisCodexApi {
     export(id: string): Promise<RealmTransferResult>;
     /** opens a file dialog and imports a previously exported realm file */
     import(): Promise<RealmTransferResult>;
+    /** fired when realms change outside the renderer (e.g. cloud sync restore);
+     *  payload is the realm id when a realm was added/restored, null otherwise */
+    onChanged(cb: (realmId: string | null) => void): () => void;
   };
   docs: {
     listByRealm(realmId: string): Promise<DocNode[]>;
@@ -556,7 +563,7 @@ export interface DiegesisCodexApi {
     listVersions(realmId: string, docId: string): Promise<SyncVersionInfo[]>;
     /** returns an error message, or null on success */
     restoreVersion(realmId: string, docId: string, timestamp: number): Promise<string | null>;
-    listRemoteRealms(): Promise<RemoteRealmInfo[]>;
+    listRemoteRealms(): Promise<{ ok: boolean; realms: RemoteRealmInfo[]; error?: string }>;
     restoreRealm(realmId: string): Promise<SyncOperationResult>;
   };
 }

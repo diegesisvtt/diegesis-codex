@@ -16,18 +16,21 @@ import {
   addTombstones,
   clearAssetState,
   clearRealmSyncData,
+  clearRetry,
   clearSyncState as clearState,
   clearTombstone,
   conflictCount,
   getAssetStates,
   getConflict,
   getResolvedSyncConfig,
+  getRetry,
   getSyncState as getState,
   getSyncPrefs,
   getSyncProviderConfig,
   listConflicts,
   listTombstones,
   migrateSyncTables,
+  recordRetryFailure,
   removeConflict,
   resolveMaskedSyncSecrets,
   setAssetState,
@@ -55,6 +58,20 @@ function broadcastStatus(status: SyncStatus): void {
   const payload = withConflictCount(status);
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send('sync:status', payload);
+  }
+}
+
+/** Notifies every window that the realm list changed (cloud sync restore). */
+function broadcastRealmsChanged(realmId: string | null): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send('realms:changed', realmId);
+  }
+}
+
+/** Notifies every window that documents in a realm changed (sync pull). */
+function broadcastDocsChanged(realmId: string): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send('docs:changed', realmId);
   }
 }
 
@@ -122,6 +139,9 @@ function createLocalAdapter(): EngineLocalAdapter {
     getAssetStates,
     setAssetState,
     clearAssetState,
+    getRetry,
+    recordRetryFailure,
+    clearRetry,
     listAssetRefs: (realmId) => {
       const refs: string[] = [];
       for (const doc of db.listRealmDocTypes(realmId)) {
@@ -183,7 +203,12 @@ function currentProvider() {
 
 export function initSync(): void {
   migrateSyncTables();
-  engine = createSyncEngine({ local: createLocalAdapter(), getProvider: currentProvider, onStatus: broadcastStatus });
+  engine = createSyncEngine({
+    local: createLocalAdapter(),
+    getProvider: currentProvider,
+    onStatus: broadcastStatus,
+    onRealmChanged: broadcastDocsChanged,
+  });
   engine.start();
   // keep status fresh in every window on startup
   statusListener = () => broadcastStatus(engine!.getStatus());
@@ -257,8 +282,8 @@ export function registerSyncIpc(): void {
         providerId as never,
         resolveMaskedSyncSecrets(providerId, config)
       );
-      await provider.test();
-      return { ok: true };
+      const url = await provider.test();
+      return { ok: true, url: url || undefined };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
@@ -294,21 +319,33 @@ export function registerSyncIpc(): void {
     if (!err) {
       removeConflict(id);
       broadcastStatus(engine!.getStatus());
+      broadcastDocsChanged(conflict.realmId);
     }
     return err;
   });
 
   ipcMain.handle('sync:versions:list', (_e, realmId: string, docId: string) => engine!.listVersions(realmId, docId));
-  ipcMain.handle('sync:versions:restore', (_e, realmId: string, docId: string, timestamp: number) =>
-    engine!.restoreVersion(realmId, docId, timestamp)
-  );
+  ipcMain.handle('sync:versions:restore', async (_e, realmId: string, docId: string, timestamp: number) => {
+    const err = await engine!.restoreVersion(realmId, docId, timestamp);
+    if (!err) broadcastDocsChanged(realmId);
+    return err;
+  });
 
-  ipcMain.handle('sync:remote:realms', () => engine!.listRemoteRealms());
+  ipcMain.handle('sync:remote:realms', async () => {
+    try {
+      return { ok: true as const, realms: await engine!.listRemoteRealms() };
+    } catch (err) {
+      return { ok: false as const, realms: [], error: err instanceof Error ? err.message : String(err) };
+    }
+  });
   ipcMain.handle('sync:remote:restore', async (_e, realmId: string) => {
     try {
       await engine!.restoreRealm(realmId);
       const prefs = getSyncPrefs();
       if (!prefs.realmIds.includes(realmId)) setSyncPrefs({ realmIds: [...prefs.realmIds, realmId] });
+      engine?.notifyConfigChanged();
+      // let every window pick up the new realm (and its docs) immediately
+      broadcastRealmsChanged(realmId);
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
