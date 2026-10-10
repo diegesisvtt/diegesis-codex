@@ -15,7 +15,7 @@ import { EditorRegistry, type EditorContribution } from './api/editors';
 import { DocTypeRegistry, type DocTypeContribution } from './api/docTypes';
 import { MenuRegistry, type MenuItemContribution, type MenuLocation } from './api/menus';
 import { SettingsRegistry, type SettingsNavEntry } from './api/settings';
-import { File, Folder, LayoutGrid } from 'lucide-react';
+import { BookOpen, File, Folder, LayoutGrid } from 'lucide-react';
 import { createAppEventBus, type AppEvents } from './api/events';
 import { HookRegistry } from './api/hooks';
 import {
@@ -97,6 +97,14 @@ export class PluginManager {
       icon: Folder,
       iconColor: 'text-ink-3',
       defaultTitle: 'Nova Pasta',
+    });
+    this.docTypes.addCore({
+      docType: 'core/pdf',
+      label: 'PDF',
+      icon: BookOpen,
+      iconColor: 'text-pdf',
+      defaultTitle: 'Novo PDF',
+      kind: 'import',
     });
   }
 

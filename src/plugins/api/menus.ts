@@ -4,14 +4,15 @@ import type { Disposable } from './types';
 
 /** Context passed to 'explorer:item' menu contributions. */
 export interface ExplorerMenuContext {
-  /** the document for real rows; null for virtual bookmark rows */
+  /** the document for real rows; null for virtual bookmark rows and the
+   *  empty-area ('explorer:background') menu, which has no target */
   doc: DocNode | null;
   /** set when the row is a virtual PDF bookmark */
   bookmark?: { pdfDocId: string; bookmarkId: string; label: string; page: number };
 }
 
 /** Menus plugins can contribute items to. */
-export type MenuLocation = 'explorer:item';
+export type MenuLocation = 'explorer:item' | 'explorer:background';
 
 /**
  * An item contributed to a host context menu. The host renders built-in

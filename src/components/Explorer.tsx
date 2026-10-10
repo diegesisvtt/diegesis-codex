@@ -1,18 +1,19 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Tree, TreeApi, NodeApi, NodeRendererProps } from 'react-arborist';
 import {
   LayoutGrid,
   ChevronRight,
+  ChevronsDownUp,
   Trash2,
   Plus,
   PenLine,
   BookOpen,
-  FileUp,
   MapPin,
   Bookmark,
   Download,
   Star,
+  Folder,
 } from 'lucide-react';
 import type { DocNode, DocumentType } from '@shared/types';
 import { REF_DRAG_MIME } from '@shared/dragDrop';
@@ -35,6 +36,16 @@ interface DeleteRequest {
 
 const DeleteConfirmContext = createContext<(req: DeleteRequest) => void>(() => {});
 
+/** Creation actions offered by the folder and background context menus. */
+interface ExplorerActions {
+  /** opens the "new document" popover targeting `parentId` at the given cursor */
+  newDocAt(parentId: string | null, x: number, y: number): void;
+  /** creates a folder inside `parentId` and starts inline rename */
+  newFolderAt(parentId: string | null): void;
+}
+
+const ExplorerActionsContext = createContext<ExplorerActions | null>(null);
+
 // buildPdfTreeInfo parses every PDF's content JSON; cache per docs-array
 // reference so each row render doesn't redo the work.
 const pdfInfoCache = new WeakMap<DocNode[], PdfTreeInfo>();
@@ -50,6 +61,7 @@ function cachedPdfInfo(docs: DocNode[]): PdfTreeInfo {
 function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
   const { docs, openDocument, focusPdf, exportDocument } = useStore();
   const requestDelete = useContext(DeleteConfirmContext);
+  const explorerActions = useContext(ExplorerActionsContext);
   const docTypes = useDocTypes();
   const menuItems = useMenuItems('explorer:item');
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
@@ -78,12 +90,24 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
     .filter((item) => item.when?.(menuCtx) ?? true)
     .map((item) => ({ icon: item.icon, label: item.label, danger: item.danger, onClick: () => item.run(menuCtx) }));
 
-  const menuEntries: CtxMenuEntry[] = [
-    { icon: Download, label: 'Exportar', disabled: !canExport, onClick: onExport },
-    { icon: PenLine, label: 'Renomear', onClick: () => node.edit() },
-    { icon: Trash2, label: 'Excluir', danger: true, onClick: remove },
-    ...(pluginEntries.length > 0 ? (['divider', ...pluginEntries] as CtxMenuEntry[]) : []),
-  ];
+  const menuEntries: CtxMenuEntry[] =
+    data.docType === 'core/folder'
+      ? [
+          { icon: Plus, label: 'Novo documento', onClick: () => explorerActions?.newDocAt(data.id, menuPos!.x, menuPos!.y) },
+          { icon: Folder, label: 'Nova pasta', onClick: () => explorerActions?.newFolderAt(data.id) },
+          'divider',
+          { icon: ChevronsDownUp, label: node.isOpen ? 'Recolher' : 'Expandir', onClick: () => (node.isOpen ? node.close() : node.open()) },
+          'divider',
+          { icon: PenLine, label: 'Renomear', onClick: () => node.edit() },
+          { icon: Trash2, label: 'Excluir', danger: true, onClick: remove },
+          ...(pluginEntries.length > 0 ? (['divider', ...pluginEntries] as CtxMenuEntry[]) : []),
+        ]
+      : [
+          { icon: Download, label: 'Exportar', disabled: !canExport, onClick: onExport },
+          { icon: PenLine, label: 'Renomear', onClick: () => node.edit() },
+          { icon: Trash2, label: 'Excluir', danger: true, onClick: remove },
+          ...(pluginEntries.length > 0 ? (['divider', ...pluginEntries] as CtxMenuEntry[]) : []),
+        ];
 
   const Icon = bookmark
     ? Bookmark
@@ -243,9 +267,16 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
 
 /** Popover de criação: escolhe o tipo (vindo do registro de docTypes) e digita o nome. */
 function NewDocPopover({
+  x,
+  y,
+  alignRight,
   onClose,
   onCreate,
 }: {
+  x: number;
+  y: number;
+  /** when true, the popover is anchored to `x` as its right edge (header +) */
+  alignRight?: boolean;
   onClose(): void;
   onCreate(c: DocTypeContribution, name: string): void;
 }) {
@@ -253,16 +284,33 @@ function NewDocPopover({
   const [name, setName] = useState('');
   const [index, setIndex] = useState(0);
   const active = Math.min(index, docTypes.length - 1);
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x, y });
+
+  // clamp inside the viewport (and right-align against `x` when requested)
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setPos({
+      x: Math.max(4, Math.min(alignRight ? x - rect.width : x, window.innerWidth - rect.width - 8)),
+      y: Math.max(4, Math.min(y, window.innerHeight - rect.height - 8)),
+    });
+  }, [x, y, alignRight]);
 
   const create = (c: DocTypeContribution) => {
     onCreate(c, name);
     onClose();
   };
 
-  return (
+  return createPortal(
     <>
       <div className="fixed inset-0 z-30" onClick={onClose} />
-      <div className="absolute right-0 top-full mt-1 z-40 w-56 bg-card backdrop-blur-md border border-cyan-500/15 rounded-lg shadow-2xl py-1 overflow-hidden animate-fade-up">
+      <div
+        ref={ref}
+        className="fixed z-40 w-56 bg-card backdrop-blur-md border border-cyan-500/15 rounded-lg shadow-2xl py-1 overflow-hidden animate-fade-up"
+        style={{ left: pos.x, top: pos.y }}
+      >
         <div className="px-2 pt-1 pb-1.5">
           <input
             autoFocus
@@ -300,7 +348,8 @@ function NewDocPopover({
           </button>
         ))}
       </div>
-    </>
+    </>,
+    document.body
   );
 }
 
@@ -308,10 +357,13 @@ export function Explorer() {
   const { docs, createDocument, importPdf, updateDocument, moveDocument, deleteDocument, openDocument, focusPdf } = useStore();
   const treeRef = useRef<TreeApi<TreeData> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const newDocBtnRef = useRef<HTMLButtonElement>(null);
   const [height, setHeight] = useState(400);
   const [importing, setImporting] = useState(false);
-  const [newDocOpen, setNewDocOpen] = useState(false);
+  const [newDocTarget, setNewDocTarget] = useState<{ parentId: string | null; x: number; y: number; alignRight?: boolean } | null>(null);
+  const [backgroundMenu, setBackgroundMenu] = useState<{ x: number; y: number } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<DeleteRequest | null>(null);
+  const bgMenuItems = useMenuItems('explorer:background');
 
   const pdfInfo = useMemo(() => cachedPdfInfo(docs), [docs]);
   const data = useMemo(() => buildTree(docs, pdfInfo.bookmarksByPdf), [docs, pdfInfo]);
@@ -356,8 +408,28 @@ export function Explorer() {
     return doc?.parentId ?? null;
   };
 
-  const createFromContribution = async (c: DocTypeContribution, name: string) => {
-    const parentId = selectedFolderId();
+  const importPdfAt = useCallback(
+    async (parentId: string | null) => {
+      if (importing) return;
+      setImporting(true);
+      try {
+        const result = await importPdf(parentId);
+        if (result.error) window.alert(result.error);
+        if (result.doc) openDocument(result.doc.id);
+      } finally {
+        setImporting(false);
+      }
+    },
+    [importing, importPdf, openDocument]
+  );
+
+  const createFromContribution = async (c: DocTypeContribution, name: string, parentId: string | null) => {
+    // 'import' types (PDF) come from a native file picker, not createDocument;
+    // the typed name is ignored (the title comes from the file name)
+    if (c.kind === 'import') {
+      await importPdfAt(parentId);
+      return;
+    }
     const title = name.trim();
     const doc = await createDocument(c.docType as DocumentType, parentId, title || c.defaultTitle, c.defaultContent?.() ?? null);
     if (doc.type === 'core/folder') {
@@ -368,20 +440,40 @@ export function Explorer() {
     }
   };
 
-  const importPdfHere = async () => {
-    if (importing) return;
-    setImporting(true);
-    try {
-      const result = await importPdf(selectedFolderId());
-      if (result.error) window.alert(result.error);
-      if (result.doc) openDocument(result.doc.id);
-    } finally {
-      setImporting(false);
+  const createFolderHere = useCallback(
+    async (parentId: string | null) => {
+      const doc = await createDocument('core/folder', parentId, 'Nova Pasta', null);
+      setTimeout(() => treeRef.current?.edit(doc.id), 60);
+    },
+    [createDocument]
+  );
+
+  const newDocAt = useCallback((parentId: string | null, x: number, y: number) => setNewDocTarget({ parentId, x, y }), []);
+  const newFolderAt = useCallback((parentId: string | null) => void createFolderHere(parentId), [createFolderHere]);
+  const explorerActions = useMemo<ExplorerActions>(() => ({ newDocAt, newFolderAt }), [newDocAt, newFolderAt]);
+
+  const openHeaderPopover = () => {
+    if (newDocTarget) {
+      setNewDocTarget(null);
+      return;
     }
+    const r = newDocBtnRef.current?.getBoundingClientRect();
+    setNewDocTarget({ parentId: selectedFolderId(), x: r?.right ?? 0, y: (r?.bottom ?? 0) + 4, alignRight: true });
   };
+
+  const bgPluginEntries: CtxMenuEntry[] = bgMenuItems
+    .filter((item) => item.when?.({ doc: null }) ?? true)
+    .map((item) => ({ icon: item.icon, label: item.label, danger: item.danger, onClick: () => item.run({ doc: null }) }));
+
+  const backgroundEntries: CtxMenuEntry[] = [
+    { icon: Plus, label: 'Novo documento', onClick: () => newDocAt(null, backgroundMenu!.x, backgroundMenu!.y) },
+    { icon: Folder, label: 'Nova pasta', onClick: () => newFolderAt(null) },
+    ...(bgPluginEntries.length > 0 ? (['divider', ...bgPluginEntries] as CtxMenuEntry[]) : []),
+  ];
 
   return (
     <DeleteConfirmContext.Provider value={requestDelete}>
+    <ExplorerActionsContext.Provider value={explorerActions}>
     <div className="h-full w-full flex flex-col bg-sidebar">
       <div className="px-3 h-9 border-b border-line flex justify-between items-center shrink-0">
         <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
@@ -389,29 +481,25 @@ export function Explorer() {
           Explorer
         </span>
         <div className="flex gap-0.5">
-          <div className="relative">
-            <button
-              onClick={() => setNewDocOpen((v) => !v)}
-              title="Novo documento"
-              className="text-ink-3 hover:text-ink-1 p-1 rounded-md hover:bg-hover transition-colors"
-            >
-              <Plus size={14} />
-            </button>
-            {newDocOpen && (
-              <NewDocPopover onClose={() => setNewDocOpen(false)} onCreate={createFromContribution} />
-            )}
-          </div>
           <button
-            onClick={importPdfHere}
-            disabled={importing}
-            title="Importar PDF"
-            className="text-ink-3 hover:text-pdf p-1 rounded-md hover:bg-hover transition-colors disabled:opacity-50"
+            ref={newDocBtnRef}
+            onClick={openHeaderPopover}
+            title="Novo documento"
+            className="text-ink-3 hover:text-ink-1 p-1 rounded-md hover:bg-hover transition-colors"
           >
-            <FileUp size={14} />
+            <Plus size={14} />
           </button>
         </div>
       </div>
-      <div ref={containerRef} className="flex-1 overflow-hidden py-1.5 diegesis-tree">
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-hidden py-1.5 diegesis-tree"
+        // rows stop propagation, so this only fires for the empty area
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setBackgroundMenu({ x: e.clientX, y: e.clientY });
+        }}
+      >
         {data.length === 0 ? (
           <div className="px-4 py-6 text-[12px] text-ink-3 leading-relaxed">
             Nada por aqui ainda.
@@ -487,7 +575,22 @@ export function Explorer() {
         onConfirm={() => pendingDelete && performDelete(pendingDelete.ids)}
         onClose={() => setPendingDelete(null)}
       />
+      {newDocTarget && (
+        <NewDocPopover
+          x={newDocTarget.x}
+          y={newDocTarget.y}
+          alignRight={newDocTarget.alignRight}
+          onClose={() => setNewDocTarget(null)}
+          onCreate={(c, name) => createFromContribution(c, name, newDocTarget.parentId)}
+        />
+      )}
+      {backgroundMenu &&
+        createPortal(
+          <ContextMenu x={backgroundMenu.x} y={backgroundMenu.y} entries={backgroundEntries} onClose={() => setBackgroundMenu(null)} />,
+          document.body
+        )}
     </div>
+    </ExplorerActionsContext.Provider>
     </DeleteConfirmContext.Provider>
   );
 }

@@ -21,6 +21,11 @@ export interface DocTypeContribution {
   defaultTitle: string;
   /** initial serialized content for new documents (null for empty) */
   defaultContent?(): string | null;
+  /** how the host materializes a new document of this type. 'import' types
+   *  are created by the host's import flow (native file picker) instead of
+   *  createDocument; the name typed in creation UIs is ignored. Defaults to
+   *  'create'. */
+  kind?: 'create' | 'import';
 }
 
 /** document types owned by the host shell — plugins cannot override these */
