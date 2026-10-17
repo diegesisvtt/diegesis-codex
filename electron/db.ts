@@ -853,14 +853,18 @@ export interface SyncedDocRow {
  */
 export function upsertSyncedDoc(doc: SyncedDocRow): void {
   const exists = db.prepare('SELECT 1 AS x FROM documents WHERE id = ?').get(doc.id);
+  // orphan guard: parent_id has a FK — null it when the parent row is absent
+  // (e.g. the parent failed to pull/corrupted and is not present locally).
+  const parentId =
+    doc.parentId && !db.prepare('SELECT 1 AS x FROM documents WHERE id = ?').get(doc.parentId) ? null : doc.parentId;
   if (exists) {
     db.prepare(
       'UPDATE documents SET parent_id = ?, type = ?, title = ?, icon = ?, cover = ?, content = ?, position = ?, updated_at = ? WHERE id = ?'
-    ).run(doc.parentId, doc.type, doc.title, doc.icon, doc.cover, doc.content, doc.position, doc.updatedAt, doc.id);
+    ).run(parentId, doc.type, doc.title, doc.icon, doc.cover, doc.content, doc.position, doc.updatedAt, doc.id);
   } else {
     db.prepare(
       'INSERT INTO documents (id, realm_id, parent_id, type, title, icon, cover, content, position, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(doc.id, doc.realmId, doc.parentId, doc.type, doc.title, doc.icon, doc.cover, doc.content, doc.position, doc.updatedAt);
+    ).run(doc.id, doc.realmId, parentId, doc.type, doc.title, doc.icon, doc.cover, doc.content, doc.position, doc.updatedAt);
   }
   ftsUpsert({ id: doc.id, realmId: doc.realmId, type: doc.type, title: doc.title, content: doc.content });
   if (doc.type !== 'core/folder') enqueueEmbedJob(doc.id);

@@ -232,10 +232,11 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     return hash;
   }
 
-  /** Pulls a remote doc. Returns 'ok', 'corrupt' (integrity failure recorded for
-   *  retry) or 'skipped' (permanent failure / backoff not elapsed). */
-  async function pullDoc(provider: SyncProvider, manifest: SyncManifest, realmId: string, docId: string): Promise<'ok' | 'corrupt' | 'skipped'> {
-    if (retryBlocked(realmId, `doc:${docId}`)) return 'skipped';
+  /** Fetches and decodes a remote doc (no local write). Returns the payload,
+   *  'skip' (permanent failure / backoff not elapsed) or 'corrupt' (integrity
+   *  failure recorded for retry). */
+  async function fetchRemoteDoc(provider: SyncProvider, realmId: string, docId: string): Promise<SyncedDocPayload | 'skip' | 'corrupt'> {
+    if (retryBlocked(realmId, `doc:${docId}`)) return 'skip';
     const bytes = await provider.get(remotePaths.doc(realmId, docId));
     const payload = decodeDoc(bytes);
     if (!payload) {
@@ -243,10 +244,30 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
       local.recordRetryFailure(realmId, 'doc', `doc:${docId}`, 'Documento remoto corrompido');
       return 'corrupt';
     }
-    local.applyRemoteDoc(payload);
-    local.setState(realmId, docId, manifest.docs[docId]?.hash ?? hashPayload(payload));
     local.clearRetry(realmId, `doc:${docId}`);
-    return 'ok';
+    return payload;
+  }
+
+  /** Applies remote payloads parents-first (parent_id has a foreign key),
+   *  nulling orphans/cycles. Returns the number of docs applied. */
+  function applyPayloadsParentsFirst(payloads: SyncedDocPayload[], manifest: SyncManifest, realmId: string): number {
+    const byId = new Set(payloads.map((p) => p.id));
+    const applied = new Set<string>();
+    let remaining = [...payloads];
+    let count = 0;
+    while (remaining.length) {
+      const idx = remaining.findIndex((p) => !p.parentId || applied.has(p.parentId) || !byId.has(p.parentId));
+      const batch = idx === -1 ? remaining.splice(0) : remaining.splice(idx, 1);
+      for (const p of batch) {
+        if (p.parentId && !applied.has(p.parentId) && byId.has(p.parentId)) p.parentId = null;
+        local.applyRemoteDoc(p);
+        local.setState(realmId, p.id, manifest.docs[p.id]?.hash ?? hashPayload(p));
+        local.clearRetry(realmId, `doc:${p.id}`);
+        applied.add(p.id);
+        count++;
+      }
+    }
+    return count;
   }
 
   /** Serializes cycles: at most one realm syncs at a time, callers coalesce. */
@@ -277,6 +298,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
       let pulled = 0;
       let conflicts = 0;
       let skipped = 0;
+      const pullQueue: SyncedDocPayload[] = [];
 
       // local hashes
       const localHashes = new Map<string, string>();
@@ -301,8 +323,9 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
         const remoteEntry = manifest.docs[docId];
         if (remoteEntry && !remoteEntry.deleted && remoteEntry.hash !== state.get(docId)) {
           // remote edited after our base: deletion vs edit → keep the edit, queue conflict
-          const pr = await pullDoc(provider, manifest, realmId, docId);
-          if (pr !== 'ok') skipped++;
+          const pr = await fetchRemoteDoc(provider, realmId, docId);
+          if (pr === 'skip' || pr === 'corrupt') skipped++;
+          else pullQueue.push(pr);
           local.addConflict(
             realmId,
             docId,
@@ -381,9 +404,9 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
             if (doc.updatedAt >= remoteEntry.updatedAt) {
               await pushDoc(provider, manifest, realmId, doc);
             } else {
-              const pr = await pullDoc(provider, manifest, realmId, docId);
-              if (pr === 'ok') pulled++;
-              else skipped++;
+              const pr = await fetchRemoteDoc(provider, realmId, docId);
+              if (pr === 'skip' || pr === 'corrupt') skipped++;
+              else pullQueue.push(pr);
             }
             local.addConflict(realmId, docId, doc.title, localText || null, remoteText || null);
             conflicts++;
@@ -391,17 +414,20 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
             await pushDoc(provider, manifest, realmId, docById.get(docId)!);
             pushed++;
           } else if (remoteChanged) {
-            const pr = await pullDoc(provider, manifest, realmId, docId);
-            if (pr === 'ok') pulled++;
-            else skipped++;
+            const pr = await fetchRemoteDoc(provider, realmId, docId);
+            if (pr === 'skip' || pr === 'corrupt') skipped++;
+            else pullQueue.push(pr);
           }
         } else if (remoteEntry && !remoteEntry.deleted && !state.has(docId)) {
           // doc created on another device, unknown locally
-          const pr = await pullDoc(provider, manifest, realmId, docId);
-          if (pr === 'ok') pulled++;
-          else skipped++;
+          const pr = await fetchRemoteDoc(provider, realmId, docId);
+          if (pr === 'skip' || pr === 'corrupt') skipped++;
+          else pullQueue.push(pr);
         }
       }
+
+      // apply pulled docs parents-first (parent_id has a foreign key)
+      if (pullQueue.length) pulled += applyPayloadsParentsFirst(pullQueue, manifest, realmId);
 
       // ---- assets ----
       const assetResult = await syncAssets(provider, manifest, realmId);
@@ -624,7 +650,6 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
       const manifest = await readManifest(provider, realmId);
       local.createRealmWithId(realmId, manifest.realmName || 'Universo restaurado');
 
-      // parents first (documents.parent_id has a foreign key)
       const pending = Object.entries(manifest.docs).filter(([, e]) => !e.deleted).map(([id]) => id);
       const payloads: SyncedDocPayload[] = [];
       for (const docId of pending) {
@@ -633,18 +658,8 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
         if (payload) payloads.push(payload);
         else log('warn', `Documento remoto ilegível ignorado na restauração: ${docId}`);
       }
-      const applied = new Set<string>();
-      let remaining = [...payloads];
-      while (remaining.length) {
-        const idx = remaining.findIndex((p) => !p.parentId || applied.has(p.parentId) || !payloads.some((q) => q.id === p.parentId));
-        const batch = idx === -1 ? remaining.splice(0) : remaining.splice(idx, 1);
-        for (const p of batch) {
-          if (!p.parentId || (!applied.has(p.parentId) && payloads.some((q) => q.id === p.parentId))) p.parentId = null;
-          local.applyRemoteDoc(p);
-          local.setState(realmId, p.id, manifest.docs[p.id]?.hash ?? hashPayload(p));
-          applied.add(p.id);
-        }
-      }
+      // parents first (documents.parent_id has a foreign key)
+      const applied = applyPayloadsParentsFirst(payloads, manifest, realmId);
 
       for (const [key, entry] of Object.entries(manifest.assets)) {
         try {
@@ -656,7 +671,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
           /* missing assets don't block the restore */
         }
       }
-      log('info', `Universo "${manifest.realmName}" restaurado da nuvem (${applied.size} documentos).`);
+      log('info', `Universo "${manifest.realmName}" restaurado da nuvem (${applied} documentos).`);
     },
 
     async listVersions(realmId, docId) {

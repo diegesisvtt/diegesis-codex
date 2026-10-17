@@ -44,7 +44,7 @@ function makeProvider(): SyncProvider & { files: Map<string, Uint8Array> } {
   };
 }
 
-function makeLocal(initialDocs: DocNode[] = []) {
+function makeLocal(initialDocs: DocNode[] = [], opts: { enforceParentFk?: boolean } = {}) {
   const docs = new Map(initialDocs.map((d) => [d.id, d]));
   const pdfPages = new Map<string, { page: number; text: string }[]>();
   const state = new Map<string, Map<string, string>>();
@@ -72,6 +72,9 @@ function makeLocal(initialDocs: DocNode[] = []) {
     getDoc: (id) => docs.get(id) ?? null,
     docPdfPages: (id) => pdfPages.get(id) ?? [],
     applyRemoteDoc: (p) => {
+      if (opts.enforceParentFk && p.parentId && !docs.has(p.parentId)) {
+        throw new Error(`FK constraint: parent ${p.parentId} missing for ${p.id}`);
+      }
       docs.set(p.id, { ...payloadToDoc(p), realmId: p.realmId });
       if (p.pdfPages) pdfPages.set(p.id, p.pdfPages);
     },
@@ -302,5 +305,40 @@ describe('sync engine', () => {
     expect(local.retries.get(`${REALM}:doc:b`)?.attempts).toBe(3);
     expect(local.docs.has('b')).toBe(false);
     expect(engine.getStatus().skipped).toBe(1);
+  });
+
+  test('pulls new parent+child docs parents-first (FK safe)', async () => {
+    const local = makeLocal([], { enforceParentFk: true });
+    const provider = makeProvider();
+    const engine = engineFor(local, provider);
+    await engine.syncNow(REALM); // baseline (empty realm)
+
+    // another device created a folder + a child note; manifest lists child first
+    const folder = makeDoc('folder1', 'Pasta', 100);
+    const child = { ...makeDoc('note1', 'Nota', 200), parentId: 'folder1' };
+    await provider.put(remotePaths.doc(REALM, 'note1'), encodeDoc(child));
+    await provider.put(remotePaths.doc(REALM, 'folder1'), encodeDoc(folder));
+    await provider.put(
+      remotePaths.manifest(REALM),
+      encodeManifest({
+        format: 'diegesis-sync-manifest',
+        version: 1,
+        realmId: REALM,
+        realmName: 'Teste',
+        updatedAt: 300,
+        deviceId: 'other-device',
+        docs: {
+          note1: { hash: hashPayload(docToPayload(child)), updatedAt: 200 },
+          folder1: { hash: hashPayload(docToPayload(folder)), updatedAt: 100 },
+        },
+        assets: {},
+      })
+    );
+
+    await engine.syncNow(REALM); // would throw FK if child applied before parent
+
+    expect(local.docs.has('folder1')).toBe(true);
+    expect(local.docs.has('note1')).toBe(true);
+    expect(local.docs.get('note1')?.parentId).toBe('folder1');
   });
 });
