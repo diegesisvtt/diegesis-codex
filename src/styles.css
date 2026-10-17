@@ -44,6 +44,7 @@
   --color-board: #4dab9a;
   --color-pdf: #d96a5f;
   --color-map: #d9a45f;
+  --color-dungeon: #9b8cf2;
   --color-timeline: #b48ad9;
   --color-table: #818cf8;
   --color-sheet: #a3be8c;
@@ -176,6 +177,25 @@ body,
 }
 .flexlayout__tab_button_trailing:hover {
   background-color: var(--color-active);
+}
+/* micro-animação de fechamento: a aba desvanece e encolhe antes de sumir */
+.flexlayout__tab_button.tab-closing {
+  pointer-events: none;
+  animation: tabClose 140ms ease forwards;
+}
+@keyframes tabClose {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(2px) scale(0.94);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flexlayout__tab_button.tab-closing {
+    animation: none;
+  }
 }
 .flexlayout__tabset-selected .flexlayout__tab_button--selected {
   border-top-color: var(--color-accent);

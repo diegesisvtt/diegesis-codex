@@ -8,6 +8,7 @@ import type { ChatRole, Conversation, DocChanges, DocInput, DocNode, DocumentTyp
 import { blocksToPlainText, isTiptapDoc, tiptapToBlocks } from '../shared/blockContent';
 import { extractTimelineText } from '../shared/timeline';
 import { extractTableText } from '../shared/table';
+import { extractDungeonText, DUNGEON_DOC_KIND } from '../shared/dungeon';
 import { extractSheetText, SHEET_DOC_KIND } from '../shared/sheet';
 
 export const generateId = () => crypto.randomBytes(6).toString('hex');
@@ -235,6 +236,10 @@ export function extractPlainText(content: string | null): string {
     // tabelas interativas: resultados, detalhes e fórmula
     if (parsed && typeof parsed === 'object' && parsed.kind === 'diegesis-table') {
       return extractTableText(content);
+    }
+    // mapas de dungeon: nomes/resumos de salas, markers e textos
+    if (parsed && typeof parsed === 'object' && parsed.kind === DUNGEON_DOC_KIND) {
+      return extractDungeonText(content);
     }
     // fichas de personagem: identidade, stats base e efeitos
     if (parsed && typeof parsed === 'object' && parsed.kind === SHEET_DOC_KIND) {

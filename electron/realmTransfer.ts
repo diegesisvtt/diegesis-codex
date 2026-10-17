@@ -12,6 +12,7 @@ import { audioFilePath, extractAudioRefs, isValidAudioData } from './audio';
 import { imageFilePath, extractImageRefs, isValidImageData } from './images';
 import type { ChatRole, DocumentType, RealmTransferResult, RetrievedChunk } from '../shared/types';
 import { parseTable, serializeTable } from '../shared/table';
+import { parseDungeon, serializeDungeon } from '../shared/dungeon';
 
 const FORMAT = 'diegesis-realm';
 const VERSION = 2;
@@ -26,6 +27,7 @@ const VALID_TYPES: DocumentType[] = [
   'core/folder',
   'core/pdf',
   'hexcrawl/map',
+  'diegesis/dungeon',
   'diegesis/timeline',
   'diegesis/table',
   'diegesis/sheet',
@@ -269,6 +271,59 @@ function remapContentReferences(type: DocumentType, content: string | null, idMa
           }
         }
         return changed ? JSON.stringify(doc) : content;
+      }
+      case 'diegesis/dungeon': {
+        const doc = parseDungeon(content);
+        let changed = false;
+        // descrições são BlockNote JSON: remapeia noteRef/table refs embutidas
+        const remapDescription = (json: string): string => {
+          if (!json) return json;
+          try {
+            const blocks = JSON.parse(json) as unknown;
+            let touched = false;
+            const walk = (node: unknown): void => {
+              if (Array.isArray(node)) {
+                for (const x of node) walk(x);
+                return;
+              }
+              if (!node || typeof node !== 'object') return;
+              const n = node as { type?: string; props?: Record<string, unknown>; content?: unknown; children?: unknown };
+              if (n.type === 'noteRef' && typeof n.props?.docId === 'string' && n.props.docId) {
+                n.props.docId = remap(n.props.docId);
+                touched = true;
+              }
+              if (
+                (n.type === 'interactiveTable' || n.type === 'tableMacro') &&
+                typeof n.props?.tableId === 'string' &&
+                n.props.tableId
+              ) {
+                n.props.tableId = remap(n.props.tableId);
+                touched = true;
+              }
+              if (n.content) walk(n.content);
+              if (n.children) walk(n.children);
+            };
+            walk(blocks);
+            return touched ? JSON.stringify(blocks) : json;
+          } catch {
+            return json;
+          }
+        };
+        for (const room of doc.rooms) {
+          const next = remapDescription(room.description);
+          if (next !== room.description) {
+            room.description = next;
+            changed = true;
+          }
+        }
+        for (const marker of doc.markers) {
+          const next = remapDescription(marker.description);
+          if (next !== marker.description) {
+            marker.description = next;
+            changed = true;
+          }
+        }
+        return changed ? serializeDungeon(doc) : content;
       }
       case 'core/whiteboard': {
         const shapes = JSON.parse(content) as Record<string, { docId?: unknown; pdfDocId?: unknown }>;

@@ -9,24 +9,19 @@ import {
   BasicTextStyleButton,
   CreateLinkButton,
   SuggestionMenuController,
-  getDefaultReactSlashMenuItems,
 } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/ariakit';
 import { pt } from '@blocknote/core/locales';
-import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs } from '@blocknote/core';
-import { filterSuggestionItems, insertOrUpdateBlockForSlashMenu } from '@blocknote/core/extensions';
-import { BookMarked, Clock, FileText, ImagePlus, Layers, Link2, Sparkles, Table } from 'lucide-react';
+import { Clock, FileText, ImagePlus, Layers, Link2, Sparkles } from 'lucide-react';
 import { REF_DRAG_MIME, parseExplorerDragRef } from '@shared/dragDrop';
 import type { DocNode } from '@shared/types';
 import { parseNoteContent } from '@shared/blockContent';
 import { useStore } from '../../state/store';
 import { Badge } from '../ui/Badge';
 import { DocIconPicker } from './shared/DocIconPicker';
-import { AudioBlock } from './note/audioBlock';
-import { InteractiveTableBlock } from './note/tableBlock';
-import { CalloutBlockNote } from './note/calloutBlock';
 import { InlineAiPopover } from './note/InlineAiPopover';
-import { NoteRefInline, NotePickerPopover } from './note/noteRef';
+import { NotePickerPopover } from './note/noteRef';
+import { noteSchema, uploadMedia, createSlashItems, createNoteRefItems } from './note/noteSchema';
 
 /** rótulo legível por tipo de documento (metadados) */
 const DOC_TYPE_LABEL: Record<string, string> = {
@@ -34,6 +29,7 @@ const DOC_TYPE_LABEL: Record<string, string> = {
   'core/whiteboard': 'Quadro branco',
   'core/pdf': 'PDF',
   'hexcrawl/map': 'Mapa',
+  'diegesis/dungeon': 'Dungeon',
   'diegesis/timeline': 'Linha do tempo',
   'diegesis/table': 'Tabela',
   'diegesis/sheet': 'Ficha',
@@ -64,39 +60,6 @@ function countWords(content: string | null): number {
   } catch {
     return 0;
   }
-}
-
-/** note schema: defaults + custom blocks (audio: disk-backed, loop-capable;
- *  interactiveTable: embeds a diegesis/table document with roll button;
- *  callout: destaque tático rule/lore/secret/quote) */
-const schema = BlockNoteSchema.create({
-  blockSpecs: {
-    ...defaultBlockSpecs,
-    audio: AudioBlock(),
-    interactiveTable: InteractiveTableBlock(),
-    callout: CalloutBlockNote(),
-  },
-  inlineContentSpecs: {
-    ...defaultInlineContentSpecs,
-    noteRef: NoteRefInline(),
-  },
-});
-
-/** Media upload routing: audio files go to disk storage (streamed via the
- *  diegesis-audio:// protocol); everything else (images) stays inline base64. */
-async function uploadMedia(file: File): Promise<string> {
-  if (file.type.startsWith('audio/')) {
-    const buf = await file.arrayBuffer();
-    const result = await window.diegesis.audio.save(file.name, buf);
-    if (!result.asset) throw new Error(result.error ?? 'Falha ao importar o áudio.');
-    return result.asset.url;
-  }
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }
 
 /** Downscales a cover image to a compact JPEG data URL (max 1600px wide) so
@@ -160,7 +123,7 @@ export function NoteEditor({
 
   const editor = useCreateBlockNote(
     {
-      schema,
+      schema: noteSchema,
       dictionary: pt,
       initialContent: parseNoteContent(doc.content) as never,
       uploadFile: uploadMedia,
@@ -175,69 +138,9 @@ export function NoteEditor({
     updateDocument(doc.id, { content: JSON.stringify(editor.document) });
   };
 
-  /* ---------- slash menu: defaults + custom blocks ---------- */
-  // BlockNote's default slash items are hardcoded to built-in blocks, so custom
-  // blocks (interactiveTable) need an explicit item here.
-  const slashItems = async (query: string) =>
-    filterSuggestionItems(
-      [
-        ...getDefaultReactSlashMenuItems(editor),
-        {
-          title: 'Tabela interativa',
-          onItemClick: () =>
-            insertOrUpdateBlockForSlashMenu(editor, { type: 'interactiveTable' } as never),
-          aliases: ['tabela', 'table', 'rolagem', 'roll', 'dados', 'dice'],
-          group: 'Diegesis Codex',
-          icon: <Table size={18} />,
-          subtext: 'Embute uma tabela rolável do universo',
-        },
-        {
-          title: 'Callout',
-          onItemClick: () =>
-            insertOrUpdateBlockForSlashMenu(editor, { type: 'callout', props: { variant: 'lore' } } as never),
-          aliases: ['destaque', 'lore', 'segredo', 'regra', 'citação', 'callout', 'quote'],
-          group: 'Diegesis Codex',
-          icon: <BookMarked size={18} />,
-          subtext: 'Bloco de destaque (regra, lore, segredo, citação)',
-        },
-        {
-          title: 'Referência de nota',
-          onItemClick: () => {
-            const box = editor.getSelectionBoundingBox();
-            setNotePicker({
-              x: box?.left ?? 40,
-              y: (box?.bottom ?? 40) + 6,
-              mode: 'insert',
-              selectionText: '',
-            });
-          },
-          aliases: ['nota', 'referência', 'referencia', 'link', 'vínculo', 'vinculo', 'wikilink', 'mention', 'mencionar'],
-          group: 'Diegesis Codex',
-          icon: <Link2 size={18} />,
-          subtext: 'Referencia outra nota do universo',
-        },
-      ],
-      query
-    );
-
-  /* ---------- `[[` wikilink: sugerir notas (alias via `|`) ---------- */
-  const noteRefItems = async (query: string) => {
-    const pipe = query.indexOf('|');
-    const search = (pipe >= 0 ? query.slice(0, pipe) : query).trim().toLowerCase();
-    const alias = pipe >= 0 ? query.slice(pipe + 1).trim() : '';
-    return docs
-      .filter((d) => d.type === 'core/note' && d.id !== doc.id)
-      .filter((d) => !search || d.title.toLowerCase().includes(search))
-      .slice(0, 10)
-      .map((d) => ({
-        title: d.title || 'Sem título',
-        subtext: alias ? `exibido como “${alias}”` : 'Referência de nota',
-        icon: <FileText size={18} />,
-        onItemClick: () => {
-          editor.insertInlineContent([{ type: 'noteRef', props: { docId: d.id, label: alias } }] as never);
-        },
-      }));
-  };
+  /* ---------- slash menu + `[[` wikilink (shared note schema) ---------- */
+  const slashItems = createSlashItems(editor, setNotePicker);
+  const noteRefItems = createNoteRefItems(editor, docs, doc.id);
 
   /* ---------- drop de documentos do Explorer (tabelas viram bloco) ---------- */
   // react-dnd's HTML5 backend force-sets dropEffect='none' outside its own drop
@@ -275,7 +178,7 @@ export function NoteEditor({
 
   useEffect(() => {
     setTitle(doc.title);
-  }, [doc.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [doc.title]);
 
   /* ---------- live reload when the AI edits this note ---------- */
   useEffect(() => {

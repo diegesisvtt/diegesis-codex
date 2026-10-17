@@ -34,6 +34,7 @@ const appEvents = {
   'playerview:clear': v.undefined(),
   'playerview:status': v.object({ open: v.boolean() }),
   'hexcrawl:camera': v.object({ docId: v.string(), x: v.number(), y: v.number(), zoom: v.number() }),
+  'dungeon:camera': v.object({ docId: v.string(), x: v.number(), y: v.number(), zoom: v.number() }),
   'roller:rolled': v.object({
     tableTitle: v.string(),
     steps: v.array(

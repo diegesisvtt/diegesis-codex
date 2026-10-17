@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import type { DocNode, PlayerViewState } from '@shared/types';
 import { PlayerNoteView } from './PlayerNoteView';
 import { PlayerMapView } from './PlayerMapView';
+import { PlayerDungeonView } from './PlayerDungeonView';
 import { PlayerImageView } from './PlayerImageView';
 import './player.css';
 
@@ -44,8 +45,8 @@ export default function PlayerApp() {
   // load + live-reload the referenced document. Depends on primitives (not
   // the state object) so viewport-only pushes don't re-fetch the realm.
   // Image states carry their own payload — no document fetch needed.
-  const realmId = state.kind === 'note' || state.kind === 'map' ? state.realmId : null;
-  const docId = state.kind === 'note' || state.kind === 'map' ? state.docId : null;
+  const realmId = state.kind === 'note' || state.kind === 'map' || state.kind === 'dungeon' ? state.realmId : null;
+  const docId = state.kind === 'note' || state.kind === 'map' || state.kind === 'dungeon' ? state.docId : null;
   useEffect(() => {
     if (!realmId || !docId) {
       setDoc(null);
@@ -80,6 +81,10 @@ export default function PlayerApp() {
         />
       )}
       {state.kind === 'map' && doc && <PlayerMapView content={doc.content} viewport={state.viewport} />}
+      {state.kind === 'dungeon' && doc && (
+        // key por doc: trocar de dungeon recria o canvas (world size/grid mudam)
+        <PlayerDungeonView key={doc.id} content={doc.content} viewport={state.viewport} />
+      )}
       {state.kind === 'image' && <PlayerImageView src={state.src} name={state.name} />}
       {(state.kind === 'none' || (state.kind !== 'image' && !doc)) && <IdleScreen />}
     </div>

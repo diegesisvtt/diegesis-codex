@@ -40,6 +40,7 @@ export type DocumentType =
   | 'core/folder'
   | 'core/pdf'
   | 'hexcrawl/map'
+  | 'diegesis/dungeon'
   | 'diegesis/timeline'
   | 'diegesis/table'
   | 'diegesis/sheet';
@@ -434,6 +435,7 @@ export type PlayerViewState =
   | { kind: 'none' }
   | { kind: 'note'; realmId: string; docId: string }
   | { kind: 'map'; realmId: string; docId: string; viewport?: MapViewport | null }
+  | { kind: 'dungeon'; realmId: string; docId: string; viewport?: MapViewport | null }
   /** an image attached to a note or whiteboard, shown full-screen */
   | { kind: 'image'; realmId: string; docId: string; src: string; name?: string };
 
@@ -506,6 +508,12 @@ export interface DiegesisCodexApi {
     /** page thumbnail disk cache (base64 JPEG); null when not cached */
     readThumb(docId: string, page: number): Promise<string | null>;
     writeThumb(docId: string, page: number, base64: string): Promise<void>;
+    /** reads the raw stored PDF bytes (used to enumerate/fill AcroForm fields) */
+    readBytes(docId: string): Promise<Uint8Array>;
+    /** overwrites the stored PDF file with the given bytes (in-place form save) */
+    saveBytes(docId: string, bytes: Uint8Array): Promise<void>;
+    /** opens a save dialog and writes the given bytes (filled copy export) */
+    exportBytes(bytes: Uint8Array, defaultName: string): Promise<RealmTransferResult>;
   };
   audio: {
     /** opens a file dialog and copies the chosen audio into app storage */

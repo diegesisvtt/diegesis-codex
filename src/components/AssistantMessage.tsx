@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/ariakit';
 import { pt } from '@blocknote/core/locales';
-import { BookOpen, FileText, History, Map, Presentation, Table, UserSquare } from 'lucide-react';
+import { BookOpen, Castle, FileText, History, Map, Presentation, Table, UserSquare } from 'lucide-react';
 import type { RetrievedChunk } from '@shared/types';
 
 const SOURCE_URL = 'https://diegesis.source/';
@@ -142,6 +142,8 @@ export function AssistantMessage({
               <Presentation size={12} className="shrink-0 text-board" />
             ) : tipSource.type === 'hexcrawl/map' ? (
               <Map size={12} className="shrink-0 text-map" />
+            ) : tipSource.type === 'diegesis/dungeon' ? (
+              <Castle size={12} className="shrink-0 text-dungeon" />
             ) : tipSource.type === 'diegesis/timeline' ? (
               <History size={12} className="shrink-0 text-timeline" />
             ) : tipSource.type === 'diegesis/table' ? (
@@ -163,7 +165,9 @@ export function AssistantMessage({
                     ? 'Quadro branco'
                     : tipSource.type === 'hexcrawl/map'
                       ? 'Mapa hex'
-                      : tipSource.type === 'diegesis/timeline'
+                      : tipSource.type === 'diegesis/dungeon'
+                        ? 'Dungeon'
+                        : tipSource.type === 'diegesis/timeline'
                         ? 'Timeline'
                         : tipSource.type === 'diegesis/table'
                           ? 'Tabela'

@@ -7,7 +7,7 @@ import type { PluginContext } from '../../api/types';
 import type { MapViewport, PlayerViewState } from '@shared/types';
 
 export type ShownDoc =
-  | { kind: 'note' | 'map'; docId: string; realmId: string }
+  | { kind: 'note' | 'map' | 'dungeon'; docId: string; realmId: string }
   | { kind: 'image'; docId: string; realmId: string; src: string; name: string };
 
 export interface PlayerViewSnapshot {
@@ -52,6 +52,10 @@ export class PlayerViewController {
     events.on('hexcrawl:camera', ({ docId, x, y, zoom }) => {
       this.gmCamera.set(docId, { x, y, zoom });
       if (this.mirrorViewport && this.shown?.kind === 'map' && this.shown.docId === docId) this.push();
+    });
+    events.on('dungeon:camera', ({ docId, x, y, zoom }) => {
+      this.gmCamera.set(docId, { x, y, zoom });
+      if (this.mirrorViewport && this.shown?.kind === 'dungeon' && this.shown.docId === docId) this.push();
     });
     // the shown document belongs to a realm — drop it when the realm changes
     events.on('realm:changed', ({ realmId }) => {
@@ -117,6 +121,18 @@ export class PlayerViewController {
     const realmId = this.ctx.app.activeRealmId;
     if (!realmId) return;
     this.shown = { kind: 'map', docId, realmId };
+    this.manualViewport = null;
+    this.persistShown();
+    this.push();
+    this.notify();
+  }
+
+  showDungeon(docId: string): void {
+    const realmId = this.ctx.app.activeRealmId;
+    if (!realmId) return;
+    this.shown = { kind: 'dungeon', docId, realmId };
+    this.manualViewport = null;
+    this.persistShown();
     this.push();
     this.notify();
   }
@@ -133,7 +149,7 @@ export class PlayerViewController {
 
   setViewport(vp: MapViewport): void {
     this.manualViewport = vp;
-    if (this.shown?.kind === 'map') this.push();
+    if (this.shown?.kind === 'map' || this.shown?.kind === 'dungeon') this.push();
   }
 
   clear(): void {
@@ -151,7 +167,7 @@ export class PlayerViewController {
     if (mirror === this.mirrorViewport) return;
     this.mirrorViewport = mirror;
     this.ctx.settings.set(SETTINGS_MIRROR, mirror);
-    if (this.shown?.kind === 'map') this.push();
+    if (this.shown?.kind === 'map' || this.shown?.kind === 'dungeon') this.push();
     this.notify();
   }
 
@@ -175,7 +191,7 @@ export class PlayerViewController {
     } else {
       const viewport =
         this.manualViewport ?? (this.mirrorViewport ? (this.gmCamera.get(this.shown.docId) ?? null) : null);
-      state = { kind: 'map', realmId: this.shown.realmId, docId: this.shown.docId, viewport };
+      state = { kind: this.shown.kind, realmId: this.shown.realmId, docId: this.shown.docId, viewport };
     }
     void window.diegesis.playerView.send(state);
   }

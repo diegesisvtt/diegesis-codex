@@ -7,6 +7,7 @@ import { aiChatPlugin } from './aiChatPlugin';
 import { audioPlugin } from './audioPlugin';
 import { commandPalettePlugin } from './commandPalettePlugin';
 import { hexcrawlPlugin } from './hexcrawlPlugin';
+import { dungeonPlugin } from './dungeonPlugin';
 import { timelinePlugin } from './timelinePlugin';
 import { tablePlugin } from './tablePlugin';
 import { rollerPlugin } from './rollerPlugin';
@@ -27,6 +28,7 @@ export const builtinPlugins: Plugin[] = [
   audioPlugin,
   commandPalettePlugin,
   hexcrawlPlugin,
+  dungeonPlugin,
   timelinePlugin,
   tablePlugin,
   rollerPlugin,

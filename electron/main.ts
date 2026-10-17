@@ -33,10 +33,15 @@ diceAssets.registerDiceAssetsScheme();
 /** in-flight chat streams, keyed by renderer-provided chatId */
 const activeChats = new Map<string, AbortController>();
 
-/** Notifies every window that documents in a realm changed (live sync). */
-function broadcastDocsChanged(realmId: string | null): void {
+/** Notifies every window that documents in a realm changed (live sync).
+ *  `exceptSender` pula a janela que originou a escrita — ela já tem estado
+ *  otimista; o eco regrediria o doc sob edits em andamento (debounce). */
+function broadcastDocsChanged(realmId: string | null, exceptSender?: number): void {
   if (!realmId) return;
-  for (const win of BrowserWindow.getAllWindows()) win.webContents.send('docs:changed', realmId);
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (exceptSender != null && win.webContents.id === exceptSender) continue;
+    win.webContents.send('docs:changed', realmId);
+  }
 }
 
 /** Deletes audio files only when no surviving document references them —
@@ -77,19 +82,19 @@ function registerIpc(): void {
   ipcMain.handle('realms:import', () => realmTransfer.importRealm());
 
   ipcMain.handle('docs:list', (_e, realmId: string) => db.listDocs(realmId));
-  ipcMain.handle('docs:create', (_e, input: DocInput) => {
+  ipcMain.handle('docs:create', (e, input: DocInput) => {
     const doc = db.createDoc(input);
-    broadcastDocsChanged(doc.realmId);
+    broadcastDocsChanged(doc.realmId, e.sender.id);
     sync.notifyDocsChanged(doc.realmId);
     return doc;
   });
-  ipcMain.handle('docs:update', (_e, id: string, changes: DocChanges) => {
+  ipcMain.handle('docs:update', (e, id: string, changes: DocChanges) => {
     db.updateDoc(id, changes);
     const realmId = db.getDocRealmId(id);
-    broadcastDocsChanged(realmId);
+    broadcastDocsChanged(realmId, e.sender.id);
     sync.notifyDocsChanged(realmId);
   });
-  ipcMain.handle('docs:delete', (_e, id: string) => {
+  ipcMain.handle('docs:delete', (e, id: string) => {
     const realmId = db.getDocRealmId(id);
     const docs = db.listSubtreeDocs(id);
     const pdfIds = docs.filter((d) => d.type === 'core/pdf');
@@ -100,12 +105,12 @@ function registerIpc(): void {
     for (const p of pdfIds) pdf.deletePdfFile(p.id);
     deleteUnreferencedAudio(audioFiles);
     deleteUnreferencedImages(imageFiles);
-    broadcastDocsChanged(realmId);
+    broadcastDocsChanged(realmId, e.sender.id);
   });
-  ipcMain.handle('docs:move', (_e, id: string, parentId: string | null, position: number) => {
+  ipcMain.handle('docs:move', (e, id: string, parentId: string | null, position: number) => {
     db.moveDoc(id, parentId, position);
     const realmId = db.getDocRealmId(id);
-    broadcastDocsChanged(realmId);
+    broadcastDocsChanged(realmId, e.sender.id);
     sync.notifyDocsChanged(realmId);
   });
   ipcMain.handle('docs:search', (_e, realmId: string, query: string) => db.searchDocs(realmId, query));
@@ -118,6 +123,12 @@ function registerIpc(): void {
   });
   ipcMain.handle('pdf:thumb:read', (_e, docId: string, page: number) => pdf.readThumb(docId, page));
   ipcMain.handle('pdf:thumb:write', (_e, docId: string, page: number, base64: string) => pdf.writeThumb(docId, page, base64));
+  ipcMain.handle('pdf:readBytes', (_e, docId: string) => pdf.readPdfBytes(docId));
+  ipcMain.handle('pdf:saveBytes', async (_e, docId: string, bytes: Uint8Array) => {
+    await pdf.savePdfBytes(docId, bytes);
+    sync.notifyAllRealms();
+  });
+  ipcMain.handle('pdf:exportBytes', (_e, bytes: Uint8Array, defaultName: string) => pdf.exportPdfBytes(bytes, defaultName));
 
   ipcMain.handle('audio:import', () => audio.importAudio());
   ipcMain.handle('audio:save', async (_e, name: string, data: Uint8Array) => {
@@ -281,9 +292,9 @@ function isValidPlayerViewState(s: unknown): s is PlayerViewState {
   if (!s || typeof s !== 'object') return false;
   const state = s as Record<string, unknown>;
   if (state.kind === 'none') return true;
-  if (state.kind !== 'note' && state.kind !== 'map' && state.kind !== 'image') return false;
+  if (state.kind !== 'note' && state.kind !== 'map' && state.kind !== 'dungeon' && state.kind !== 'image') return false;
   if (typeof state.realmId !== 'string' || typeof state.docId !== 'string') return false;
-  if (state.kind === 'map' && state.viewport != null) {
+  if ((state.kind === 'map' || state.kind === 'dungeon') && state.viewport != null) {
     const v = state.viewport as Record<string, unknown>;
     if (!v || typeof v !== 'object') return false;
     if (!Number.isFinite(v.x) || !Number.isFinite(v.y) || !Number.isFinite(v.zoom)) return false;

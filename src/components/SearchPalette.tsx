@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, useAnimationControls, useReducedMotion } from 'framer-motion';
-import { File, LayoutGrid, Search, Sparkles, BookOpen, Map, History, Table, UserSquare } from 'lucide-react';
+import { File, LayoutGrid, Search, Sparkles, BookOpen, Map, Castle, History, Table, UserSquare } from 'lucide-react';
 import type { SearchResult, SemanticSearchResult } from '@shared/types';
 import { useStore } from '../state/store';
 
@@ -290,7 +290,9 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose(): voi
                     ? BookOpen
                     : r.type === 'hexcrawl/map'
                       ? Map
-                      : r.type === 'diegesis/timeline'
+                      : r.type === 'diegesis/dungeon'
+                        ? Castle
+                        : r.type === 'diegesis/timeline'
                         ? History
                         : r.type === 'diegesis/table'
                           ? Table
@@ -304,7 +306,9 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose(): voi
                     ? 'text-pdf'
                     : r.type === 'hexcrawl/map'
                       ? 'text-map'
-                      : r.type === 'diegesis/timeline'
+                      : r.type === 'diegesis/dungeon'
+                        ? 'text-dungeon'
+                        : r.type === 'diegesis/timeline'
                         ? 'text-timeline'
                         : r.type === 'diegesis/table'
                           ? 'text-table'

@@ -12,7 +12,7 @@ import type { PlayerViewController } from './controller';
 import { extractAttachedImages, type AttachedImage } from './attachedImages';
 
 /** doc types the player window knows how to render */
-const DISPLAYABLE = new Set(['core/note', 'hexcrawl/map']);
+const DISPLAYABLE = new Set(['core/note', 'hexcrawl/map', 'diegesis/dungeon']);
 /** doc types that can hold attached images */
 const IMAGE_HOLDERS = new Set(['core/note', 'core/whiteboard']);
 
@@ -22,17 +22,23 @@ export function PlayerViewControlPanel({ controller }: { controller: PlayerViewC
   const docTypes = useDocTypes();
   const [query, setQuery] = useState('');
 
-  // map display only makes sense while the hexcrawl plugin is active
+  // map display only makes sense while the map plugins are active
   const plugins = usePlugins();
   const hexcrawlActive = plugins.find((p) => p.manifest.id === 'diegesis/hexcrawl')?.active ?? false;
+  const dungeonActive = plugins.find((p) => p.manifest.id === 'diegesis/dungeon')?.active ?? false;
 
   const displayable = useMemo(() => {
     const q = query.trim().toLowerCase();
     return docs
-      .filter((d) => DISPLAYABLE.has(d.type) && (d.type !== 'hexcrawl/map' || hexcrawlActive))
+      .filter(
+        (d) =>
+          DISPLAYABLE.has(d.type) &&
+          (d.type !== 'hexcrawl/map' || hexcrawlActive) &&
+          (d.type !== 'diegesis/dungeon' || dungeonActive)
+      )
       .filter((d) => !q || d.title.toLowerCase().includes(q))
       .sort((a, b) => a.title.localeCompare(b.title));
-  }, [docs, query, hexcrawlActive]);
+  }, [docs, query, hexcrawlActive, dungeonActive]);
 
   const attachedImages = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -47,6 +53,7 @@ export function PlayerViewControlPanel({ controller }: { controller: PlayerViewC
 
   const show = (doc: DocNode) => {
     if (doc.type === 'hexcrawl/map') controller.showMap(doc.id);
+    else if (doc.type === 'diegesis/dungeon') controller.showDungeon(doc.id);
     else controller.showNote(doc.id);
   };
 
@@ -159,7 +166,7 @@ export function PlayerViewControlPanel({ controller }: { controller: PlayerViewC
       </div>
 
       {/* viewport mirroring (maps) */}
-      {hexcrawlActive && (
+      {(hexcrawlActive || dungeonActive) && (
         <div className="px-3 pb-3 shrink-0">
           <label className="flex items-center gap-2 text-ink-2 cursor-pointer select-none">
             <input
