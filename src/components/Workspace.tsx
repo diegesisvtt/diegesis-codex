@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Layout, Model, TabNode, Actions, DockLocation, IJsonModel, IJsonTabNode } from 'flexlayout-react';
-import { BookOpen } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Layout, Model, TabNode, TabSetNode, Actions, DockLocation, IJsonModel, IJsonTabNode } from 'flexlayout-react';
+import { BookOpen, Columns, Download, LocateFixed, PanelLeftClose, PanelRightClose, X, XCircle } from 'lucide-react';
 import { useStore, type PanelKind } from '../state/store';
 import { usePluginManager, useViews, type ViewContribution } from '../plugins';
 import { DocumentContainer } from './DocumentContainer';
+import { ContextMenu, type CtxMenuEntry } from './ContextMenu';
 
 const MAIN_TABSET_ID = 'main-tabset';
 const WELCOME_TAB_ID = '__welcome__';
+
+/** Duração da micro-animação de fechamento de aba (0 quando reduzido movimento). */
+const TAB_CLOSE_MS =
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 140;
 
 const PANEL_TABS: Partial<Record<PanelKind, { id: string; name: string }>> = {
   settings: { id: '__settings__', name: 'Configurações' },
@@ -157,12 +163,13 @@ function Welcome() {
 }
 
 export function Workspace() {
-  const { docs, uiState, saveUiState, registerOpenDocument, registerOnDocumentDeleted, registerOpenPanel, registerOpenView, setAiChatOpen } = useStore();
+  const { docs, uiState, saveUiState, registerOpenDocument, registerOnDocumentDeleted, registerOpenPanel, registerOpenView, setAiChatOpen, exportDocument, revealDocument } = useStore();
   const manager = usePluginManager();
   const views = useViews();
   const layoutRef = useRef<Layout>(null);
   const docsRef = useRef(docs);
   docsRef.current = docs;
+  const [tabMenu, setTabMenu] = useState<{ node: TabNode | TabSetNode; x: number; y: number } | null>(null);
 
   const model = useMemo(() => {
     const validIds = new Set(docs.map((d) => d.id));
@@ -395,6 +402,86 @@ export function Workspace() {
     [manager]
   );
 
+  // Fecha uma aba com micro-animação: marca a aba com a classe `tab-closing`
+  // (que dispara o keyframe no CSS) e só então a remove do modelo.
+  const animateClose = useCallback(
+    (id: string) => {
+      if (TAB_CLOSE_MS <= 0 || !model.getNodeById(id)) {
+        model.doAction(Actions.deleteTab(id));
+        return;
+      }
+      model.doAction(Actions.updateNodeAttributes(id, { className: 'tab-closing' }));
+      window.setTimeout(() => {
+        if (model.getNodeById(id)) model.doAction(Actions.deleteTab(id));
+      }, TAB_CLOSE_MS);
+    },
+    [model]
+  );
+
+  // Right-click context menu for document tabs (and the empty tab strip).
+  // Close actions are scoped to the tab's own tabset; "à esquerda/direita"
+  // follow the tab order within that strip. Non-closable tabs (welcome) are
+  // skipped so bulk close never touches them.
+  const tabMenuEntries = useMemo<CtxMenuEntry[]>(() => {
+    if (!tabMenu) return [];
+    const { node } = tabMenu;
+    const closeIds = (ids: string[]) => {
+      for (const id of ids) animateClose(id);
+    };
+
+    if (node.getType() === TabSetNode.TYPE) {
+      const tabset = node as TabSetNode;
+      const closable = (tabset.getChildren() as TabNode[]).filter((t) => t.isEnableClose());
+      return [
+        {
+          icon: Columns,
+          label: 'Fechar todas as abas',
+          disabled: closable.length === 0,
+          onClick: () => closeIds(closable.map((t) => t.getId())),
+        },
+      ];
+    }
+
+    const tab = node as TabNode;
+    const parent = tab.getParent() as TabSetNode | undefined;
+    const siblings = (parent?.getChildren() ?? []) as TabNode[];
+    const idx = siblings.findIndex((t) => t.getId() === tab.getId());
+    const closable = (t: TabNode) => t.isEnableClose();
+    const left = siblings.slice(0, idx).filter(closable);
+    const right = siblings.slice(idx + 1).filter(closable);
+    const others = siblings.filter((t) => t.getId() !== tab.getId() && t.isEnableClose());
+    const all = siblings.filter(closable);
+    const isDoc = tab.getComponent() === 'document';
+    const docId = isDoc ? (tab.getConfig()?.docId as string | undefined) : undefined;
+
+    const entries: CtxMenuEntry[] = [
+      { icon: X, label: 'Fechar', disabled: !tab.isEnableClose(), onClick: () => closeIds([tab.getId()]) },
+      'divider',
+      { icon: XCircle, label: 'Fechar outras abas', disabled: others.length === 0, onClick: () => closeIds(others.map((t) => t.getId())) },
+      { icon: PanelLeftClose, label: 'Fechar abas à esquerda', disabled: left.length === 0, onClick: () => closeIds(left.map((t) => t.getId())) },
+      { icon: PanelRightClose, label: 'Fechar abas à direita', disabled: right.length === 0, onClick: () => closeIds(right.map((t) => t.getId())) },
+      'divider',
+      { icon: Columns, label: 'Fechar tudo', disabled: all.length === 0, onClick: () => closeIds(all.map((t) => t.getId())) },
+    ];
+
+    if (isDoc && docId) {
+      entries.push(
+        'divider',
+        { icon: LocateFixed, label: 'Revelar no Explorer', onClick: () => revealDocument(docId) },
+        {
+          icon: Download,
+          label: 'Exportar documento',
+          onClick: async () => {
+            const res = await exportDocument(docId);
+            if (!res.ok && !res.canceled) window.alert(res.error ?? 'Falha ao exportar o documento.');
+          },
+        }
+      );
+    }
+
+    return entries;
+  }, [tabMenu, animateClose, revealDocument, exportDocument]);
+
   return (
     <div className="relative flex-1 h-full min-w-0">
       <Layout
@@ -405,8 +492,37 @@ export function Workspace() {
           ensureWelcomeTab(m);
           saveUiState({ layout: m.toJson() });
         }}
+        onContextMenu={(node, event) => {
+          event.preventDefault();
+          // The tab button's own contextmenu bubbles up to the tab strip, which
+          // also fires onContextMenu (with the TabSetNode). Stop it here so a
+          // right-click on a tab doesn't get overwritten by the strip handler.
+          event.stopPropagation();
+          const type = node.getType();
+          if (type === TabNode.TYPE) {
+            // ignore border tabs (their parent is a BorderNode, not a TabSetNode)
+            if (node.getParent()?.getType() !== TabSetNode.TYPE) return;
+            setTabMenu({ node: node as TabNode, x: event.clientX, y: event.clientY });
+          } else if (type === TabSetNode.TYPE) {
+            setTabMenu({ node: node as TabSetNode, x: event.clientX, y: event.clientY });
+          }
+        }}
+        onAction={(action) => {
+          // Animate the built-in close button (X) on each tab: cancel the
+          // immediate delete and route it through the animated close instead.
+          if (action.type === Actions.DELETE_TAB) {
+            animateClose(action.data.node);
+            return undefined;
+          }
+          return action;
+        }}
         realtimeResize={true}
       />
+      {tabMenu &&
+        createPortal(
+          <ContextMenu x={tabMenu.x} y={tabMenu.y} entries={tabMenuEntries} onClose={() => setTabMenu(null)} />,
+          document.body
+        )}
     </div>
   );
 }

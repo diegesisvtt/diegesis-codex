@@ -183,7 +183,7 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
       }}
       onDoubleClick={() => {
         if (bookmark || pin) return; // single click already navigated
-        if (data.docType !== 'core/folder') openDocument(data.id);
+        node.edit();
       }}
       onContextMenu={(e) => {
         e.preventDefault();
@@ -232,28 +232,6 @@ function Node({ node, style, dragHandle }: NodeRendererProps<TreeData>) {
           {bookmark && <span className="ml-1.5 text-[10px] text-ink-3">p.{bookmark.page}</span>}
         </span>
       )}
-      <span className="opacity-0 group-hover:opacity-100 flex items-center shrink-0 transition-opacity">
-        <button
-          title="Renomear"
-          onClick={(e) => {
-            e.stopPropagation();
-            node.edit();
-          }}
-          className="p-1 text-ink-3 hover:text-ink-1 hover:bg-active rounded"
-        >
-          <PenLine size={12} />
-        </button>
-        <button
-          title="Excluir"
-          onClick={(e) => {
-            e.stopPropagation();
-            remove();
-          }}
-          className="p-1 text-ink-3 hover:text-danger hover:bg-active rounded"
-        >
-          <Trash2 size={12} />
-        </button>
-      </span>
       {menuPos &&
         // portal: as linhas da árvore usam transform, o que quebraria o
         // position:fixed do menu (ficaria relativo à linha)
@@ -354,7 +332,7 @@ function NewDocPopover({
 }
 
 export function Explorer() {
-  const { docs, createDocument, importPdf, updateDocument, moveDocument, deleteDocument, openDocument, focusPdf } = useStore();
+  const { docs, createDocument, importPdf, updateDocument, moveDocument, deleteDocument, openDocument, focusPdf, explorerReveal, clearRevealDocument } = useStore();
   const treeRef = useRef<TreeApi<TreeData> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const newDocBtnRef = useRef<HTMLButtonElement>(null);
@@ -396,6 +374,18 @@ export function Explorer() {
     ro.observe(containerRef.current);
     return () => ro.disconnect();
   }, []);
+
+  // Reveal a document in the tree (requested by the tab context menu): expand
+  // ancestor folders, scroll to it and select it. select() opens parents and
+  // waits for the row to become visible before scrolling, so no extra plumbing
+  // is needed here.
+  useEffect(() => {
+    if (!explorerReveal) return;
+    const tree = treeRef.current;
+    clearRevealDocument();
+    if (!tree) return;
+    tree.select(explorerReveal, { align: 'center', focus: false });
+  }, [explorerReveal, clearRevealDocument]);
 
   const selectedFolderId = (): string | null => {
     const tree = treeRef.current;

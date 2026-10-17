@@ -29,6 +29,9 @@ interface StoreState {
   pdfFocus: PdfFocus | null;
   /** pending Settings section to pre-select (deep-link), consumed by the SettingsPanel */
   settingsSection: string | null;
+  /** pending document to reveal in the Explorer (set by the tab context menu,
+   *  consumed by the Explorer tree — consumable, one-shot) */
+  explorerReveal: string | null;
 }
 
 interface StoreActions {
@@ -83,6 +86,9 @@ interface StoreActions {
   /** fired when a document's title/content changed outside the renderer (AI tools);
    *  not fired for docs with a pending local save (user is typing) */
   subscribeExternalDocChange(fn: (doc: DocNode) => void): () => void;
+  /** ask the Explorer to scroll to and select a document (consumable, one-shot) */
+  revealDocument(docId: string): void;
+  clearRevealDocument(): void;
 }
 
 const StoreContext = createContext<(StoreState & StoreActions) | null>(null);
@@ -119,6 +125,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     rightPanelView: null,
     pdfFocus: null,
     settingsSection: null,
+    explorerReveal: null,
   });
 
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -144,7 +151,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       bootProgress({ label: 'Carregando documentos', detail: activeRealm?.name ?? 'Preparando workspace' });
       const docs = activeRealmId ? await window.diegesis.docs.listByRealm(activeRealmId) : [];
       bootStep();
-      setState({ ready: true, realms, activeRealmId, docs, uiState: ui ?? {}, aiDraft: null, rightPanelView: null, pdfFocus: null, settingsSection: null });
+      setState({ ready: true, realms, activeRealmId, docs, uiState: ui ?? {}, aiDraft: null, rightPanelView: null, pdfFocus: null, settingsSection: null, explorerReveal: null });
     })();
   }, []);
 
@@ -397,6 +404,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const clearPdfFocus = useCallback(() => {
     setState((s) => (s.pdfFocus ? { ...s, pdfFocus: null } : s));
   }, []);
+  const revealDocument = useCallback((docId: string) => {
+    setState((s) => ({ ...s, explorerReveal: docId }));
+  }, []);
+  const clearRevealDocument = useCallback(() => {
+    setState((s) => (s.explorerReveal ? { ...s, explorerReveal: null } : s));
+  }, []);
   const subscribeExternalDocChange = useCallback((fn: (doc: DocNode) => void) => {
     externalDocListeners.current.add(fn);
     return () => externalDocListeners.current.delete(fn);
@@ -438,6 +451,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       focusPdf,
       clearPdfFocus,
       subscribeExternalDocChange,
+      revealDocument,
+      clearRevealDocument,
     }),
     [
       state,
@@ -469,6 +484,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       focusPdf,
       clearPdfFocus,
       subscribeExternalDocChange,
+      revealDocument,
+      clearRevealDocument,
     ]
   );
 
