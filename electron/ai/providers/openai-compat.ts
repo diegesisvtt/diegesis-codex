@@ -71,6 +71,7 @@ export function createOpenAICompatProvider(overrides: Partial<ProviderInfo> & { 
       { key: 'baseUrl', label: 'Base URL', type: 'text', placeholder: 'https://api.openai.com/v1', required: true },
       { key: 'apiKey', label: 'API Key', type: 'password', secret: true, placeholder: 'sk-…' },
       { key: 'chatModel', label: 'Modelo de chat', type: 'text', placeholder: 'gpt-4o-mini', required: true },
+      { key: 'contextSize', label: 'Contexto (tokens)', type: 'number', placeholder: '8192', default: '8192' },
     ],
     ...overrides,
   };

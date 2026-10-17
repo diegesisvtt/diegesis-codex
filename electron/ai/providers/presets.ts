@@ -10,6 +10,7 @@ export const ollamaProvider: LLMProvider = createOpenAICompatProvider({
   fields: [
     { key: 'baseUrl', label: 'Base URL', type: 'text', default: 'http://127.0.0.1:11434/v1', required: true },
     { key: 'chatModel', label: 'Modelo de chat', type: 'text', placeholder: 'llama3.1', required: true },
+    { key: 'contextSize', label: 'Contexto (tokens)', type: 'number', placeholder: '8192', default: '8192' },
   ],
 });
 
@@ -21,6 +22,7 @@ export const openaiProvider: LLMProvider = createOpenAICompatProvider({
     { key: 'baseUrl', label: 'Base URL', type: 'text', default: 'https://api.openai.com/v1', required: true },
     { key: 'apiKey', label: 'API Key', type: 'password', secret: true, placeholder: 'sk-…', required: true },
     { key: 'chatModel', label: 'Modelo de chat', type: 'text', default: 'gpt-4o-mini', required: true },
+    { key: 'contextSize', label: 'Contexto (tokens)', type: 'number', placeholder: '128000', default: '128000' },
   ],
 });
 
@@ -31,6 +33,7 @@ export const lmstudioProvider: LLMProvider = createOpenAICompatProvider({
   fields: [
     { key: 'baseUrl', label: 'Base URL', type: 'text', default: 'http://127.0.0.1:1234/v1', required: true },
     { key: 'chatModel', label: 'Modelo de chat', type: 'text', required: true },
+    { key: 'contextSize', label: 'Contexto (tokens)', type: 'number', placeholder: '8192', default: '8192' },
   ],
 });
 

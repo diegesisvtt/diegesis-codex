@@ -10,6 +10,7 @@ import { runWebSearch } from './websearch';
 import { markdownToBlocks } from '../../shared/blockContent';
 import type { DocNode } from '../../shared/types';
 import type { ToolCall, ToolSpec } from './providers/base';
+import { truncateText } from './budget';
 
 // ---------- tool definitions ----------
 
@@ -111,6 +112,8 @@ export const WEB_SEARCH_TOOL: ToolSpec = {
 
 const MAX_TITLE = 200;
 const MAX_CONTENT = 100_000;
+/** Cap on text returned by read_document, so a large PDF/note can't overflow context. */
+const READ_DOC_MAX_CHARS = 8000;
 
 function docInRealm(docId: string, realmId: string): DocNode | null {
   const doc = db.listDocs(realmId).find((d) => d.id === docId);
@@ -150,7 +153,9 @@ export async function executeTool(
                   ? 'pdf'
                   : d.type === 'hexcrawl/map'
                     ? 'hexmap'
-                    : d.type === 'diegesis/timeline'
+                    : d.type === 'diegesis/dungeon'
+                      ? 'dungeon'
+                      : d.type === 'diegesis/timeline'
                       ? 'timeline'
                       : d.type === 'diegesis/table'
                         ? 'table'
@@ -165,13 +170,14 @@ export async function executeTool(
       case 'read_document': {
         const doc = str('docId') && docInRealm(str('docId')!, realmId);
         if (!doc) return { result: JSON.stringify({ error: 'documento não encontrado neste universo' }), summary: 'Documento não encontrado', ok: false };
-        // PDFs: include the extracted page text, not just the annotation JSON
+        // PDFs: include the extracted page text, not just the annotation JSON.
+        // Cap the payload so a large PDF/note cannot overflow the model's context.
         const text =
           doc.type === 'core/pdf'
             ? (db.getDocForChunking(doc.id)?.text ?? '')
             : db.extractPlainText(doc.content);
         return {
-          result: JSON.stringify({ id: doc.id, title: doc.title, content: text }),
+          result: JSON.stringify({ id: doc.id, title: doc.title, content: truncateText(text, READ_DOC_MAX_CHARS) }),
           summary: `Leu "${doc.title}"`,
           ok: true,
         };

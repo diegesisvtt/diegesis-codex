@@ -7,6 +7,12 @@ import { flush } from './embedder';
 import { embedQuery } from './local-embedder';
 import { getProvider } from './providers/registry';
 import { executeTool, REALM_TOOLS, WEB_SEARCH_TOOL } from './tools';
+import {
+  CONTEXT_OVERFLOW_MESSAGE,
+  DEFAULT_CONTEXT_TOKENS,
+  fitToContext,
+  isContextOverflowError,
+} from './budget';
 import { routeGeneration } from './specialists/router';
 import { runGeneration } from './specialists/orchestrator';
 import type { ProviderMessage, ToolCall } from './providers/base';
@@ -25,6 +31,18 @@ const GENERATION_HINT =
 
 function looksLikeGeneration(text: string): boolean {
   return GENERATION_HINT.test(text);
+}
+
+/** Reads the provider's declared context window (tokens), with a safe fallback. */
+function contextTokens(config: Record<string, string>): number {
+  const n = Number(config.contextSize);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_CONTEXT_TOKENS;
+}
+
+/** Maps a transport error to a friendlier message when it is a context overflow. */
+function friendlyError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  return isContextOverflowError(msg) ? CONTEXT_OVERFLOW_MESSAGE : msg;
 }
 
 export async function retrieve(realmId: string, query: string, k = TOP_K): Promise<RetrievedChunk[]> {
@@ -192,6 +210,7 @@ export async function streamChat(req: AIChatRequest, cb: ChatCallbacks, signal?:
     }
 
     const tools = req.useWebSearch ? [...REALM_TOOLS, WEB_SEARCH_TOOL] : REALM_TOOLS;
+    const ctxTokens = contextTokens(cfg.config);
 
     const working: ProviderMessage[] = [
       { role: 'system', content: buildSystemPrompt(realmId, req.useContext ? sources : null, indexEmpty, !!req.useWebSearch) },
@@ -205,7 +224,8 @@ export async function streamChat(req: AIChatRequest, cb: ChatCallbacks, signal?:
       let turnText = '';
       let toolCalls: ToolCall[] | undefined;
 
-      for await (const chunk of provider.chat(cfg.config, { messages: working, tools, signal })) {
+      const messages = fitToContext(working, ctxTokens);
+      for await (const chunk of provider.chat(cfg.config, { messages, tools, signal })) {
         if (chunk.done) {
           toolCalls = chunk.toolCalls;
           break;
@@ -238,7 +258,7 @@ export async function streamChat(req: AIChatRequest, cb: ChatCallbacks, signal?:
       send('', true);
       return;
     }
-    send('', true, err instanceof Error ? err.message : String(err));
+    send('', true, friendlyError(err));
   }
 }
 
@@ -293,7 +313,8 @@ export async function streamInline(req: InlineAIRequest, cb: ChatCallbacks, sign
       ...req.messages.map((m) => ({ role: m.role, content: m.content })),
     ];
 
-    for await (const chunk of provider.chat(cfg.config, { messages: working, signal })) {
+    const messages = fitToContext(working, contextTokens(cfg.config));
+    for await (const chunk of provider.chat(cfg.config, { messages, signal })) {
       if (chunk.done) break;
       send(chunk.delta, false);
     }
@@ -303,6 +324,6 @@ export async function streamInline(req: InlineAIRequest, cb: ChatCallbacks, sign
       send('', true);
       return;
     }
-    send('', true, err instanceof Error ? err.message : String(err));
+    send('', true, friendlyError(err));
   }
 }
