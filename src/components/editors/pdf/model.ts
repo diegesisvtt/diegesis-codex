@@ -90,6 +90,9 @@ export interface FolderStyle {
 export type PdfPageFilter = 'normal' | 'invert' | 'sepia';
 export type PdfLayout = 'single' | 'spread';
 
+/** Value of an AcroForm field: text/dropdown(radio) → string, checkbox → boolean, multiselect → string[] */
+export type PdfFormValue = string | boolean | string[];
+
 export interface NavHistoryEntry {
   page: number;
   /** fractional offset of the page top within the scroll container */
@@ -122,7 +125,8 @@ export interface PdfDocContent {
   flyleaf: FlyleafRef[];
   /** folder docId -> appearance overrides */
   folderStyle: Record<string, FolderStyle>;
-  onboardingSeen?: boolean;
+  /** AcroForm field values keyed by fully-qualified field name */
+  forms: Record<string, PdfFormValue>;
 }
 
 export const PIN_TAG_COLORS: Record<NonNullable<PdfPinTag>, string> = {
@@ -174,6 +178,7 @@ export function defaultPdfContent(): PdfDocContent {
     bookmarks: [],
     flyleaf: [],
     folderStyle: {},
+    forms: {},
   };
 }
 
@@ -194,6 +199,7 @@ export function parsePdfContent(content: string | null): PdfDocContent {
       navHistory: Array.isArray(parsed.navHistory) ? parsed.navHistory : [],
       hlLabels: parsed.hlLabels ?? {},
       folderStyle: parsed.folderStyle ?? {},
+      forms: parsed.forms && typeof parsed.forms === 'object' ? parsed.forms : {},
     };
   } catch {
     return base;

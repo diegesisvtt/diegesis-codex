@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import { Readable } from 'node:stream';
 import * as db from './db';
 import { generateId } from './db';
-import type { DocNode } from '../shared/types';
+import type { DocNode, RealmTransferResult } from '../shared/types';
 
 export const PDF_SCHEME = 'diegesis-pdf';
 const MAX_PDF_SIZE = 300 * 1024 * 1024; // 300 MB
@@ -135,6 +135,69 @@ export async function writeThumb(docId: string, page: number, base64: string): P
   if (!file || typeof base64 !== 'string' || base64.length > 2_000_000) return;
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   await fs.promises.writeFile(file, Buffer.from(base64, 'base64'));
+}
+
+// ---------- editable (AcroForm) form support ----------
+// The renderer enumerates/fills fields with pdf-lib and sends raw bytes back
+// here to persist in-place or export a filled copy.
+
+function validPdfId(docId: string): boolean {
+  return /^[a-z0-9]+$/i.test(docId);
+}
+
+/** Returns the stored PDF file as bytes (for pdf-lib field enumeration). */
+export function readPdfBytes(docId: string): Buffer {
+  if (!validPdfId(docId)) throw new Error('ID de documento inválido.');
+  const file = pdfFilePath(docId);
+  if (!fs.existsSync(file)) throw new Error('Arquivo PDF não encontrado no armazenamento do app.');
+  return fs.readFileSync(file);
+}
+
+/** Overwrites the stored PDF file (in-place form save) after sanity checks. */
+export async function savePdfBytes(docId: string, bytes: Uint8Array): Promise<void> {
+  if (!validPdfId(docId)) throw new Error('ID de documento inválido.');
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) throw new Error('Dados inválidos.');
+  if (bytes.byteLength > MAX_PDF_SIZE) {
+    throw new Error(`Arquivo muito grande (${Math.ceil(bytes.byteLength / 1048576)} MB). Limite: 300 MB.`);
+  }
+  const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (buf.toString('latin1', 0, 5) !== '%PDF-') throw new Error('Os dados não formam um PDF válido.');
+  await fs.promises.writeFile(pdfFilePath(docId), buf);
+}
+
+function safeFileName(name: string): string {
+  const clean = name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim();
+  return clean || 'documento';
+}
+
+/** Opens a save dialog and writes the given (already-filled) PDF bytes. */
+export async function exportPdfBytes(bytes: Uint8Array, defaultName: string): Promise<RealmTransferResult> {
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
+    return { ok: false, error: 'Dados inválidos.' };
+  }
+  const win = BrowserWindow.getAllWindows()[0];
+  if (!win) return { ok: false, error: 'Janela principal não disponível.' };
+
+  let defaultDir = '';
+  try {
+    defaultDir = app.getPath('desktop');
+  } catch {
+    /* fall back to the OS default */
+  }
+  const base = safeFileName(defaultName).replace(/\.pdf$/i, '');
+  const picked = await dialog.showSaveDialog(win, {
+    title: 'Exportar PDF preenchido',
+    defaultPath: path.join(defaultDir, `${base}.pdf`),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }],
+  });
+  if (picked.canceled || !picked.filePath) return { ok: false, canceled: true };
+
+  try {
+    await fs.promises.writeFile(picked.filePath, Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+  } catch {
+    return { ok: false, error: 'Não foi possível gravar o arquivo.' };
+  }
+  return { ok: true, filePath: picked.filePath };
 }
 
 /** Registers the privileged scheme; must run before app 'ready'. */

@@ -1,5 +1,5 @@
 // pdf.js setup for the renderer (Vite bundles the worker via ?url).
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import { getDocument, GlobalWorkerOptions, AnnotationMode } from 'pdfjs-dist';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
@@ -70,7 +70,7 @@ export async function renderCoverThumb(pdf: PDFDocumentProxy): Promise<string | 
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
     const ctx = canvas.getContext('2d')!;
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    await page.render({ canvasContext: ctx, viewport, annotationMode: AnnotationMode.ENABLE_FORMS }).promise;
     const url = canvas.toDataURL('image/jpeg', 0.72);
     page.cleanup();
     return url;

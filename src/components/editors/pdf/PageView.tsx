@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { TextLayer } from 'pdfjs-dist';
+import { TextLayer, AnnotationMode } from 'pdfjs-dist';
 import type { PDFDocumentProxy } from './pdfjs';
 
 interface PageViewProps {
@@ -76,7 +76,9 @@ export function PageView({ pdf, pageNumber, scale, rotation, fallbackAspect, fil
         const ctx = canvas.getContext('2d')!;
         // HiDPI: render through a DPR transform instead of scaling the context
         const transform = dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined;
-        renderTask = page.render({ canvasContext: ctx, viewport, transform });
+        // Form field widgets (AcroForm) are rendered by our overlay, not the
+        // canvas — otherwise their appearance (boxes/values) would double up.
+        renderTask = page.render({ canvasContext: ctx, viewport, transform, annotationMode: AnnotationMode.ENABLE_FORMS });
         try {
           await renderTask.promise;
         } catch {

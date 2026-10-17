@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
+import { AnnotationMode } from 'pdfjs-dist';
 import type { PDFDocumentProxy } from './pdfjs';
 
 // Cache of small page renders per document, shared by hover previews.
@@ -53,7 +54,7 @@ export async function ensurePageThumb(docId: string, pdf: PDFDocumentProxy, page
   canvas.width = Math.ceil(viewport.width);
   canvas.height = Math.ceil(viewport.height);
   const ctx = canvas.getContext('2d')!;
-  await p.render({ canvasContext: ctx, viewport }).promise;
+  await p.render({ canvasContext: ctx, viewport, annotationMode: AnnotationMode.ENABLE_FORMS }).promise;
   const url = canvas.toDataURL('image/jpeg', 0.8);
   p.cleanup();
   // bound per-document cache (JPEG data URLs are not cheap)

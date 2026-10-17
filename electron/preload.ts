@@ -75,6 +75,9 @@ const api: DiegesisCodexApi = {
     saveText: (docId: string, pages: string[]) => ipcRenderer.invoke('pdf:saveText', docId, pages),
     readThumb: (docId: string, page: number) => ipcRenderer.invoke('pdf:thumb:read', docId, page),
     writeThumb: (docId: string, page: number, base64: string) => ipcRenderer.invoke('pdf:thumb:write', docId, page, base64),
+    readBytes: (docId: string) => ipcRenderer.invoke('pdf:readBytes', docId),
+    saveBytes: (docId: string, bytes: Uint8Array) => ipcRenderer.invoke('pdf:saveBytes', docId, bytes),
+    exportBytes: (bytes: Uint8Array, defaultName: string) => ipcRenderer.invoke('pdf:exportBytes', bytes, defaultName),
   },
   audio: {
     import: () => ipcRenderer.invoke('audio:import'),

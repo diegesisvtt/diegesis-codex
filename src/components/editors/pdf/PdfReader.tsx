@@ -17,12 +17,17 @@ import {
   Check,
   Bookmark,
   Table,
+  FileSignature,
+  Save,
+  Download,
 } from 'lucide-react';
 import { Layout, Model, Actions, DockLocation, type TabNode, type IJsonModel, type IJsonTabNode } from 'flexlayout-react';
 import type { DocNode } from '@shared/types';
 import { useStore } from '../../../state/store';
-import { parsePdfContent, type PdfDocContent, type PdfLayout, type PdfPageFilter, type PdfPinTag } from './model';
-import { loadPdf, extractPagesText, renderCoverThumb, type PDFDocumentProxy } from './pdfjs';
+import { parsePdfContent, type PdfDocContent, type PdfLayout, type PdfPageFilter, type PdfPinTag, type PdfFormValue } from './model';
+import { loadPdf, unloadPdf, extractPagesText, renderCoverThumb, type PDFDocumentProxy } from './pdfjs';
+import { loadFormFields, invalidateFormFields, fillPdf, type FormFieldDef } from './forms';
+import { FormLayer } from './FormLayer';
 import { createPdfSearcher, type PdfSearcher } from './search';
 import { PageView } from './PageView';
 import { OutlinePanel } from './OutlinePanel';
@@ -38,7 +43,6 @@ import { ensurePageThumb } from './Scry';
 import { usePdfAnnotations } from './useAnnotations';
 import { parseStatblock } from './rpg';
 import { serializeSheet, statblockToSheet } from '@shared/sheet';
-import { OnboardingModal } from './OnboardingModal';
 import { extractRegionText } from './tableCapture';
 import { createDefaultTable, createEmptyRow, serializeTable } from '@shared/table';
 
@@ -171,6 +175,7 @@ export function PdfReader({ doc }: { doc: DocNode }) {
     useStore();
 
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
+  const [pdfReloadKey, setPdfReloadKey] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [processing, setProcessing] = useState<string | null>(null);
 
@@ -204,6 +209,12 @@ export function PdfReader({ doc }: { doc: DocNode }) {
   const [capturing, setCapturing] = useState(false);
   const [capRect, setCapRect] = useState<{ page: number; x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
+
+  // ---- AcroForm (editable PDF) state ----
+  const [formFields, setFormFields] = useState<FormFieldDef[]>([]);
+  const [showForm, setShowForm] = useState(true);
+  const [formBusy, setFormBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const docsRef = useRef(docs);
   docsRef.current = docs;
@@ -342,6 +353,56 @@ export function PdfReader({ doc }: { doc: DocNode }) {
 
   const annotations = usePdfAnnotations(doc, contentRef, commit);
 
+  /** Writes a single form field value into the doc content JSON. */
+  const setFormValue = useCallback(
+    (name: string, value: PdfFormValue) => {
+      commit((c) => {
+        c.forms[name] = value;
+      });
+    },
+    [commit]
+  );
+
+  /** Fills the stored PDF with the current form values (in-place save). */
+  const saveForm = useCallback(async () => {
+    setFormBusy(true);
+    setFormError(null);
+    try {
+      const bytes = await window.diegesis.pdf.readBytes(doc.id);
+      const filled = await fillPdf(bytes, contentRef.current.forms);
+      await window.diegesis.pdf.saveBytes(doc.id, filled);
+      commit((c) => {
+        c.file.size = filled.byteLength;
+      });
+      // The stored file changed: drop the cached pdf.js doc + field defs and reload.
+      unloadPdf(doc.id);
+      invalidateFormFields(doc.id);
+      setPdf(null);
+      setFormFields([]);
+      setPdfReloadKey((k) => k + 1);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFormBusy(false);
+    }
+  }, [doc.id, commit]);
+
+  /** Exports a filled copy of the PDF to disk. */
+  const exportForm = useCallback(async () => {
+    setFormBusy(true);
+    setFormError(null);
+    try {
+      const bytes = await window.diegesis.pdf.readBytes(doc.id);
+      const filled = await fillPdf(bytes, contentRef.current.forms);
+      const res = await window.diegesis.pdf.exportBytes(filled, `${doc.title}-preenchido.pdf`);
+      if (!res.ok && res.error) setFormError(res.error);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFormBusy(false);
+    }
+  }, [doc.id, doc.title]);
+
   // ---- load the PDF (cached per docId; never destroyed on unmount — the
   // pdf.js worker is shared, and StrictMode double-mounts in dev) ----
   useEffect(() => {
@@ -357,7 +418,40 @@ export function PdfReader({ doc }: { doc: DocNode }) {
     return () => {
       cancelled = true;
     };
-  }, [doc.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc.id, pdfReloadKey]);
+
+  // ---- enumerate AcroForm fields (pdf-lib) when the document loads ----
+  useEffect(() => {
+    if (!pdf) return;
+    let cancelled = false;
+    loadFormFields(doc.id)
+      .then((fields) => {
+        if (cancelled) return;
+        setFormFields(fields);
+        // Seed pre-filled defaults into the overlay without overwriting values the
+        // user already entered (empty string/false/[] are treated as "no default").
+        const seeded: Record<string, PdfFormValue> = {};
+        for (const f of fields) {
+          const dv = f.defaultValue;
+          const empty = dv === undefined || dv === '' || dv === false || (Array.isArray(dv) && dv.length === 0);
+          if (!empty && contentRef.current.forms[f.name] === undefined) seeded[f.name] = dv as PdfFormValue;
+        }
+        if (Object.keys(seeded).length > 0) {
+          commit((c) => {
+            for (const [k, v] of Object.entries(seeded)) c.forms[k] = v;
+          });
+        }
+      })
+      .catch((err) => {
+        console.error('[pdf] falha ao ler campos do formulário', err);
+        if (!cancelled) setFormError(`Não foi possível ler os campos do formulário: ${err instanceof Error ? err.message : String(err)}`);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdf, doc.id]);
 
   // ---- first-import processing: page count, cover thumbnail, text extraction ----
   useEffect(() => {
@@ -611,8 +705,8 @@ export function PdfReader({ doc }: { doc: DocNode }) {
   const onPageContextMenu = (e: React.MouseEvent) => {
     const hit = fractionalFromEvent(e);
     if (!hit) return;
-    // don't override the menu on top of an existing pin
-    if ((e.target as HTMLElement).closest('[role="button"]')) return;
+    // don't override the menu on top of an existing pin or a form field
+    if ((e.target as HTMLElement).closest('[role="button"], .pdf-form-field')) return;
     e.preventDefault();
     setHlPopover(null);
     setCtxMenu({
@@ -649,8 +743,8 @@ export function PdfReader({ doc }: { doc: DocNode }) {
   const onPagePointerUp = (e: React.MouseEvent) => {
     if (onCapturePointerUp()) return;
     if (placing || linkingPinId) return;
-    // selections inside pin embeds/tooltips are editing, not highlighting
-    if ((e.target as HTMLElement).closest('.pdf-pin-embed, .pdf-pin-tooltip')) return;
+    // selections inside pin embeds/tooltips/form fields are editing, not highlighting
+    if ((e.target as HTMLElement).closest('.pdf-pin-embed, .pdf-pin-tooltip, .pdf-form-field')) return;
     const page = (e.target as HTMLElement).closest('[data-page]') as HTMLElement | null;
     if (!page) return;
     // slight delay so the selection is final
@@ -1113,6 +1207,24 @@ export function PdfReader({ doc }: { doc: DocNode }) {
         <Table size={16} className={capturing ? 'text-table' : undefined} />
       </ToolButton>
 
+      {formFields.length > 0 && (
+        <>
+          <ToolButton
+            title={showForm ? 'Ocultar campos do formulário' : 'Mostrar campos do formulário'}
+            active={showForm}
+            onClick={() => setShowForm((v) => !v)}
+          >
+            <FileSignature size={16} />
+          </ToolButton>
+          <ToolButton title="Salvar valores no PDF" disabled={formBusy} onClick={saveForm}>
+            {formBusy ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+          </ToolButton>
+          <ToolButton title="Exportar cópia preenchida" disabled={formBusy} onClick={exportForm}>
+            <Download size={16} />
+          </ToolButton>
+        </>
+      )}
+
       <ToolButton title={`Filtro de página: ${FILTER_LABELS[content.view.filter]} (Shift+I)`} onClick={cycleFilter}>
         <Contrast size={16} className={content.view.filter !== 'normal' ? 'text-accent-ink' : undefined} />
       </ToolButton>
@@ -1175,6 +1287,14 @@ export function PdfReader({ doc }: { doc: DocNode }) {
             <div className="sticky top-4 z-20 flex justify-center pointer-events-none">
               <div className="bg-elevated border border-danger/50 rounded-full px-4 py-1.5 text-[12px] text-danger shadow-lg">
                 {captureError}
+              </div>
+            </div>
+          )}
+
+          {formError && (
+            <div className="sticky top-4 z-20 flex justify-center pointer-events-none">
+              <div className="bg-elevated border border-danger/50 rounded-full px-4 py-1.5 text-[12px] text-danger shadow-lg">
+                {formError}
               </div>
             </div>
           )}
@@ -1271,6 +1391,13 @@ export function PdfReader({ doc }: { doc: DocNode }) {
                             pageNumber={p}
                             active={activePages.has(p)}
                             onJump={jumpTo}
+                          />
+                          <FormLayer
+                            fields={formFields.filter((f) => f.page === p)}
+                            values={content.forms}
+                            onChange={setFormValue}
+                            visible={showForm}
+                            scale={rowScale}
                           />
                         </PageView>
                       );
@@ -1382,15 +1509,6 @@ export function PdfReader({ doc }: { doc: DocNode }) {
           onClose={() => setHlPopover(null)}
         />
       )}
-      {!content.onboardingSeen && pdf && (
-        <OnboardingModal
-          onClose={() =>
-            commit((c) => {
-              c.onboardingSeen = true;
-            })
-          }
-        />
-      )}
     </div>
   );
 }
@@ -1399,18 +1517,21 @@ function ToolButton({
   title,
   active,
   onClick,
+  disabled,
   children,
 }: {
   title: string;
   active?: boolean;
   onClick: () => void;
+  disabled?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <button
       title={title}
       onClick={onClick}
-      className={`p-1.5 rounded transition-colors ${
+      disabled={disabled}
+      className={`p-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-default ${
         active ? 'bg-accent-soft text-accent-ink' : 'text-ink-2 hover:bg-hover hover:text-ink-1'
       }`}
     >
