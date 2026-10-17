@@ -54,6 +54,7 @@ export function TableCard({ tableDoc, onUnlink }: { tableDoc: DocNode; onUnlink?
   return (
     <InteractiveRollTable
       title={tableDoc.title || 'Sem título'}
+      description={table.description || undefined}
       formula={table.formula || undefined}
       rows={table.rows}
       ranges={ranges ?? undefined}
@@ -61,6 +62,7 @@ export function TableCard({ tableDoc, onUnlink }: { tableDoc: DocNode; onUnlink?
       steps={steps}
       onRoll={roll}
       onOpen={() => openDocument(tableDoc.id)}
+      showTitle={false}
       onUnlink={
         onUnlink
           ? () => {

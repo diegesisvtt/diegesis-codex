@@ -9,6 +9,7 @@ import {
   Link2,
   Plus,
   Trash2,
+  Wand2,
 } from 'lucide-react';
 import type { DocNode } from '@shared/types';
 import {
@@ -21,6 +22,7 @@ import {
   rollTotal,
   rowsFromText,
   serializeTable,
+  suggestFormula,
   type ChainStep,
   type InteractiveTable,
   type TableRow,
@@ -39,6 +41,8 @@ import { DocLinkPicker } from './DocLinkPicker';
 export function TableEditor({ doc }: { doc: DocNode }) {
   const { docs, updateDocument, openDocument } = useStore();
   const manager = usePluginManager();
+  /** título editável (o nome do documento) — as tabelas inline ocultam o título */
+  const [title, setTitle] = useState(doc.title);
   const [data, setDataState] = useState<InteractiveTable>(() => parseTable(doc.content));
   const dataRef = useRef(data);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -59,6 +63,16 @@ export function TableEditor({ doc }: { doc: DocNode }) {
     dirty.current = true;
     dataRef.current = next;
     setDataState(next);
+  };
+
+  /** mantém o título local sincronizado quando o documento muda (renome externo/IA) */
+  useEffect(() => {
+    setTitle(doc.title);
+  }, [doc.title]);
+
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTitle(e.target.value);
+    updateDocument(doc.id, { title: e.target.value });
   };
 
   // autosave com debounce + flush ao desmontar (mesmo padrão da timeline)
@@ -198,6 +212,12 @@ export function TableEditor({ doc }: { doc: DocNode }) {
     });
   };
 
+  /** define a fórmula a partir dos pesos (1dN, N = soma dos pesos) — estilo Foundry */
+  const suggestRoll = () => {
+    const f = suggestFormula(dataRef.current.rows);
+    if (f) commit({ ...dataRef.current, formula: f });
+  };
+
   // ---------- colar dados ----------
 
   const handlePaste = (e: React.ClipboardEvent) => {
@@ -240,6 +260,26 @@ export function TableEditor({ doc }: { doc: DocNode }) {
 
   return (
     <div className="h-full flex flex-col bg-app" onPaste={handlePaste}>
+      {/* título editável (nome do documento) */}
+      <div className="px-4 pt-4">
+        <input
+          type="text"
+          value={title}
+          onChange={handleTitleChange}
+          placeholder="Nova Tabela"
+          spellCheck={false}
+          className="w-full bg-transparent text-[28px] leading-[1.2] font-bold text-ink-1 placeholder-ink-3 outline-none tracking-tight"
+        />
+        <textarea
+          value={data.description}
+          onChange={(e) => commit({ ...dataRef.current, description: e.target.value })}
+          placeholder="Descrição da tabela…"
+          rows={2}
+          spellCheck={false}
+          className="mt-1 w-full bg-transparent text-[13px] text-ink-2 outline-none placeholder:text-ink-3 resize-y leading-relaxed"
+        />
+      </div>
+
       {/* barra de ferramentas */}
       <div className="flex items-center gap-1 px-3 py-1.5 flex-wrap">
         <div className="flex items-center gap-1.5 mr-1">
@@ -256,6 +296,15 @@ export function TableEditor({ doc }: { doc: DocNode }) {
             }`}
           />
         </div>
+        <button
+          type="button"
+          onClick={suggestRoll}
+          disabled={totalWeight <= 0}
+          title="Determinar rolagem pelos pesos (define 1dN)"
+          className="flex items-center gap-1 px-2 py-1 text-[12px] rounded text-ink-2 hover:bg-hover hover:text-ink-1 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink-2"
+        >
+          <Wand2 size={13} /> Auto
+        </button>
         <button
           type="button"
           onClick={roll}
