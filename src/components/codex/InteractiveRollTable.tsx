@@ -3,8 +3,8 @@
 // faixas, barras de peso e destaque da linha sorteada. Puro — a rolagem em si
 // é do host.
 
-import { useMemo, useState } from 'react';
-import { ArrowUpRight, Check, CornerDownLeft, Dices, Table, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowUpRight, Check, CornerDownLeft, Dices, Maximize2, Minimize2, Table, X } from 'lucide-react';
 import { rollTotal, type ChainStep, type TableRow } from '@shared/table';
 import { TacticalCard } from '../ui/TacticalCard';
 import { Badge } from '../ui/Badge';
@@ -14,6 +14,8 @@ const MAX_PREVIEW_ROWS = 8;
 export interface InteractiveRollTableProps {
   title: string;
   formula?: string;
+  /** descrição da tabela — exibida no popover do modo inline */
+  description?: string;
   rows: TableRow[];
   ranges?: ({ min: number; max: number } | null)[];
   rollable: boolean;
@@ -22,12 +24,19 @@ export interface InteractiveRollTableProps {
   onOpen?: () => void;
   onInsert?: () => void;
   onUnlink?: () => void;
+  /** alterna entre aparência aberta (card) e inline (macro) */
+  onToggleVariant?: () => void;
+  /** 'open' (card expandido) ou 'inline' (macro compacta) */
+  variant?: 'open' | 'inline';
+  /** exibe o título no cabeçalho; inline usa false (título vive no documento) */
+  showTitle?: boolean;
   maxPreviewRows?: number;
 }
 
 export function InteractiveRollTable({
   title,
   formula,
+  description,
   rows,
   ranges,
   rollable,
@@ -36,6 +45,9 @@ export function InteractiveRollTable({
   onOpen,
   onInsert,
   onUnlink,
+  onToggleVariant,
+  variant = 'open',
+  showTitle = true,
   maxPreviewRows = MAX_PREVIEW_ROWS,
 }: InteractiveRollTableProps) {
   const [inserted, setInserted] = useState(false);
@@ -52,21 +64,128 @@ export function InteractiveRollTable({
     setTimeout(() => setInserted(false), 1200);
   };
 
+  /* popover (hover) do modo inline: título + descrição */
+  const [hovering, setHovering] = useState(false);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const enterHover = () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => setHovering(true), 200);
+  };
+  const leaveHover = () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
+    setHovering(false);
+  };
+  useEffect(() => () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+  }, []);
+
+  /* ---------- aparência inline (macro): componente único + popover ---------- */
+  if (variant === 'inline') {
+    return (
+      <div
+        className="relative flex w-fit max-w-full items-center gap-1 rounded-lg border border-cyan-500/25 bg-card px-1.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+        onMouseEnter={enterHover}
+        onMouseLeave={leaveHover}
+      >
+        <button
+          type="button"
+          onClick={onRoll}
+          disabled={!rollable}
+          title="Rolar na tabela"
+          className="flex items-center gap-1 px-1 py-0.5 rounded text-[12px] font-semibold text-cyan-300 hover:text-neon hover:bg-cyan-500/10 disabled:opacity-40 active:scale-90 transition-all duration-100"
+        >
+          <Dices size={13} />
+          <span className="font-mono">{formula || `${rollableCount} itens`}</span>
+        </button>
+
+        {steps && steps.length > 0 && (
+          <span className="flex items-center gap-1.5 pl-1.5 border-l border-cyan-500/20 text-[12.5px] min-w-0">
+            {steps.map((step, i) => {
+              const total = rollTotal(step.result);
+              return (
+                <span key={i} className="inline-flex items-baseline gap-1 min-w-0">
+                  {i > 0 && <span className="text-ink-3 select-none">→</span>}
+                  {total != null && <span className="font-bold font-mono text-ink-1 text-glow-cyan">{total}</span>}
+                  <span className="text-ink-1 truncate max-w-[260px]">
+                    {step.result.row.text || <em className="text-ink-3">(sem texto)</em>}
+                  </span>
+                </span>
+              );
+            })}
+          </span>
+        )}
+
+        {onToggleVariant && (
+          <button
+            type="button"
+            onClick={onToggleVariant}
+            title="Aparência aberta"
+            className="p-1 rounded text-ink-3 hover:text-ink-1 hover:bg-hover"
+          >
+            <Maximize2 size={13} />
+          </button>
+        )}
+        {onOpen && (
+          <button
+            type="button"
+            onClick={onOpen}
+            title="Abrir tabela"
+            className="p-1 rounded text-ink-3 hover:text-ink-1 hover:bg-hover"
+          >
+            <ArrowUpRight size={13} />
+          </button>
+        )}
+        {onUnlink && (
+          <button type="button" onClick={onUnlink} title="Desvincular tabela" className="p-1 rounded text-ink-3 hover:text-danger">
+            <X size={13} />
+          </button>
+        )}
+
+        {/* popover: título + descrição da tabela */}
+        {hovering && (title || description) && (
+          <div className="absolute left-0 top-full mt-2 z-30 w-[260px] rounded-lg border border-line bg-elevated/95 backdrop-blur shadow-xl p-2.5 space-y-1.5 animate-fade-in">
+            <div className="flex items-center gap-1.5">
+              <Table size={12} className="text-table shrink-0" />
+              <span className="flex-1 min-w-0 truncate text-[12px] font-medium text-ink-1">{title}</span>
+            </div>
+            {description && (
+              <p className="text-[11px] text-ink-2 leading-snug whitespace-pre-wrap">{description}</p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <TacticalCard className="my-1 w-full">
       <TacticalCard.Header className="relative flex items-center gap-2">
         <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-cyan-400/60 via-violet/40 to-transparent" />
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <Table size={14} className="text-table shrink-0" />
-          <button
-            type="button"
-            onClick={onOpen}
-            title="Abrir tabela"
-            className="flex items-center gap-1 min-w-0 text-[13px] font-medium text-ink-1 hover:text-accent-ink"
-          >
-            <span className="truncate">{title}</span>
-            {onOpen && <ArrowUpRight size={12} className="shrink-0 text-ink-3" />}
-          </button>
+          {showTitle ? (
+            <>
+              <Table size={14} className="text-table shrink-0" />
+              <button
+                type="button"
+                onClick={onOpen}
+                title="Abrir tabela"
+                className="flex items-center gap-1 min-w-0 text-[13px] font-medium text-ink-1 hover:text-accent-ink"
+              >
+                <span className="truncate">{title}</span>
+                {onOpen && <ArrowUpRight size={12} className="shrink-0 text-ink-3" />}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpen}
+              title="Abrir tabela"
+              className="p-1 rounded text-table hover:bg-hover hover:text-ink-1"
+            >
+              <Table size={14} className="shrink-0" />
+            </button>
+          )}
           {formula && (
             <Badge variant="tactical" className="shrink-0">
               {formula}
@@ -88,6 +207,16 @@ export function InteractiveRollTable({
           >
             <Dices size={12} /> Rolar
           </button>
+          {onToggleVariant && (
+            <button
+              type="button"
+              onClick={onToggleVariant}
+              title="Aparência inline"
+              className="p-1 rounded text-ink-3 hover:text-ink-1 hover:bg-hover"
+            >
+              <Minimize2 size={13} />
+            </button>
+          )}
           {onUnlink && (
             <button type="button" onClick={onUnlink} title="Desvincular tabela" className="p-1 rounded text-ink-3 hover:text-danger">
               <X size={13} />

@@ -12,7 +12,7 @@ import {
 } from './shared/table';
 
 function makeTable(rows: Partial<ReturnType<typeof createEmptyRow>>[], formula = ''): InteractiveTable {
-  return { kind: 'diegesis-table', version: 1, formula, rows: rows.map((r) => ({ ...createEmptyRow(), ...r })) };
+  return { kind: 'diegesis-table', version: 1, formula, description: '', rows: rows.map((r) => ({ ...createEmptyRow(), ...r })) };
 }
 
 describe('rollOnTable (engine roll-tables)', () => {

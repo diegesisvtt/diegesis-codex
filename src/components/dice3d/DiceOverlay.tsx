@@ -10,6 +10,10 @@ import { parseFormula } from '@shared/table';
 import { configToOptions, createConfiguredDiceBox, dice3dBridge, type RollPayload } from './bridge';
 
 const HIDE_DELAY_MS = 3000;
+// rolagem legítima pode levar até ~16s (iterationLimit = 1000 frames); se
+// passar disso o worker de física/fila serial travou — recuperamos recriando
+// o DiceBox, senão os dados ficariam congelados na tela para sempre
+const STALL_TIMEOUT_MS = 15000;
 
 export function DiceOverlay() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -22,38 +26,52 @@ export function DiceOverlay() {
   );
   const config = useSyncExternalStore(dice3dBridge.subscribe, () => dice3dBridge.config);
 
+  /** cria o DiceBox no container (worker por padrão; `false` força main thread) */
+  const spawn = useCallback((worker?: boolean): DiceBox | null => {
+    const el = containerRef.current;
+    if (!el) return null;
+    const box = createConfiguredDiceBox(el, dice3dBridge.config, worker === undefined ? undefined : { worker });
+    box.on('error', (err) => console.error('[dice3d]', err));
+    boxRef.current = box;
+    return box;
+  }, []);
+
+  /** destrói o box atual e recria um novo — o destroy interrompe rolagens
+   *  emperradas e destrava a fila serial */
+  const respawn = useCallback(() => {
+    const old = boxRef.current;
+    boxRef.current = null;
+    old?.destroy();
+    spawn();
+  }, [spawn]);
+
   // ciclo de vida do DiceBox — container em tela cheia
   useEffect(() => {
     if (!active) return;
-    const el = containerRef.current;
-    if (!el) return;
-    let box: DiceBox | null = null;
     let watchdog: ReturnType<typeof setTimeout> | undefined;
-    const spawn = (worker?: boolean) => {
-      box = createConfiguredDiceBox(el, dice3dBridge.config, worker === undefined ? undefined : { worker });
-      boxRef.current = box;
-      box.on('error', (err) => console.error('[dice3d]', err));
-      return box;
-    };
     // adia a criação: em StrictMode o primeiro setup é cancelado antes de
     // criar — evita destruir um WebGL context / event bus sem necessidade
     const start = setTimeout(() => {
       const created = spawn();
+      if (!created) return;
       // watchdog: se a física não inicializar a tempo, recria na main thread
       watchdog = setTimeout(() => {
-        if (created.initialized) return;
+        // um respawn (stall) pode ter trocado o box nesse meio-tempo
+        if (created.initialized || boxRef.current !== created) return;
         console.warn('[dice3d] física não inicializou a tempo — recriando sem worker');
         created.destroy();
+        if (boxRef.current === created) boxRef.current = null;
         spawn(false);
       }, 6000);
     }, 0);
     return () => {
       clearTimeout(start);
       if (watchdog !== undefined) clearTimeout(watchdog);
+      const box = boxRef.current;
+      boxRef.current = null;
       box?.destroy();
-      if (boxRef.current === box) boxRef.current = null;
     };
-  }, [active]);
+  }, [active, spawn]);
 
   // reconfiguração ao vivo
   const firstConfig = useRef(true);
@@ -95,15 +113,26 @@ export function DiceOverlay() {
         off();
         scheduleHide();
       });
+      // watchdog de travamento: se o worker de física não responder (fila
+      // serial emperrada), os dados ficariam congelados na tela para sempre
+      const stall = setTimeout(() => {
+        off();
+        console.warn('[dice3d] rolagem não assentou a tempo — recriando DiceBox');
+        if (boxRef.current === box) respawn();
+        setVisible(false);
+      }, STALL_TIMEOUT_MS);
       try {
         await box.roll(terms);
       } catch (err) {
         off();
-        scheduleHide();
+        // se um respawn já trocou o box, não mexer no overlay do box novo
+        if (boxRef.current === box) scheduleHide();
         console.error('[dice3d] roll failed', err);
+      } finally {
+        clearTimeout(stall);
       }
     },
-    [scheduleHide]
+    [scheduleHide, respawn]
   );
 
   // o overlay é o animador do plugin: presentRoll usa este handler

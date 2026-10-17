@@ -25,6 +25,7 @@ export const InteractiveTableBlock = createReactBlockSpec(
     type: 'interactiveTable',
     propSchema: {
       tableId: { default: '' },
+      mode: { default: 'open' },
     },
     content: 'none',
   },
@@ -68,6 +69,12 @@ export const InteractiveTableBlock = createReactBlockSpec(
         const doc = await createDocument('diegesis/table', null, 'Nova Tabela', serializeTable(createDefaultTable()));
         pick(doc.id);
         openDocument(doc.id);
+      };
+
+      /** alterna entre aparência aberta (card) e inline (macro) — persiste no bloco */
+      const toggleMode = () => {
+        const next = block.props.mode === 'inline' ? 'open' : 'inline';
+        editor.updateBlock(block, { props: { ...currentProps(), mode: next } });
       };
 
       /** resolve um docId vinculado para outra tabela (rolagem encadeada) */
@@ -176,6 +183,7 @@ export const InteractiveTableBlock = createReactBlockSpec(
       return (
         <InteractiveRollTable
           title={tableDoc.title || 'Sem título'}
+          description={table.description || undefined}
           formula={table.formula || undefined}
           rows={table.rows}
           ranges={ranges ?? undefined}
@@ -188,6 +196,9 @@ export const InteractiveTableBlock = createReactBlockSpec(
             setSteps(null);
             editor.updateBlock(block, { props: { ...currentProps(), tableId: '' } });
           }}
+          variant={block.props.mode === 'inline' ? 'inline' : 'open'}
+          showTitle={false}
+          onToggleVariant={toggleMode}
         />
       );
     },

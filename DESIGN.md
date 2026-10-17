@@ -41,7 +41,7 @@ de criar um controle novo, verifique se já existe uma primitiva.
 | `DiceButton` / `DiceBar` | dado facetado + barra de dados rápidos (d4–d100) |
 | `RollResultCard` | resultado no feed de rolagens (crítico/falha) |
 | `CalloutBlock` | destaque `rule` \| `lore` \| `secret` \| `quote` (bloco BlockNote `/callout`) |
-| `InteractiveRollTable` | tabela inline tática (cabeçalho + fórmula + rolagem + linha sorteada) |
+| `InteractiveRollTable` | tabela tática (cabeçalho + fórmula + rolagem + linha sorteada); `variant="open"\|"inline"` (card vs macro) e `showTitle` (título vive no documento, oculto inline) |
 
 ### Toggle — regra de uso
 

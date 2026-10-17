@@ -30,6 +30,8 @@ export interface InteractiveTable {
   version: 1;
   /** fórmula de dado em notação canônica, ex: '1d20', '2d6', '4d6kh3'; '' = sorteio ponderado puro */
   formula: string;
+  /** descrição da tabela (exibida na página e no popover inline) */
+  description: string;
   rows: TableRow[];
 }
 
@@ -60,7 +62,7 @@ export function createEmptyRow(): TableRow {
 }
 
 export function createDefaultTable(): InteractiveTable {
-  return { kind: 'diegesis-table', version: 1, formula: '', rows: [createEmptyRow()] };
+  return { kind: 'diegesis-table', version: 1, formula: '', description: '', rows: [createEmptyRow()] };
 }
 
 // ---------- parsing / serialização ----------
@@ -90,6 +92,7 @@ export function parseTable(content: string | null | undefined): InteractiveTable
       kind: 'diegesis-table',
       version: 1,
       formula: isStr(raw.formula) && parseFormula(raw.formula) ? raw.formula.trim() : '',
+      description: isStr(raw.description) ? raw.description : '',
       rows,
     };
   } catch {
@@ -106,6 +109,7 @@ export function extractTableText(content: string): string {
   const t = parseTable(content);
   const parts: string[] = [];
   if (t.formula) parts.push(t.formula);
+  if (t.description) parts.push(t.description);
   for (const r of t.rows) {
     if (r.text) parts.push(r.text);
     if (r.details) parts.push(r.details);
@@ -173,6 +177,17 @@ export function computeRanges(rows: TableRow[], formula: RollExpr): (RowRange | 
     result.push(end >= start ? { min: start, max: end } : null);
   }
   return result;
+}
+
+/**
+ * Sugere a fórmula de dado a partir dos pesos das linhas: `1dN`, onde N é a
+ * soma dos pesos roláveis (>= 0). Ex.: 3 linhas de peso 1 → `1d3`; pesos
+ * 1,2,1 → `1d4` (cada linha ocupa uma faixa proporcional ao seu peso).
+ * Retorna null quando não há peso rolável.
+ */
+export function suggestFormula(rows: TableRow[]): string | null {
+  const total = rows.reduce((s, r) => s + Math.max(0, r.weight), 0);
+  return total > 0 ? `1d${total}` : null;
 }
 
 // ---------- rolagem ----------
