@@ -126,7 +126,7 @@ const api: DiegesisCodexApi = {
   },
 };
 
-// The player-facing second window (?window=player) is shown to semi-trusted
+// The player-facing Player View window (?window=player) is shown to semi-trusted
 // viewers: expose only the read-only surface it needs, never the full GM API
 // (doc mutation, realm deletion, AI, etc.).
 const locationSearch = (globalThis as { location?: { search?: string } }).location?.search ?? '';

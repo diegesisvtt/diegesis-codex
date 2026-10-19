@@ -419,7 +419,7 @@ export interface SyncOperationResult {
   error?: string;
 }
 
-// ---------- player view (second window) ----------
+// ---------- player view ----------
 
 /** hexcrawl viewport: CENTER of the view in hex-space world coordinates +
  *  zoom. Window-size independent — each window rebuilds its own screen
@@ -430,7 +430,7 @@ export interface MapViewport {
   zoom: number;
 }
 
-/** what the player-facing second window should display */
+/** what the player-facing Player View window should display */
 export type PlayerViewState =
   | { kind: 'none' }
   | { kind: 'note'; realmId: string; docId: string }
@@ -580,7 +580,7 @@ export interface DiegesisCodexApi {
   };
 }
 
-/** Reduced API surface exposed to the player-facing second window — read-only
+/** Reduced API surface exposed to the player-facing Player View window — read-only
  *  (the window is shown to semi-trusted viewers, so no doc mutation, realm
  *  management or AI capabilities). */
 export interface PlayerDiegesisCodexApi {

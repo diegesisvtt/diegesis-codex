@@ -4,11 +4,10 @@ import { PlayerViewController, SETTINGS_MIRROR, SETTINGS_TEXT_SCALE } from './pl
 import { PlayerViewControlPanel } from './playerView/ControlPanel';
 
 /**
- * Player View — janela secundária voltada aos jogadores. Exibe notas como
- * pergaminhos antigos, mapas hexcrawl na visão do jogador (névoa de guerra
- * opaca) e imagens anexadas a notas/whiteboards, com conteúdo atualizado em
- * tempo real e viewport controlável por outros plugins via eventos
- * ('playerview:*').
+ * Player View — janela voltada aos jogadores. Exibe notas como pergaminhos
+ * antigos, mapas hexcrawl na visão do jogador (névoa de guerra opaca) e
+ * imagens anexadas a notas/whiteboards, com conteúdo atualizado em tempo
+ * real e viewport controlável por outros plugins via eventos ('playerview:*').
  */
 export const playerViewPlugin: Plugin = {
   manifest: {
@@ -17,7 +16,7 @@ export const playerViewPlugin: Plugin = {
     version: '1.0.0',
     apiVersion: PLUGIN_API_VERSION,
     description:
-      'Janela secundária para os jogadores: notas como pergaminhos antigos, mapas hexcrawl com névoa de guerra, imagens anexadas e viewport controlado em tempo real.',
+      'Janela voltada aos jogadores: notas como pergaminhos antigos, mapas hexcrawl com névoa de guerra, imagens anexadas e viewport controlado em tempo real.',
     author: 'Diegesis Codex',
     permissions: ['ui', 'commands', 'events', 'settings'],
   },
@@ -37,7 +36,7 @@ export const playerViewPlugin: Plugin = {
         type: 'boolean',
         label: 'Espelhar a câmera do mestre',
         description:
-          'Ao exibir um mapa hexcrawl na janela do jogador, acompanha automaticamente o zoom e a posição da câmera do mestre.',
+          'Ao exibir um mapa hexcrawl no Player View, acompanha automaticamente o zoom e a posição da câmera do mestre.',
         default: true,
       },
       {
@@ -63,14 +62,14 @@ export const playerViewPlugin: Plugin = {
 
     ctx.commands.add({
       id: 'player-view:toggle',
-      title: 'Player View: abrir/fechar janela do jogador',
+      title: 'Player View: abrir/fechar',
       shortcut: 'mod+shift+w',
       run: () => controller.toggleWindow(),
     });
 
     ctx.views.addRibbonItem({
       id: 'player-view:toggle',
-      title: 'Janela do jogador (Ctrl+Shift+W)',
+      title: 'Player View (Ctrl+Shift+W)',
       icon: ScreenShare,
       command: 'player-view:toggle',
       order: 50,
@@ -78,10 +77,10 @@ export const playerViewPlugin: Plugin = {
 
     ctx.views.add({
       id: 'player-view:panel',
-      title: 'Janela do Jogador',
+      title: 'Player View',
       location: 'border-left',
       component: () => <PlayerViewControlPanel controller={controller} />,
-      tab: { id: 'player-view', name: 'Jogador', default: true },
+      tab: { id: 'player-view', name: 'Player View', default: true },
       order: 40,
     });
 

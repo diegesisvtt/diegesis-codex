@@ -270,7 +270,7 @@ function registerIpc(): void {
   ipcMain.handle('plugins:read', (_e, dir: string) => plugins.readPluginCode(dir));
   ipcMain.handle('plugins:openFolder', () => plugins.openPluginsFolder());
 
-  // ---- player view (second window) ----
+  // ---- player view ----
   ipcMain.handle('player-view:open', () => playerView.openPlayerView());
   ipcMain.handle('player-view:close', () => playerView.closePlayerView());
   ipcMain.handle('player-view:status', () => ({

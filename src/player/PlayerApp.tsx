@@ -1,4 +1,4 @@
-/* Root of the player-facing second window (?window=player).
+/* Root of the player-facing Player View window (?window=player).
    Receives what to display from the GM window over IPC and live-reloads
    document content via docs:changed broadcasts. */
 

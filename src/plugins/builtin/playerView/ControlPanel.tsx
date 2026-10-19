@@ -1,7 +1,7 @@
-/* GM-side control panel for the player view: a single searchable list
-   of displayable documents (notes → parchment, hexcrawl maps → player
-   view), the images attached to notes/whiteboards, plus window toggle and
-   viewport mirroring. */
+/* GM-side control panel for the Player View: a single searchable list of
+   displayable documents (notes → parchment, hexcrawl maps → player view),
+   the images attached to notes/whiteboards, plus window toggle and viewport
+   mirroring. */
 
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import { Eye, Image as ImageIcon, Monitor, MonitorOff, Search, X } from 'lucide-react';
@@ -70,7 +70,7 @@ export function PlayerViewControlPanel({ controller }: { controller: PlayerViewC
           }`}
         >
           {snap.windowOpen ? <Monitor size={14} /> : <MonitorOff size={14} />}
-          {snap.windowOpen ? 'Janela aberta — clique para fechar' : 'Abrir janela do jogador'}
+          {snap.windowOpen ? 'Player View aberta — clique para fechar' : 'Abrir Player View'}
         </button>
 
         {/* currently shown */}
@@ -86,7 +86,7 @@ export function PlayerViewControlPanel({ controller }: { controller: PlayerViewC
             )}
           </span>
           {snap.shown && (
-            <button title="Limpar tela do jogador" onClick={() => controller.clear()} className="p-1 rounded text-ink-3 hover:text-danger">
+            <button title="Limpar Player View" onClick={() => controller.clear()} className="p-1 rounded text-ink-3 hover:text-danger">
               <X size={13} />
             </button>
           )}
@@ -119,7 +119,7 @@ export function PlayerViewControlPanel({ controller }: { controller: PlayerViewC
             <button
               key={doc.id}
               onClick={() => show(doc)}
-              title={`Exibir "${doc.title || 'Sem título'}" na janela do jogador`}
+              title={`Exibir "${doc.title || 'Sem título'}" no Player View`}
               className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border text-left transition-colors ${
                 isShown ? 'border-accent bg-accent-soft' : 'border-transparent hover:border-line hover:bg-overlay'
               }`}
@@ -147,7 +147,7 @@ export function PlayerViewControlPanel({ controller }: { controller: PlayerViewC
                 <button
                   key={`${img.docId}-${i}`}
                   onClick={() => controller.showImage(img.docId, img.src, img.name)}
-                  title={`Exibir "${img.name}" (${img.docTitle || 'Sem título'}) na janela do jogador`}
+                    title={`Exibir "${img.name}" (${img.docTitle || 'Sem título'}) no Player View`}
                   className={`relative aspect-square rounded-lg overflow-hidden border transition-colors ${
                     isShownImage(img) ? 'border-accent' : 'border-line hover:border-ink-3'
                   }`}
