@@ -9,6 +9,12 @@ import {
   BasicTextStyleButton,
   CreateLinkButton,
   SuggestionMenuController,
+  FileCaptionButton,
+  FileDeleteButton,
+  FileDownloadButton,
+  FilePreviewButton,
+  FileRenameButton,
+  FileReplaceButton,
 } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/ariakit';
 import { pt } from '@blocknote/core/locales';
@@ -399,6 +405,14 @@ export function NoteEditor({
                 <BasicTextStyleButton basicTextStyle="strike" key="strikeStyleButton" />
                 <BasicTextStyleButton basicTextStyle="code" key="codeStyleButton" />
                 <CreateLinkButton key="createLinkButton" />
+                {/* nativos de arquivo: auto-ocultam fora de blocos de arquivo
+                    (captura legível para imagens — hoje a toolbar as omitia) */}
+                <FileCaptionButton key="fileCaptionButton" />
+                <FileReplaceButton key="fileReplaceButton" />
+                <FileRenameButton key="fileRenameButton" />
+                <FileDownloadButton key="fileDownloadButton" />
+                <FilePreviewButton key="filePreviewButton" />
+                <FileDeleteButton key="fileDeleteButton" />
                 <button
                   key="linkNote"
                   title="Vincular nota"
