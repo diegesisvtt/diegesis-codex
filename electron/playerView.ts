@@ -1,6 +1,6 @@
 import { BrowserWindow, shell } from 'electron';
 import path from 'node:path';
-import { appIconPath } from './appIcon';
+import { playerIconPath } from './appIcon';
 import type { PlayerViewState } from '../shared/types';
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
@@ -36,8 +36,8 @@ export function openPlayerView(): void {
     minWidth: 640,
     minHeight: 480,
     backgroundColor: '#0c0a09',
-    title: 'Diegesis Codex — Visão do Jogador',
-    icon: appIconPath(),
+    title: 'Diegesis Codex — Player View',
+    icon: playerIconPath(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -73,6 +73,11 @@ export function openPlayerView(): void {
     playerWindow = null;
     broadcastStatus();
   });
+
+  // keep the OS-level window title distinct from the GM window: index.html's
+  // <title> would otherwise clobber it, making the two windows identical to
+  // external capture tools (WebRTC/portal window pickers) on Linux
+  win.webContents.on('page-title-updated', (e) => e.preventDefault());
 
   playerWindow = win;
 

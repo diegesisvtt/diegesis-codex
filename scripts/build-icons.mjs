@@ -57,6 +57,27 @@ for (const size of sizes) pngs.set(size, await png(size));
 await writeFile(path.join(buildDir, 'icon.png'), pngs.get(1024));
 await writeFile(path.join(root, 'public', 'icon.png'), pngs.get(512));
 
+// Player View variant: amber "cast" badge so capture tools / taskbars can
+// tell the player window apart from the GM window
+function badgeSvg(size) {
+  const r = Math.round(size * 0.22);
+  const cx = size - r - size * 0.04;
+  const cy = cx;
+  const ring = r * 0.1;
+  const t = r * 0.55; // half-height of the play triangle
+  const tx = cx - t * 0.4; // left edge of the triangle
+  return Buffer.from(`<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="#0c0a09"/>
+    <circle cx="${cx}" cy="${cy}" r="${r - ring}" fill="#f59e0b"/>
+    <polygon points="${tx},${cy - t} ${tx},${cy + t} ${tx + t * 1.4},${cy}" fill="#0c0a09"/>
+  </svg>`);
+}
+const playerPng = await sharp(pngs.get(1024))
+  .composite([{ input: badgeSvg(1024) }])
+  .png()
+  .toBuffer();
+await writeFile(path.join(buildDir, 'icon-player.png'), playerPng);
+
 const ico = buildIco([16, 24, 32, 48, 64, 128, 256].map((s) => ({ size: s, data: pngs.get(s) })));
 await writeFile(path.join(buildDir, 'icon.ico'), ico);
 
@@ -71,4 +92,4 @@ const icns = buildIcns([
 ]);
 await writeFile(path.join(buildDir, 'icon.icns'), icns);
 
-console.log('icons: build/icon.png (1024), build/icon.ico, build/icon.icns, public/icon.png (512)');
+console.log('icons: build/icon.png (1024), build/icon.ico, build/icon.icns, build/icon-player.png, public/icon.png (512)');

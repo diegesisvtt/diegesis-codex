@@ -23,6 +23,12 @@ export default function PlayerApp() {
   const [state, setState] = useState<PlayerViewState>({ kind: 'none' });
   const [doc, setDoc] = useState<DocNode | null>(null);
   const [docs, setDocs] = useState<DocNode[]>([]);
+  // keep a distinct window title so capture tools don't confuse this
+  // window with the GM window (belt-and-suspenders with the main-process
+  // page-title-updated guard in electron/playerView.ts)
+  useEffect(() => {
+    document.title = 'Diegesis Codex — Player View';
+  }, []);
 
   // initial state (window reopened) + live pushes from the GM window
   useEffect(() => {
