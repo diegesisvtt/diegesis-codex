@@ -19,10 +19,38 @@ function IdleScreen() {
   );
 }
 
+/** Root font-size multiplier for the player window (player.css is all rem).
+ *  Small windows keep the base size; large ones (TVs) grow super-linearly so
+ *  text stays readable at viewing distance — same physical size on 1080p and
+ *  4K because the input is the physical window height. */
+function autoTextScaleFactor(): number {
+  const physHeight = window.innerHeight * window.devicePixelRatio;
+  if (physHeight <= 860) return 1;
+  return Math.min(4, Math.pow(physHeight / 800, 1.6));
+}
+
+/** Applies the effective text scale (GM override wins over auto) to the
+ *  document root; re-evaluates on resize (maximize on the TV, etc.). */
+function usePlayerTextScale(override: number | null): void {
+  useEffect(() => {
+    const apply = () => {
+      const factor = override ?? autoTextScaleFactor();
+      document.documentElement.style.fontSize = `${16 * factor}px`;
+    };
+    apply();
+    window.addEventListener('resize', apply);
+    return () => window.removeEventListener('resize', apply);
+  }, [override]);
+}
+
 export default function PlayerApp() {
   const [state, setState] = useState<PlayerViewState>({ kind: 'none' });
   const [doc, setDoc] = useState<DocNode | null>(null);
   const [docs, setDocs] = useState<DocNode[]>([]);
+  /** GM window forces a fixed text scale (settings "Tamanho do texto");
+   *  null = auto-scale with the window size */
+  const [scaleOverride, setScaleOverride] = useState<number | null>(null);
+
   // keep a distinct window title so capture tools don't confuse this
   // window with the GM window (belt-and-suspenders with the main-process
   // page-title-updated guard in electron/playerView.ts)
@@ -38,15 +66,22 @@ export default function PlayerApp() {
       gotLivePush = true;
       setState(s);
     });
+    const unsubscribeScale = window.diegesis.playerView.onScale((scale) => {
+      if (!cancelled) setScaleOverride(scale);
+    });
     window.diegesis.playerView.status().then((s) => {
       // a live push that arrived first is newer than the cached state
       if (!cancelled && !gotLivePush) setState(s.state);
+      if (!cancelled) setScaleOverride(s.scale);
     });
     return () => {
       cancelled = true;
       unsubscribe();
+      unsubscribeScale();
     };
   }, []);
+
+  usePlayerTextScale(scaleOverride);
 
   // load + live-reload the referenced document. Depends on primitives (not
   // the state object) so viewport-only pushes don't re-fetch the realm.

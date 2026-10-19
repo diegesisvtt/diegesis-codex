@@ -276,6 +276,7 @@ function registerIpc(): void {
   ipcMain.handle('player-view:status', () => ({
     open: playerView.isPlayerViewOpen(),
     state: playerView.getPlayerViewState(),
+    scale: playerView.getPlayerViewScale(),
   }));
   ipcMain.handle('player-view:send', (_e, state: PlayerViewState) => {
     if (!isValidPlayerViewState(state)) {
@@ -283,6 +284,13 @@ function registerIpc(): void {
       return;
     }
     playerView.sendToPlayerView(state);
+  });
+  ipcMain.handle('player-view:scale', (_e, scale: unknown) => {
+    if (!isValidPlayerViewScale(scale)) {
+      console.warn('[player-view] escala inválida rejeitada:', scale);
+      return;
+    }
+    playerView.setPlayerViewScale(scale);
   });
 }
 
@@ -308,6 +316,12 @@ function isValidPlayerViewState(s: unknown): s is PlayerViewState {
     if (state.name != null && typeof state.name !== 'string') return false;
   }
   return true;
+}
+
+/** Same boundary validation for the text-scale push (null = auto). */
+function isValidPlayerViewScale(s: unknown): s is number | null {
+  if (s === null) return true;
+  return typeof s === 'number' && Number.isFinite(s) && s >= 1 && s <= 4;
 }
 
 function createWindow(): void {

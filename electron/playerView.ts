@@ -7,6 +7,8 @@ const isDev = !!process.env.VITE_DEV_SERVER_URL;
 
 let playerWindow: BrowserWindow | null = null;
 let lastState: PlayerViewState = { kind: 'none' };
+/** text scale forced by the GM window (settings); null = auto with window size */
+let lastScale: number | null = null;
 
 export function isPlayerViewOpen(): boolean {
   return playerWindow !== null && !playerWindow.isDestroyed();
@@ -14,6 +16,18 @@ export function isPlayerViewOpen(): boolean {
 
 export function getPlayerViewState(): PlayerViewState {
   return lastState;
+}
+
+export function getPlayerViewScale(): number | null {
+  return lastScale;
+}
+
+/** Caches the scale (applied to a window that opens later) and pushes it live. */
+export function setPlayerViewScale(scale: number | null): void {
+  lastScale = scale;
+  if (isPlayerViewOpen()) {
+    playerWindow!.webContents.send('player-view:scale', scale);
+  }
 }
 
 /** Broadcasts the open/closed status to every window (GM UI reacts to it). */
@@ -89,7 +103,13 @@ export function openPlayerView(): void {
     win.loadFile(path.join(__dirname, '../dist/index.html'), { query: { window: 'player' } });
   }
 
-  win.webContents.once('did-finish-load', broadcastStatus);
+  win.webContents.once('did-finish-load', () => {
+    broadcastStatus();
+    // a newly opened window receives the scale the GM window holds (the
+    // renderer's status() call covers it too; pushing here applies it before
+    // the first content renders, avoiding a visible size jump)
+    win.webContents.send('player-view:scale', lastScale);
+  });
 }
 
 export function closePlayerView(): void {

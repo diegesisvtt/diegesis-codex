@@ -18,12 +18,24 @@ export interface PlayerViewSnapshot {
 
 /** exportada para o schema declarativo de settings (playerViewPlugin) */
 export const SETTINGS_MIRROR = 'mirrorViewport';
+export const SETTINGS_TEXT_SCALE = 'textScale';
 const SETTINGS_SHOWN = 'shown';
+
+/** 'auto' → null (auto-escala com o tamanho da janela do player) */
+function textScaleFromMode(mode: string): number | null {
+  if (mode === 'auto') return null;
+  const n = Number(mode);
+  return Number.isFinite(n) && n >= 1 && n <= 4 ? n : null;
+}
 
 export class PlayerViewController {
   private readonly ctx: PluginContext;
   private shown: ShownDoc | null = null;
   private mirrorViewport: boolean;
+  /** raw settings value ('auto' | '1' | '1.5' | '2.5') */
+  private textScaleMode: string;
+  /** derived multiplier pushed to the player window (null = auto) */
+  private textScale: number | null;
   private windowOpen = false;
   /** last camera reported by each hexcrawl editor (mirror mode) */
   private gmCamera = new Map<string, MapViewport>();
@@ -37,6 +49,8 @@ export class PlayerViewController {
     this.ctx = ctx;
     this.mirrorViewport = ctx.settings.get(SETTINGS_MIRROR, true);
     this.shown = ctx.settings.get<ShownDoc | null>(SETTINGS_SHOWN, null);
+    this.textScaleMode = ctx.settings.get(SETTINGS_TEXT_SCALE, 'auto');
+    this.textScale = textScaleFromMode(this.textScaleMode);
     this.snapshot = { windowOpen: false, shown: this.shown, mirrorViewport: this.mirrorViewport };
   }
 
@@ -71,6 +85,11 @@ export class PlayerViewController {
       this.windowOpen = open;
       this.notify();
     });
+
+    // syncs the configured scale into the main-process cache so a window that
+    // is (or will be) open receives it — settings.subscribe alone does not
+    // fire for a value that is already stored
+    void window.diegesis.playerView.setScale(this.textScale);
 
     // restore the last shown content into a window that is already open
     if (this.shown && this.shown.realmId === this.ctx.app.activeRealmId) this.push();
@@ -169,6 +188,18 @@ export class PlayerViewController {
     this.ctx.settings.set(SETTINGS_MIRROR, mirror);
     if (this.shown?.kind === 'map' || this.shown?.kind === 'dungeon') this.push();
     this.notify();
+  }
+
+  /** applies the "Tamanho do texto" setting: stores the mode and pushes the
+   *  resulting scale (null = auto) to the player window. No-op guard: o plugin
+   *  assina as settings — sem isto, o settings.set abaixo dispararia o
+   *  subscriber de novo (loop) */
+  setTextScale(mode: string): void {
+    if (mode === this.textScaleMode) return;
+    this.textScaleMode = mode;
+    this.textScale = textScaleFromMode(mode);
+    this.ctx.settings.set(SETTINGS_TEXT_SCALE, mode);
+    void window.diegesis.playerView.setScale(this.textScale);
   }
 
   /* ---------- internals ---------- */

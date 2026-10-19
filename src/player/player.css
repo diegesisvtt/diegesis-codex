@@ -1,5 +1,7 @@
 /* Player-facing window (player view): idle screen, ancient parchment notes,
-   full-screen attached images. */
+   full-screen attached images.
+   All sizes are in rem (base 16px) so the root font-size can scale the whole
+   layout with the window — PlayerApp grows it on large screens (TVs). */
 
 .pw-root {
   height: 100%;
@@ -22,8 +24,8 @@
 }
 
 .pw-idle-rune {
-  width: 54px;
-  height: 54px;
+  width: 3.375rem;
+  height: 3.375rem;
   border: 1.5px solid #8a7a5a;
   transform: rotate(45deg);
   display: flex;
@@ -34,14 +36,14 @@
 
 .pw-idle-rune::before {
   content: '';
-  width: 26px;
-  height: 26px;
+  width: 1.625rem;
+  height: 1.625rem;
   border: 1px solid #6a5d43;
 }
 
 .pw-idle-text {
   font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
-  font-size: 15px;
+  font-size: 0.9375rem;
   letter-spacing: 3px;
   text-transform: uppercase;
   color: #a39477;
@@ -57,7 +59,7 @@
 .pw-scroll-wrap {
   height: 100%;
   overflow-y: auto;
-  padding: 48px 24px 96px;
+  padding: 3rem 1.5rem 6rem;
   display: flex;
   justify-content: center;
   background:
@@ -66,11 +68,11 @@
 }
 
 .pw-parchment {
-  width: min(760px, 100%);
+  width: min(47.5rem, 100%);
   height: fit-content;
-  padding: 64px 72px 80px;
+  padding: 4rem 4.5rem 5rem;
   font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
-  font-size: 17px;
+  font-size: 1.0625rem;
   line-height: 1.75;
   color: #3a2c17;
   background:
@@ -112,9 +114,9 @@
   margin: 1.2em 0 0.55em;
 }
 
-.pw-parchment h1 { font-size: 30px; }
-.pw-parchment h2 { font-size: 24px; }
-.pw-parchment h3 { font-size: 20px; border-bottom: none; }
+.pw-parchment h1 { font-size: 1.875rem; }
+.pw-parchment h2 { font-size: 1.5rem; }
+.pw-parchment h3 { font-size: 1.25rem; border-bottom: none; }
 
 .pw-parchment p { margin: 0.55em 0; }
 
@@ -142,10 +144,10 @@
 .pw-parchment pre {
   background: rgba(46, 33, 16, 0.88);
   color: #e8dcc0;
-  padding: 14px 18px;
+  padding: 0.875rem 1.125rem;
   border-radius: 4px;
   overflow-x: auto;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .pw-parchment pre code { background: none; padding: 0; color: inherit; }
@@ -173,8 +175,8 @@
 .pw-check { display: flex; align-items: baseline; gap: 8px; }
 .pw-check-box {
   display: inline-block;
-  width: 13px;
-  height: 13px;
+  width: 0.8125rem;
+  height: 0.8125rem;
   border: 1.5px solid #6a4a12;
   border-radius: 2px;
   transform: translateY(1px);
@@ -227,7 +229,7 @@
   font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
   font-variant: small-caps;
   letter-spacing: 1.5px;
-  font-size: 14px;
+  font-size: 0.875rem;
   color: #a39477;
 }
 

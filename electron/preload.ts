@@ -101,7 +101,9 @@ const api: DiegesisCodexApi = {
     close: () => ipcRenderer.invoke('player-view:close'),
     status: () => ipcRenderer.invoke('player-view:status'),
     send: (state) => ipcRenderer.invoke('player-view:send', state),
+    setScale: (scale: number | null) => ipcRenderer.invoke('player-view:scale', scale),
     onState: (cb) => subscribe<PlayerViewState>('player-view:state', cb),
+    onScale: (cb) => subscribe<number | null>('player-view:scale', cb),
     onStatus: (cb) => subscribe<{ open: boolean }>('player-view:status', cb),
   },
   sync: {
@@ -139,6 +141,7 @@ if (isPlayerWindow) {
     playerView: {
       status: api.playerView.status,
       onState: api.playerView.onState,
+      onScale: api.playerView.onScale,
     },
   };
   contextBridge.exposeInMainWorld('diegesis', playerApi);

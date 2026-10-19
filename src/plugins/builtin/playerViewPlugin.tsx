@@ -1,6 +1,6 @@
 import { ScreenShare } from 'lucide-react';
 import { PLUGIN_API_VERSION, type Plugin } from '../api/types';
-import { PlayerViewController, SETTINGS_MIRROR } from './playerView/controller';
+import { PlayerViewController, SETTINGS_MIRROR, SETTINGS_TEXT_SCALE } from './playerView/controller';
 import { PlayerViewControlPanel } from './playerView/ControlPanel';
 
 /**
@@ -40,9 +40,26 @@ export const playerViewPlugin: Plugin = {
           'Ao exibir um mapa hexcrawl na janela do jogador, acompanha automaticamente o zoom e a posição da câmera do mestre.',
         default: true,
       },
+      {
+        key: SETTINGS_TEXT_SCALE,
+        type: 'select',
+        label: 'Tamanho do texto',
+        description:
+          'Escala o texto da janela dos jogadores (notas, telas e legendas). "Automático" cresce sozinho conforme o tamanho da janela — ideal para TVs. Escolher um tamanho fixo desliga o automático.',
+        default: 'auto',
+        choices: [
+          { value: 'auto', label: 'Automático (ajusta ao tamanho da tela)' },
+          { value: '1', label: 'Padrão' },
+          { value: '1.5', label: 'Grande' },
+          { value: '2.5', label: 'TV / tela grande' },
+        ],
+      },
     ]);
     ctx.settingsPages.add({ id: 'diegesis/player-view:settings', title: 'Player View', icon: ScreenShare, order: 50 });
-    ctx.settings.subscribe(() => controller.setMirrorViewport(ctx.settings.get(SETTINGS_MIRROR, true)));
+    ctx.settings.subscribe(() => {
+      controller.setMirrorViewport(ctx.settings.get(SETTINGS_MIRROR, true));
+      controller.setTextScale(ctx.settings.get(SETTINGS_TEXT_SCALE, 'auto'));
+    });
 
     ctx.commands.add({
       id: 'player-view:toggle',

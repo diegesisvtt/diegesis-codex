@@ -542,12 +542,16 @@ export interface DiegesisCodexApi {
   playerView: {
     open(): Promise<void>;
     close(): Promise<void>;
-    /** open state + last pushed content (used by the player window on load) */
-    status(): Promise<{ open: boolean; state: PlayerViewState }>;
+    /** open state + last pushed content + text scale (used by the player window on load) */
+    status(): Promise<{ open: boolean; state: PlayerViewState; scale: number | null }>;
     /** pushes content to the player window (called from the GM window) */
     send(state: PlayerViewState): Promise<void>;
     /** player window: content pushed by the GM window */
     onState(cb: (state: PlayerViewState) => void): () => void;
+    /** GM window: force a fixed text scale in the player window (null = auto) */
+    setScale(scale: number | null): Promise<void>;
+    /** player window: text scale pushed by the GM window (null = auto) */
+    onScale(cb: (scale: number | null) => void): () => void;
     /** GM window: the player window was opened/closed */
     onStatus(cb: (status: { open: boolean }) => void): () => void;
   };
@@ -581,5 +585,5 @@ export interface DiegesisCodexApi {
  *  management or AI capabilities). */
 export interface PlayerDiegesisCodexApi {
   docs: Pick<DiegesisCodexApi['docs'], 'listByRealm' | 'onChanged'>;
-  playerView: Pick<DiegesisCodexApi['playerView'], 'status' | 'onState'>;
+  playerView: Pick<DiegesisCodexApi['playerView'], 'status' | 'onState' | 'onScale'>;
 }
