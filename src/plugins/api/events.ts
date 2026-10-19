@@ -15,6 +15,9 @@ const diceRollSchema = v.custom<DiceRollResult>((x) => x !== null && typeof x ==
  *  - `realm:changed` — the active realm (universe) changed
  *  - `command:executed` — a command was executed through the registry
  *  - `plugins:changed` — a plugin was activated or deactivated
+ *  - `editor:imageClicked` — the user clicked/selected an image inside a
+ *    core editor (note or whiteboard); plugins may react (e.g. the player
+ *    view shows it) — the core emits, any plugin can consume
  *  - `playerview:showNote` / `showMap` / `showImage` — show content in the player view
  *  - `playerview:setViewport` — set the player view map viewport
  *  - `playerview:clear` — clear the player view (back to idle screen)
@@ -27,6 +30,12 @@ const appEvents = {
   'realm:changed': v.object({ realmId: v.nullable(v.string()) }),
   'command:executed': v.object({ commandId: v.string() }),
   'plugins:changed': v.object({ pluginId: v.string(), enabled: v.boolean() }),
+  'editor:imageClicked': v.object({
+    docId: v.string(),
+    src: v.string(),
+    name: v.string(),
+    source: v.union([v.literal('note'), v.literal('whiteboard')]),
+  }),
   'playerview:showNote': v.object({ docId: v.string() }),
   'playerview:showMap': v.object({ docId: v.string() }),
   'playerview:showImage': v.object({ docId: v.string(), src: v.string(), name: v.string() }),

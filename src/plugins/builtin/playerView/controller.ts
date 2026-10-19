@@ -63,6 +63,13 @@ export class PlayerViewController {
     events.on('playerview:showImage', ({ docId, src, name }) => this.showImage(docId, src, name));
     events.on('playerview:setViewport', (vp) => this.setViewport(vp));
     events.on('playerview:clear', () => this.clear());
+    // a GM clicked an image inside a core editor (note/whiteboard): show it
+    // in the player view, opening the window if it is closed — the send is
+    // cached in the main process, so a still-loading window restores it on load
+    events.on('editor:imageClicked', ({ docId, src, name }) => {
+      if (!this.windowOpen) void window.diegesis.playerView.open();
+      this.showImage(docId, src, name);
+    });
     events.on('hexcrawl:camera', ({ docId, x, y, zoom }) => {
       this.gmCamera.set(docId, { x, y, zoom });
       if (this.mirrorViewport && this.shown?.kind === 'map' && this.shown.docId === docId) this.push();

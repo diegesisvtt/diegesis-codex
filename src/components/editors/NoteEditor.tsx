@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   useCreateBlockNote,
+  useBlockNoteEditor,
+  useSelectedBlocks,
   FormattingToolbar,
   FormattingToolbarController,
   BlockTypeSelect,
@@ -18,11 +20,12 @@ import {
 } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/ariakit';
 import { pt } from '@blocknote/core/locales';
-import { Clock, FileText, ImagePlus, Layers, Link2, Sparkles } from 'lucide-react';
+import { Clock, FileText, ImagePlus, Layers, Link2, ScreenShare, Sparkles } from 'lucide-react';
 import { REF_DRAG_MIME, parseExplorerDragRef } from '@shared/dragDrop';
 import type { DocNode } from '@shared/types';
 import { parseNoteContent } from '@shared/blockContent';
 import { useStore } from '../../state/store';
+import { usePluginManager, usePlugins } from '../../plugins/manager';
 import { Badge } from '../ui/Badge';
 import { DocIconPicker } from './shared/DocIconPicker';
 import { InlineAiPopover } from './note/InlineAiPopover';
@@ -99,6 +102,32 @@ async function downscaleCover(file: File): Promise<string> {
   return canvas.toDataURL('image/jpeg', 0.82);
 }
 
+/** Toolbar button shown only while an image block is selected (mirrors the
+ *  self-hiding pattern of the default file buttons). Sends the image to the
+ *  player view through the `editor:imageClicked` app event — the core editor
+ *  doesn't know which plugin consumes it. */
+function ShowToPlayerViewButton({ docId, docTitle, onShow }: { docId: string; docTitle: string; onShow: (src: string, name: string) => void }) {
+  const editor = useBlockNoteEditor();
+  const selected = useSelectedBlocks(editor);
+  const image = selected.find((b) => b.type === 'image' && typeof b.props?.url === 'string' && b.props.url);
+  if (!image) return null;
+  const src = image.props.url;
+  const caption = typeof image.props.caption === 'string' ? image.props.caption : '';
+  return (
+    <button
+      title="Exibir no Player View"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => {
+        editor.focus();
+        onShow(src, caption || docTitle);
+      }}
+      className="bn-ak-button bn-ak-secondary bn-ask-ai"
+    >
+      <ScreenShare size={16} strokeWidth={1.75} />
+    </button>
+  );
+}
+
 export function NoteEditor({
   doc,
   embedded = false,
@@ -111,6 +140,9 @@ export function NoteEditor({
   showIcon?: boolean;
 }) {
   const { docs, updateDocument, subscribeExternalDocChange } = useStore();
+  const manager = usePluginManager();
+  const plugins = usePlugins();
+  const playerViewActive = plugins.some((p) => p.manifest.id === 'diegesis/player-view' && p.active);
   const [title, setTitle] = useState(doc.title);
   /** suppresses the persist round-trip while applying an external change */
   const applyingExternalRef = useRef(false);
@@ -413,6 +445,16 @@ export function NoteEditor({
                 <FileDownloadButton key="fileDownloadButton" />
                 <FilePreviewButton key="filePreviewButton" />
                 <FileDeleteButton key="fileDeleteButton" />
+                {playerViewActive && (
+                  <ShowToPlayerViewButton
+                    key="showToPlayerView"
+                    docId={doc.id}
+                    docTitle={doc.title}
+                    onShow={(src, name) =>
+                      manager.events.emit('editor:imageClicked', { docId: doc.id, src, name, source: 'note' })
+                    }
+                  />
+                )}
                 <button
                   key="linkNote"
                   title="Vincular nota"

@@ -17,10 +17,12 @@ import {
   Swords,
   Image as ImageIcon,
   Music,
+  ScreenShare,
 } from 'lucide-react';
 import type { DocNode } from '@shared/types';
 import { REF_DRAG_MIME, parseExplorerDragRef } from '@shared/dragDrop';
 import { useStore } from '../../../state/store';
+import { usePluginManager, usePlugins } from '../../../plugins/manager';
 import { audioPlayer } from '../../../state/audioPlayer';
 import {
   createShape,
@@ -183,6 +185,9 @@ function ShapeFrame({
 
 export function Whiteboard({ doc }: { doc: DocNode }) {
   const { docs, updateDocument, openDocument, focusPdf } = useStore();
+  const manager = usePluginManager();
+  const plugins = usePlugins();
+  const playerViewActive = plugins.some((p) => p.manifest.id === 'diegesis/player-view' && p.active);
   const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -894,6 +899,18 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
     [beginDrag, selectedIds, editingId, tool]
   );
 
+  /** empurra uma shape de imagem para o Player View (o plugin consome o
+   *  evento `editor:imageClicked` — o whiteboard não conhece o plugin) */
+  const showImageToPlayerView = useCallback(
+    (shape: WBShape) => {
+      const src = shape.props.src;
+      if (typeof src !== 'string' || !src) return;
+      const name = typeof shape.props.name === 'string' && shape.props.name ? shape.props.name : doc.title;
+      manager.events.emit('editor:imageClicked', { docId: doc.id, src, name, source: 'whiteboard' });
+    },
+    [manager, doc]
+  );
+
   const handleDoubleClickShape = useCallback(
     (shape: WBShape) => {
       if (handActive) return;
@@ -914,12 +931,17 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
         }
         return;
       }
+      // double-click on an image shape pushes it to the Player View
+      if (shape.type === 'image') {
+        if (playerViewActive) showImageToPlayerView(shape);
+        return;
+      }
       if (shape.type === 'text' || shape.type === 'note' || shape.type === 'arrow') {
         setSelectedIds(new Set([shape.id]));
         setEditingId(shape.id);
       }
     },
-    [handActive, openDocument, focusPdf]
+    [handActive, openDocument, focusPdf, playerViewActive, showImageToPlayerView]
   );
 
   /* ---------- creation ---------- */
@@ -1286,6 +1308,16 @@ export function Whiteboard({ doc }: { doc: DocNode }) {
                     label: 'Editar',
                     shortcut: 'Enter',
                     onClick: () => setEditingId(menuShape.id),
+                  },
+                  'divider',
+                ] as CtxMenuEntry[])
+              : []),
+            ...(playerViewActive && menuShape.type === 'image'
+              ? ([
+                  {
+                    icon: ScreenShare,
+                    label: 'Exibir no Player View',
+                    onClick: () => showImageToPlayerView(menuShape),
                   },
                   'divider',
                 ] as CtxMenuEntry[])
