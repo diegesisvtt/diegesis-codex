@@ -16,11 +16,13 @@ import * as embedder from './ai/embedder';
 import { docEvents } from './ai/events';
 import { semanticSearch, streamChat, streamInline } from './ai/rag';
 import { getProvider, listProviders } from './ai/providers/registry';
+import { getImageGenProvider, listImageGenProviders } from './ai/imagegen/registry';
+import { generateImages } from './ai/imagegen/service';
 import { emptyDossier, runSpecialist } from './ai/specialists/base';
 import { tableExtractSpecialist } from './ai/specialists/table-extract';
 import { sheetEffectSpecialist } from './ai/specialists/sheet-effect';
 import { listSearchProviders, runWebSearch } from './ai/websearch';
-import type { AIChatRequest, AIProviderConfig, DocChanges, DocInput, InlineAIRequest, PlayerViewState, UiState } from '../shared/types';
+import type { AIChatRequest, AIProviderConfig, DocChanges, DocInput, ImageGenRequest, InlineAIRequest, PlayerViewState, UiState } from '../shared/types';
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 
@@ -32,6 +34,9 @@ diceAssets.registerDiceAssetsScheme();
 
 /** in-flight chat streams, keyed by renderer-provided chatId */
 const activeChats = new Map<string, AbortController>();
+
+/** in-flight image generation jobs, keyed by renderer-provided jobId */
+const activeImageJobs = new Map<string, AbortController>();
 
 /** Notifies every window that documents in a realm changed (live sync).
  *  `exceptSender` pula a janela que originou a escrita — ela já tem estado
@@ -192,7 +197,7 @@ function registerIpc(): void {
       {
         onChunk: (chunk) => safeSend('ai:chat:chunk', chunk),
         onSources: (chatId, sources) => safeSend('ai:chat:sources', { chatId, sources }),
-        onTool: (chatId, summary, ok) => safeSend('ai:chat:tool', { chatId, summary, ok }),
+        onTool: (chatId, summary, ok, imageUrl) => safeSend('ai:chat:tool', { chatId, summary, ok, imageUrl }),
       },
       controller.signal
     ).finally(() => activeChats.delete(req.chatId));
@@ -209,13 +214,63 @@ function registerIpc(): void {
       {
         onChunk: (chunk) => safeSend('ai:chat:chunk', chunk),
         onSources: (chatId, sources) => safeSend('ai:chat:sources', { chatId, sources }),
-        onTool: (chatId, summary, ok) => safeSend('ai:chat:tool', { chatId, summary, ok }),
+        onTool: (chatId, summary, ok, imageUrl) => safeSend('ai:chat:tool', { chatId, summary, ok, imageUrl }),
       },
       controller.signal
     ).finally(() => activeChats.delete(req.chatId));
   });
   ipcMain.handle('ai:chat:cancel', (_e, chatId: string) => {
     activeChats.get(chatId)?.abort();
+  });
+
+  // ---- image generation ----
+  ipcMain.handle('imagegen:providers', () => listImageGenProviders());
+  ipcMain.handle('imagegen:test', (_e, providerId: string, config: Record<string, string>) => {
+    const provider = getImageGenProvider(providerId);
+    if (!provider) return { ok: false, error: `Backend desconhecido: ${providerId}` };
+    return provider.testConnection(aiConfig.resolveMaskedImageGenSecrets(providerId, config));
+  });
+  ipcMain.handle('imagegen:settings:set', (_e, cfg: AIProviderConfig | null) => {
+    aiConfig.setImageGenProvider(cfg);
+  });
+  ipcMain.handle('imagegen:models', async () => {
+    const cfg = aiConfig.getResolvedImageGenConfig();
+    const provider = cfg && getImageGenProvider(cfg.providerId);
+    if (!provider?.listModels || !cfg) return [];
+    try {
+      return await provider.listModels(cfg.config);
+    } catch {
+      return [];
+    }
+  });
+  ipcMain.handle('imagegen:loras', async () => {
+    const cfg = aiConfig.getResolvedImageGenConfig();
+    const provider = cfg && getImageGenProvider(cfg.providerId);
+    if (!provider?.listLoras || !cfg) return [];
+    try {
+      return await provider.listLoras(cfg.config);
+    } catch {
+      return [];
+    }
+  });
+  ipcMain.handle('imagegen:generate', (event, req: ImageGenRequest) => {
+    // a duplicated jobId would corrupt the cancellation map — reject it
+    if (activeImageJobs.has(req?.jobId)) {
+      return { ok: false, error: 'Já existe uma geração em andamento com este id.' };
+    }
+    const sender = event.sender;
+    const controller = new AbortController();
+    activeImageJobs.set(req.jobId, controller);
+    return generateImages(
+      req,
+      (p) => {
+        if (!sender.isDestroyed()) sender.send('imagegen:progress', p);
+      },
+      controller.signal
+    ).finally(() => activeImageJobs.delete(req.jobId));
+  });
+  ipcMain.handle('imagegen:cancel', (_e, jobId: string) => {
+    activeImageJobs.get(jobId)?.abort();
   });
 
   // PDF region capture → table-extract specialist → structured table

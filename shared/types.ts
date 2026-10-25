@@ -151,7 +151,7 @@ export interface SearchResult {
 export interface ProviderField {
   key: string;
   label: string;
-  type: 'text' | 'password' | 'number';
+  type: 'text' | 'password' | 'number' | 'textarea';
   placeholder?: string;
   required?: boolean;
   /** secret fields are encrypted at rest and masked when read back */
@@ -182,6 +182,57 @@ export interface AISettings {
   chat: AIProviderConfig | null;
   /** web search provider; null = DuckDuckGo default (keyless) */
   search: AIProviderConfig | null;
+  /** image generation backend; null = disabled */
+  imagegen: AIProviderConfig | null;
+}
+
+// ---------- image generation ----------
+
+export interface ImageGenLora {
+  /** LoRA file name as known by the backend (e.g. ComfyUI lora_name) */
+  name: string;
+  strength: number;
+}
+
+export interface ImageGenRequest {
+  /** renderer-generated id, used for progress events and cancellation */
+  jobId: string;
+  prompt: string;
+  negativePrompt?: string;
+  /** checkpoint/model name; empty = backend default */
+  model?: string;
+  loras?: ImageGenLora[];
+  width?: number;
+  height?: number;
+  steps?: number;
+  cfg?: number;
+  /** -1 or omitted = random */
+  seed?: number;
+  /** 1-4 images; default 1 */
+  count?: number;
+}
+
+export interface ImageGenProgress {
+  jobId: string;
+  /** 0..100, or -1 when the backend can't report progress */
+  progress: number;
+  /** human-readable stage, e.g. 'Na fila…', 'Gerando…' */
+  stage: string;
+}
+
+export interface GeneratedImage {
+  /** diegesis-image:// asset URL (already persisted on disk) */
+  url: string;
+  name: string;
+  seed?: number;
+}
+
+export interface ImageGenResult {
+  ok: boolean;
+  images?: GeneratedImage[];
+  error?: string;
+  /** true when the user cancelled the job (not a failure) */
+  cancelled?: boolean;
 }
 
 /** sentinel returned in place of stored secret values */
@@ -281,6 +332,8 @@ export interface AIToolEvent {
   /** human-readable summary, e.g. 'Criou a nota "Arton"' */
   summary: string;
   ok: boolean;
+  /** present for image-generation tools: thumbnail to show in the chat */
+  imageUrl?: string;
 }
 
 export interface ChatStreamChunk {
@@ -499,6 +552,21 @@ export interface DiegesisCodexApi {
     onChatChunk(cb: (chunk: ChatStreamChunk) => void): () => void;
     onChatSources(cb: (s: AIChatSources) => void): () => void;
     onToolEvent(cb: (e: AIToolEvent) => void): () => void;
+  };
+  imagegen: {
+    /** available image-generation backends (ComfyUI, OpenAI Images, Stability…) */
+    providers(): Promise<ProviderInfo[]>;
+    testProvider(providerId: string, config: Record<string, string>): Promise<ProviderTestResult>;
+    /** persists the active backend config (secrets are encrypted in main) */
+    setProvider(cfg: AIProviderConfig | null): Promise<void>;
+    /** checkpoints/models available on the configured backend */
+    listModels(): Promise<string[]>;
+    /** LoRAs available on the configured backend (empty when unsupported) */
+    listLoras(): Promise<string[]>;
+    /** runs a generation job; result images are already stored on disk */
+    generate(req: ImageGenRequest): Promise<ImageGenResult>;
+    cancel(jobId: string): Promise<void>;
+    onProgress(cb: (p: ImageGenProgress) => void): () => void;
   };
   pdf: {
     /** opens a file dialog, copies the PDF into app storage and creates the document */

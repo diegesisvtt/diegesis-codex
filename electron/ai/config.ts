@@ -5,11 +5,13 @@
 import { safeStorage } from 'electron';
 import { getDb } from '../db';
 import { getProvider } from './providers/registry';
+import { getImageGenProvider } from './imagegen/registry';
 import { getSearchProvider } from './websearch';
 import { SECRET_MASK, type AIProviderConfig, type AISettings, type ProviderInfo } from '../../shared/types';
 
 const CHAT_KEY = 'ai_chat_provider';
 const SEARCH_KEY = 'ai_search_provider';
+const IMAGEGEN_KEY = 'ai_imagegen_provider';
 const ENC_PREFIX = 'enc:';
 
 function encrypt(value: string): string {
@@ -106,10 +108,15 @@ function readResolved(lookup: ProviderLookup, key: string): AIProviderConfig | n
 }
 
 export function getAISettings(): AISettings {
-  return { chat: readMasked(getProviderInfo, CHAT_KEY), search: readMasked(getSearchProvider, SEARCH_KEY) };
+  return {
+    chat: readMasked(getProviderInfo, CHAT_KEY),
+    search: readMasked(getSearchProvider, SEARCH_KEY),
+    imagegen: readMasked(getImageGenProviderInfo, IMAGEGEN_KEY),
+  };
 }
 
 const getProviderInfo: ProviderLookup = (id) => getProvider(id)?.info;
+const getImageGenProviderInfo: ProviderLookup = (id) => getImageGenProvider(id)?.info;
 
 export function setChatProvider(cfg: AIProviderConfig | null): void {
   writeConfig(getProviderInfo, CHAT_KEY, cfg);
@@ -132,14 +139,22 @@ export function getResolvedSearchConfig(): AIProviderConfig | null {
 /**
  * Replaces SECRET_MASK placeholders in an incoming config with the stored secret,
  * so "test connection" works without retyping the API key.
+ *
+ * Credential-exfiltration guard: stored secrets are only injected when the
+ * endpoint matches the stored one — otherwise a caller could point baseUrl at
+ * an arbitrary host and have the real key sent there in the auth header.
+ * (Providers without a baseUrl field have a hardcoded endpoint, so no check.)
  */
 function resolveMasked(lookup: ProviderLookup, settingsKey: string, providerId: string, incoming: Record<string, string>): Record<string, string> {
   const secrets = secretKeys(lookup, providerId);
   const stored = readRaw(settingsKey);
   const out = { ...incoming };
+  const endpointMatches =
+    !stored || !('baseUrl' in stored.config) || stored.config.baseUrl === undefined || stored.config.baseUrl === incoming.baseUrl;
   for (const key of secrets) {
     if (out[key] !== SECRET_MASK) continue;
-    out[key] = stored && stored.providerId === providerId && stored.config[key] ? decrypt(stored.config[key]) : '';
+    out[key] =
+      endpointMatches && stored && stored.providerId === providerId && stored.config[key] ? decrypt(stored.config[key]) : '';
   }
   return out;
 }
@@ -150,4 +165,17 @@ export function resolveMaskedSecrets(providerId: string, incoming: Record<string
 
 export function resolveMaskedSearchSecrets(providerId: string, incoming: Record<string, string>): Record<string, string> {
   return resolveMasked(getSearchProvider, SEARCH_KEY, providerId, incoming);
+}
+
+export function setImageGenProvider(cfg: AIProviderConfig | null): void {
+  writeConfig(getImageGenProviderInfo, IMAGEGEN_KEY, cfg);
+}
+
+/** Returns the stored imagegen config with secrets decrypted (main-process use only). */
+export function getResolvedImageGenConfig(): AIProviderConfig | null {
+  return readResolved(getImageGenProviderInfo, IMAGEGEN_KEY);
+}
+
+export function resolveMaskedImageGenSecrets(providerId: string, incoming: Record<string, string>): Record<string, string> {
+  return resolveMasked(getImageGenProviderInfo, IMAGEGEN_KEY, providerId, incoming);
 }
