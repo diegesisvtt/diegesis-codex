@@ -5,21 +5,24 @@ import type { BlockNoteEditor } from '@blocknote/core';
 import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs } from '@blocknote/core';
 import { filterSuggestionItems, insertOrUpdateBlockForSlashMenu } from '@blocknote/core/extensions';
 import { getDefaultReactSlashMenuItems } from '@blocknote/react';
-import { BookMarked, Dices, FileText, Link2, Table } from 'lucide-react';
+import { BookMarked, Dices, FileText, ImagePlus, Link2, Table } from 'lucide-react';
 import type { DocNode } from '@shared/types';
 import { AudioBlock } from './audioBlock';
+import { GeneratedImageBlock } from './generatedImageBlock';
 import { InteractiveTableBlock } from './tableBlock';
 import { TableMacroInline } from './tableMacro';
 import { CalloutBlockNote } from './calloutBlock';
 import { NoteRefInline } from './noteRef';
 
 /** note schema: defaults + custom blocks (audio: disk-backed, loop-capable;
+ *  generatedImage: geração de imagem por IA com ComfyUI/OpenAI/etc.;
  *  interactiveTable: embeds a diegesis/table document with roll button;
  *  callout: destaque tático rule/lore/secret/quote) */
 export const noteSchema = BlockNoteSchema.create({
   blockSpecs: {
     ...defaultBlockSpecs,
     audio: AudioBlock(),
+    generatedImage: GeneratedImageBlock(),
     interactiveTable: InteractiveTableBlock(),
     callout: CalloutBlockNote(),
   },
@@ -67,6 +70,15 @@ export function createSlashItems(
     filterSuggestionItems(
       [
         ...getDefaultReactSlashMenuItems(editor),
+        {
+          title: 'Imagem gerada (IA)',
+          onItemClick: () =>
+            insertOrUpdateBlockForSlashMenu(editor, { type: 'generatedImage' } as never),
+          aliases: ['imagem', 'image', 'ia', 'ai', 'gerar', 'gerada', 'arte', 'art', 'comfyui', 'txt2img', 'prompt'],
+          group: 'Diegesis Codex',
+          icon: <ImagePlus size={18} />,
+          subtext: 'Gera uma imagem com IA a partir de um prompt',
+        },
         {
           title: 'Tabela interativa',
           onItemClick: () =>

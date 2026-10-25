@@ -23,6 +23,15 @@ function noteImages(doc: DocNode): AttachedImage[] {
           name: typeof b.props.caption === 'string' && b.props.caption ? b.props.caption : doc.title,
         });
       }
+      // AI-generated image block: url prop + prompt as caption
+      if (b.type === 'generatedImage' && typeof b.props?.url === 'string' && b.props.url) {
+        out.push({
+          docId: doc.id,
+          docTitle: doc.title,
+          src: b.props.url,
+          name: typeof b.props.prompt === 'string' && b.props.prompt ? b.props.prompt : doc.title,
+        });
+      }
       if (b.children?.length) walk(b.children);
     }
   };
