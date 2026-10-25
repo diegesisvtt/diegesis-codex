@@ -4,6 +4,7 @@ import { highlightsPlugin } from './highlightsPlugin';
 import { settingsPlugin } from './settingsPlugin';
 import { searchPlugin } from './searchPlugin';
 import { aiChatPlugin } from './aiChatPlugin';
+import { imageGenPlugin } from './imageGenPlugin';
 import { audioPlugin } from './audioPlugin';
 import { commandPalettePlugin } from './commandPalettePlugin';
 import { hexcrawlPlugin } from './hexcrawlPlugin';
@@ -25,6 +26,7 @@ export const builtinPlugins: Plugin[] = [
   settingsPlugin,
   searchPlugin,
   aiChatPlugin,
+  imageGenPlugin,
   audioPlugin,
   commandPalettePlugin,
   hexcrawlPlugin,

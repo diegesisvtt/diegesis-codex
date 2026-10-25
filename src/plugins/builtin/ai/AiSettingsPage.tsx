@@ -27,9 +27,11 @@ import {
   type InlinePromptsConfig,
 } from '../../../ai/inlinePrompts';
 
-// ---------- shared provider form (chat & web search) ----------
+// ---------- shared provider form (chat, web search & image generation) ----------
 
-function ProviderSection({
+/** Generic provider form: dropdown + declared fields + test-connection.
+ *  Exported for the image-generation settings page (same IPC/config pattern). */
+export function ProviderSection({
   title,
   description,
   emptyLabel,
@@ -150,13 +152,23 @@ function ProviderSection({
                     {f.label}
                     {f.required && <span className="text-danger"> *</span>}
                   </label>
-                  <input
-                    type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
-                    value={values[f.key] ?? ''}
-                    placeholder={f.placeholder}
-                    onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                    className="w-full bg-sidebar border border-line rounded-md px-3 py-2 text-[13px] text-ink-1 placeholder-ink-3 outline-none focus:border-accent transition-colors"
-                  />
+                  {f.type === 'textarea' ? (
+                    <textarea
+                      value={values[f.key] ?? ''}
+                      placeholder={f.placeholder}
+                      rows={5}
+                      onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                      className="w-full bg-sidebar border border-line rounded-md px-3 py-2 text-[12px] font-mono text-ink-1 placeholder-ink-3 outline-none focus:border-accent transition-colors resize-y"
+                    />
+                  ) : (
+                    <input
+                      type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
+                      value={values[f.key] ?? ''}
+                      placeholder={f.placeholder}
+                      onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                      className="w-full bg-sidebar border border-line rounded-md px-3 py-2 text-[13px] text-ink-1 placeholder-ink-3 outline-none focus:border-accent transition-colors"
+                    />
+                  )}
                 </div>
               ))}
             </div>
