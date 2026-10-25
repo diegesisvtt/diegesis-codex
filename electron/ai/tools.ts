@@ -6,6 +6,7 @@ import * as db from '../db';
 import { docEvents } from './events';
 import { generateId } from '../db';
 import { getResolvedSearchConfig } from './config';
+import { generateImages } from './imagegen/service';
 import { runWebSearch } from './websearch';
 import { markdownToBlocks } from '../../shared/blockContent';
 import type { DocNode } from '../../shared/types';
@@ -98,14 +99,32 @@ export const REALM_TOOLS: ToolSpec[] = [
 // ---------- execution ----------
 
 /** Web search tool — only offered when the user enables "Busca na web". */
-export const WEB_SEARCH_TOOL: ToolSpec = {
-  name: 'web_search',
+export const WEB_SEARCH_TOOL: ToolSpec = {  name: 'web_search',
   description:
     'Busca na web por informações atuais ou externas ao universo. Retorna títulos, URLs e trechos.',
   parameters: {
     type: 'object',
     properties: { query: { type: 'string', description: 'consulta de busca' } },
     required: ['query'],
+    additionalProperties: false,
+  },
+};
+
+/** Image generation tool — only offered when an imagegen backend is configured. */
+export const IMAGE_GEN_TOOL: ToolSpec = {
+  name: 'generate_image',
+  description:
+    'Gera uma imagem a partir de uma descrição. Escreva o prompt em INGLÊS, detalhado e visual. ' +
+    'Se docId de uma nota for informado, a imagem é inserida no final da nota; caso contrário, ' +
+    'apenas gera e retorna a URL — nesse caso, mostre a imagem na sua resposta com markdown ![descrição](url).',
+  parameters: {
+    type: 'object',
+    properties: {
+      prompt: { type: 'string', description: 'descrição visual da imagem, em inglês' },
+      negativePrompt: { type: 'string', description: 'o que evitar na imagem (opcional)' },
+      docId: { type: 'string', description: 'id da nota onde inserir a imagem (opcional)' },
+    },
+    required: ['prompt'],
     additionalProperties: false,
   },
 };
@@ -128,7 +147,7 @@ export async function executeTool(
   call: ToolCall,
   realmId: string,
   semanticSearch: (query: string) => Promise<unknown>
-): Promise<{ result: string; summary: string; ok: boolean }> {
+): Promise<{ result: string; summary: string; ok: boolean; imageUrl?: string }> {
   let args: Record<string, unknown>;
   try {
     args = JSON.parse(call.arguments || '{}');
@@ -278,6 +297,74 @@ export async function executeTool(
             ok: false,
           };
         }
+      }
+
+      case 'generate_image': {
+        const prompt = str('prompt');
+        if (!prompt) return { result: JSON.stringify({ error: 'prompt é obrigatório' }), summary: 'Geração inválida', ok: false };
+        const generated = await generateImages(
+          { jobId: generateId(), prompt: prompt.slice(0, 4000), negativePrompt: str('negativePrompt') },
+          () => {}
+        );
+        if (!generated.ok || !generated.images?.length) {
+          return {
+            result: JSON.stringify({ error: generated.error ?? 'falha ao gerar a imagem' }),
+            summary: 'Geração de imagem falhou',
+            ok: false,
+          };
+        }
+        const image = generated.images[0];
+
+        // with a target note: append a generatedImage block and refresh editors
+        const target = str('docId');
+        if (target) {
+          const doc = docInRealm(target, realmId);
+          if (!doc || doc.type !== 'core/note') {
+            return {
+              result: JSON.stringify({ error: 'docId não é uma nota deste universo', url: image.url }),
+              summary: 'Nota alvo não encontrada',
+              ok: false,
+              imageUrl: image.url,
+            };
+          }
+          let blocks: unknown[];
+          const rawContent = doc.content ?? '';
+          if (rawContent.trim()) {
+            try {
+              const parsed = JSON.parse(rawContent) as unknown;
+              blocks = Array.isArray(parsed) ? parsed : [{ type: 'paragraph' }];
+            } catch {
+              // never clobber content we couldn't read
+              return {
+                result: JSON.stringify({ error: 'conteúdo da nota está corrompido; imagem gerada mas não inserida', url: image.url }),
+                summary: 'Nota com conteúdo ilegível',
+                ok: false,
+                imageUrl: image.url,
+              };
+            }
+          } else {
+            blocks = [{ type: 'paragraph' }];
+          }
+          blocks.push({
+            type: 'generatedImage',
+            props: { url: image.url, prompt, seed: image.seed ?? -1 },
+          });
+          db.updateDoc(doc.id, { content: JSON.stringify(blocks) });
+          docEvents.emit('changed', realmId);
+          return {
+            result: JSON.stringify({ url: image.url, insertedInto: doc.id, title: doc.title }),
+            summary: `Gerou uma imagem em "${doc.title}"`,
+            ok: true,
+            imageUrl: image.url,
+          };
+        }
+
+        return {
+          result: JSON.stringify({ url: image.url, hint: 'mostre a imagem na resposta com markdown ![descrição](url)' }),
+          summary: `Gerou a imagem "${prompt.slice(0, 50)}"`,
+          ok: true,
+          imageUrl: image.url,
+        };
       }
 
       default:

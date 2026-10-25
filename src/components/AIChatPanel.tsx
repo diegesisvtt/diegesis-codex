@@ -11,7 +11,7 @@ const generateChatId = newId;
 
 interface DisplayMessage extends ChatMessage {
   sources?: RetrievedChunk[];
-  tools?: { summary: string; ok: boolean }[];
+  tools?: { summary: string; ok: boolean; imageUrl?: string }[];
   error?: boolean;
 }
 
@@ -119,7 +119,7 @@ export function AIChatPanel() {
         const copy = [...ms];
         const last = copy[copy.length - 1];
         if (last?.role === 'assistant') {
-          copy[copy.length - 1] = { ...last, tools: [...(last.tools ?? []), { summary: e.summary, ok: e.ok }] };
+          copy[copy.length - 1] = { ...last, tools: [...(last.tools ?? []), { summary: e.summary, ok: e.ok, imageUrl: e.imageUrl }] };
         }
         return copy;
       });
@@ -342,14 +342,23 @@ export function AIChatPanel() {
                     {m.tools && m.tools.length > 0 && (
                       <div className="flex flex-col gap-1 mb-2">
                         {m.tools.map((t, j) => (
-                          <div
-                            key={j}
-                            className={`flex items-center gap-1.5 text-[11.5px] ${
-                              t.ok ? 'text-ink-3' : 'text-danger'
-                            }`}
-                          >
-                            <Wrench size={11} className="shrink-0" />
-                            {t.summary}
+                          <div key={j}>
+                            <div
+                              className={`flex items-center gap-1.5 text-[11.5px] ${
+                                t.ok ? 'text-ink-3' : 'text-danger'
+                              }`}
+                            >
+                              <Wrench size={11} className="shrink-0" />
+                              {t.summary}
+                            </div>
+                            {t.imageUrl && (
+                              <img
+                                src={t.imageUrl}
+                                alt={t.summary}
+                                className="mt-1.5 rounded-lg border border-line max-w-full"
+                                draggable={false}
+                              />
+                            )}
                           </div>
                         ))}
                       </div>

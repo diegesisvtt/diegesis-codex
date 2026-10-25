@@ -6,7 +6,8 @@ import { getResolvedChatConfig } from './config';
 import { flush } from './embedder';
 import { embedQuery } from './local-embedder';
 import { getProvider } from './providers/registry';
-import { executeTool, REALM_TOOLS, WEB_SEARCH_TOOL } from './tools';
+import { executeTool, IMAGE_GEN_TOOL, REALM_TOOLS, WEB_SEARCH_TOOL } from './tools';
+import { imageGenConfigured } from './imagegen/service';
 import {
   CONTEXT_OVERFLOW_MESSAGE,
   DEFAULT_CONTEXT_TOKENS,
@@ -70,7 +71,8 @@ function buildSystemPrompt(
   realmId: string | null,
   chunks: RetrievedChunk[] | null,
   indexEmpty: boolean,
-  useWebSearch: boolean
+  useWebSearch: boolean,
+  useImageGen: boolean
 ): string {
   const parts: string[] = [
     'Você é o assistente do Diegesis Codex, um estúdio de worldbuilding. Responda no idioma do usuário.',
@@ -132,13 +134,22 @@ function buildSystemPrompt(
     );
   }
 
+  if (useImageGen) {
+    parts.push(
+      'Você tem a ferramenta generate_image para gerar imagens. ' +
+        'Use-a sempre que o usuário pedir uma imagem, ilustração, arte ou retrato. ' +
+        'Se o usuário mencionar uma nota específica (ou estiver claro qual nota ilustrar), ' +
+        'passe o docId para inserir a imagem nela; caso contrário gere sem docId e mostre a imagem na resposta.'
+    );
+  }
+
   return parts.join('\n\n');
 }
 
 export interface ChatCallbacks {
   onChunk(chunk: ChatStreamChunk): void;
   onSources(chatId: string, sources: RetrievedChunk[]): void;
-  onTool(chatId: string, summary: string, ok: boolean): void;
+  onTool(chatId: string, summary: string, ok: boolean, imageUrl?: string): void;
 }
 
 export async function streamChat(req: AIChatRequest, cb: ChatCallbacks, signal?: AbortSignal): Promise<void> {
@@ -209,11 +220,16 @@ export async function streamChat(req: AIChatRequest, cb: ChatCallbacks, signal?:
       if (sources.length > 0) cb.onSources(req.chatId, sources);
     }
 
-    const tools = req.useWebSearch ? [...REALM_TOOLS, WEB_SEARCH_TOOL] : REALM_TOOLS;
+    const useImageGen = imageGenConfigured();
+    const tools = [
+      ...REALM_TOOLS,
+      ...(req.useWebSearch ? [WEB_SEARCH_TOOL] : []),
+      ...(useImageGen ? [IMAGE_GEN_TOOL] : []),
+    ];
     const ctxTokens = contextTokens(cfg.config);
 
     const working: ProviderMessage[] = [
-      { role: 'system', content: buildSystemPrompt(realmId, req.useContext ? sources : null, indexEmpty, !!req.useWebSearch) },
+      { role: 'system', content: buildSystemPrompt(realmId, req.useContext ? sources : null, indexEmpty, !!req.useWebSearch, useImageGen) },
       ...req.messages.map((m) => ({ role: m.role, content: m.content })),
     ];
 
@@ -239,11 +255,11 @@ export async function streamChat(req: AIChatRequest, cb: ChatCallbacks, signal?:
 
       working.push({ role: 'assistant', content: turnText, toolCalls });
       for (const call of toolCalls) {
-        const { result, summary, ok } = await executeTool(call, realmId, async (query) => {
+        const { result, summary, ok, imageUrl } = await executeTool(call, realmId, async (query) => {
           const chunks = await retrieve(realmId, query, 5);
           return chunks.map((c) => ({ docId: c.docId, title: c.title, text: c.text.slice(0, 500), score: c.score }));
         });
-        cb.onTool(req.chatId, summary, ok);
+        cb.onTool(req.chatId, summary, ok, imageUrl);
         working.push({ role: 'tool', toolCallId: call.id, content: result });
       }
     }
